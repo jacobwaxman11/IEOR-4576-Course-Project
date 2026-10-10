@@ -1,0 +1,41 @@
+{
+  "query_id": 11771343,
+  "query_url": "https://wrds-www.wharton.upenn.edu/query-manager/query/11771343/",
+  "query_form_url": "https://wrds-www.wharton.upenn.edu/pages/get-data/center-research-security-prices-crsp/quarterly-update/mutual-funds/monthly-returns/",
+  "product": "crsp_q_mutualfunds",
+  "table": "monthly_tna_ret_nav",
+  "acquired": "2026-10-10",
+  "requested_start": "1981-06-01",
+  "requested_end": "2026-06-30",
+  "selection": {
+    "format": "ticker",
+    "value": "DFSCX",
+    "lookup_table": "fund_names"
+  },
+  "selected_variables": [
+    "mret",
+    "mnav",
+    "mtna"
+  ],
+  "download_name": "x0ek2ltmfq0rgc7a.csv",
+  "local_path": "data/raw/crsp/dfscx_monthly_1981_2026q2.csv",
+  "bytes": 27467,
+  "sha256": "3e8222bb689dd6f32f7d76048b992304e7ef479d044078880d23ddf3d543fcc0",
+  "rows": 535,
+  "first_date": "1981-12-31",
+  "last_date": "2026-06-30",
+  "fund_numbers": [
+    "008296"
+  ],
+  "usable_return_rows": 534,
+  "first_numeric_return_date": "1982-01-29",
+  "last_numeric_return_date": "2026-06-30",
+  "duplicate_fund_months": 0,
+  "missing_calendar_months": [],
+  "replication_1982_2002": {
+    "months": 252,
+    "missing_numeric_returns": 0
+  },
+  "interpretation": "Underlying fund component of SBBI small stocks from Jan 1982; not a verified numerically identical EnCorr export. Pre-1982 SBBI component not supplied.",
+  "nonnumeric_return_rows": 1
+}

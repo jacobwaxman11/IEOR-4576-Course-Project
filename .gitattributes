@@ -1,0 +1,2 @@
+data/raw/french/** filter=lfs diff=lfs merge=lfs -text
+data/raw/french_legacy_202412/** filter=lfs diff=lfs merge=lfs -text

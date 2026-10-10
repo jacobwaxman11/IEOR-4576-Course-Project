@@ -1,0 +1,91 @@
+{
+  "PredictorData_original_2005.xls": {
+    "ltr": {
+      "first_month": 192601,
+      "last_month": 200512,
+      "rows": 960,
+      "missing_196306_200212": 0,
+      "sample_rows": 475
+    },
+    "corpr": {
+      "first_month": 192601,
+      "last_month": 200512,
+      "rows": 960,
+      "missing_196306_200212": 0,
+      "sample_rows": 475
+    },
+    "Rfree": {
+      "first_month": 187101,
+      "last_month": 200512,
+      "rows": 1620,
+      "missing_196306_200212": 0,
+      "sample_rows": 475
+    },
+    "CRSP_SPvw": {
+      "first_month": 192601,
+      "last_month": 200512,
+      "rows": 960,
+      "missing_196306_200212": 0,
+      "sample_rows": 475
+    },
+    "duplicate_months": 0
+  },
+  "PredictorData2025.xlsx": {
+    "ltr": {
+      "first_month": 192601,
+      "last_month": 202512,
+      "rows": 1200,
+      "missing_196306_200212": 0,
+      "sample_rows": 475
+    },
+    "corpr": {
+      "first_month": 192601,
+      "last_month": 202512,
+      "rows": 1200,
+      "missing_196306_200212": 0,
+      "sample_rows": 475
+    },
+    "Rfree": {
+      "first_month": 187102,
+      "last_month": 202512,
+      "rows": 1859,
+      "missing_196306_200212": 0,
+      "sample_rows": 475
+    },
+    "CRSP_SPvw": {
+      "first_month": 192601,
+      "last_month": 202512,
+      "rows": 1200,
+      "missing_196306_200212": 0,
+      "sample_rows": 475
+    },
+    "duplicate_months": 0
+  },
+  "source": "https://sites.google.com/view/agoyal145",
+  "bond_source_break": "Author states ltr/corpr switch to Bloomberg indices from 2022",
+  "vintage_comparison": {
+    "comparison_period": "1963-06 to 2002-12",
+    "rows": 475,
+    "differences_over_1e_10": {
+      "ltr": 0,
+      "corpr": 0,
+      "Rfree": 475,
+      "CRSP_SPvw": 470
+    },
+    "max_absolute_differences": {
+      "ltr": 0.0,
+      "corpr": 0.0,
+      "Rfree": 0.002181327273750715,
+      "CRSP_SPvw": 0.0012059999999999987
+    }
+  },
+  "french_rf": {
+    "path": "data/raw/french/F-F_Research_Data_Factors_CSV.zip",
+    "member": "F-F_Research_Data_Factors.csv",
+    "table4_months": 475,
+    "missing_rf": 0,
+    "units": "percent; divide by 100",
+    "source_url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/Data_Library/f-f_factors.html",
+    "provenance": "Ibbotson through May 2024; ICE BofA from June 2024; original EnCorr numerical equality not verified"
+  }
+}

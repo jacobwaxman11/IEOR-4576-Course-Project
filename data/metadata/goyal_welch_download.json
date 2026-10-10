@@ -1,0 +1,26 @@
+[
+  {
+    "name": "PredictorData_original_2005.xls",
+    "status": "downloaded",
+    "type": "application/octet-stream",
+    "bytes": 751104,
+    "sha256": "7917e2627d1daeb917bc3460ca9ad23be1d109c6b0e5370dbc92cecf3d16e20d",
+    "source": "https://drive.google.com/uc?export=download&id=1T0pCslc2vxMDt7EFGI0MJ6mndeQvObBT"
+  },
+  {
+    "name": "PredictorData2025.xlsx",
+    "status": "downloaded",
+    "type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "bytes": 485064,
+    "sha256": "8d210b779442a5a9206702060aac67c1de4283186c0f167ebdb4488d149be872",
+    "source": "https://docs.google.com/spreadsheets/d/1qwpl2R_DNujpU5YUkk8lacP1tTeMb9iJ/export?format=xlsx"
+  },
+  {
+    "name": "goyal_welch_2008.pdf",
+    "status": "downloaded",
+    "type": "application/octet-stream",
+    "bytes": 1087972,
+    "sha256": "57ad3636290682b93dc52a2baabc9440d84ed76b2736a08a8ba7a014c6df5b7b",
+    "source": "https://drive.google.com/uc?export=download&id=1uvjBJ9D09T0_sp7kQppWpD-xelJ0KQhc"
+  }
+]

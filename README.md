@@ -91,10 +91,14 @@ folder is the repository root; there is no extra nested `project-name/` folder.
 | `results/extension/figures/` | Extension comparison figures |
 | `report/` | Write-up and slides |
 
-Shareable data can be tracked in Git, as requested for this project. The blanket `data/`
-ignore from the course template is therefore omitted. Licensed CRSP and TAQ
-observations must remain local: place them in the ignored `crsp/` or `taq/`
-subdirectories under each data stage. The scaffold includes no observations.
+Sixteen public French factor/portfolio archives are tracked with Git LFS. After
+cloning, install Git LFS and run `git lfs pull` to retrieve the actual ZIP files.
+See [data/README.md](data/README.md) for the download inventory, source attribution,
+checksums, and instructions for reacquiring local-only inputs.
+
+The blanket `data/` ignore from the course template is omitted. Licensed CRSP and
+TAQ observations and Goyal–Welch source workbooks remain local in ignored raw
+directories. Their acquisition records and source notes are included.
 See the [WRDS data policy](https://wrds-www.wharton.upenn.edu/pages/about/data-download-and-analysis-policy/).
 Generated results are ignored, apart from directory placeholders, and should be
 rebuildable once the pipeline is implemented. Never commit credentials.

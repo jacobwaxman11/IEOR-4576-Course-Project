@@ -1,0 +1,32 @@
+{
+  "file": "data/raw/crsp/daily_indexes_1961_2026q2.csv.gz",
+  "status": "downloaded_and_validated",
+  "query_id": 11771207,
+  "query_url": "https://wrds-www.wharton.upenn.edu/query-manager/query/11771207/",
+  "query_file": "data/metadata/queries/daily_indexes.sql",
+  "bytes": 823644,
+  "sha256": "c838a658bbf81b3b2a7d31e1d08e003d99cbe58db9bace9b8a7a73d96c78a1eb",
+  "rows": 16481,
+  "columns": [
+    "dlycaldt",
+    "vwretd",
+    "vwretx",
+    "vwtotval",
+    "vwusdval",
+    "vwtotcnt",
+    "vwusdcnt",
+    "ewretd",
+    "ewretx",
+    "ewtotval",
+    "ewusdval",
+    "ewtotcnt",
+    "ewusdcnt",
+    "sprtrn",
+    "spindx"
+  ],
+  "date_column": "dlycaldt",
+  "first_date": "1961-01-03",
+  "last_date": "2026-06-30",
+  "downloaded_on": "2026-10-10",
+  "publication": "restricted_local_only"
+}

@@ -1,0 +1,19 @@
+{
+  "query_id": 11771343,
+  "query_url": "https://wrds-www.wharton.upenn.edu/query-manager/query/11771343/",
+  "query_form_url": "https://wrds-www.wharton.upenn.edu/pages/get-data/center-research-security-prices-crsp/quarterly-update/mutual-funds/monthly-returns/",
+  "product": "crsp_q_mutualfunds",
+  "table": "monthly_tna_ret_nav",
+  "requested_start": "1981-06-01",
+  "requested_end": "2026-06-30",
+  "selection": {
+    "format": "ticker",
+    "value": "DFSCX",
+    "lookup_table": "fund_names"
+  },
+  "selected_variables": [
+    "mret",
+    "mnav",
+    "mtna"
+  ]
+}

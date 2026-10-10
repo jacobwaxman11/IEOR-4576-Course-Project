@@ -1,0 +1,98 @@
+[
+  {
+    "file": "data/raw/french_legacy_202412/F-F_Research_Data_Factors_CSV.zip",
+    "url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp_202412/F-F_Research_Data_Factors_CSV.zip",
+    "bytes": 12995,
+    "sha256": "fc9e41cc3b66c62fa8f565a01fb4c8c0d7962c777303c46b8ab7102190b98ea2",
+    "first_date": "192607",
+    "last_date": "202412",
+    "downloaded_on": "2026-10-10",
+    "vintage": "December 2024 legacy FIZ archive, not the original 2006 vintage",
+    "units": "percent",
+    "status": "downloaded_and_validated"
+  },
+  {
+    "file": "data/raw/french_legacy_202412/F-F_Research_Data_Factors_daily_CSV.zip",
+    "url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp_202412/F-F_Research_Data_Factors_daily_CSV.zip",
+    "bytes": 179691,
+    "sha256": "2ea687afb4b1b8f75c67bcb8b414a6bc5510e42d36b8671335b0fced2ae3b985",
+    "first_date": "19260701",
+    "last_date": "20241231",
+    "downloaded_on": "2026-10-10",
+    "vintage": "December 2024 legacy FIZ archive, not the original 2006 vintage",
+    "units": "percent",
+    "status": "downloaded_and_validated"
+  },
+  {
+    "file": "data/raw/french_legacy_202412/F-F_Momentum_Factor_CSV.zip",
+    "url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp_202412/F-F_Momentum_Factor_CSV.zip",
+    "bytes": 5539,
+    "sha256": "ddf2d51164f44ab1950837ab8469885e03e186a1f86c96f5297623b8b3c5c604",
+    "first_date": "192701",
+    "last_date": "202412",
+    "downloaded_on": "2026-10-10",
+    "vintage": "December 2024 legacy FIZ archive, not the original 2006 vintage",
+    "units": "percent",
+    "status": "downloaded_and_validated"
+  },
+  {
+    "file": "data/raw/french_legacy_202412/F-F_Momentum_Factor_daily_CSV.zip",
+    "url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp_202412/F-F_Momentum_Factor_daily_CSV.zip",
+    "bytes": 83926,
+    "sha256": "9b91c4ff709f6f0c9deb07caff523a7e93298870905c3abe0f64a63f51e41adb",
+    "first_date": "19261103",
+    "last_date": "20241231",
+    "downloaded_on": "2026-10-10",
+    "vintage": "December 2024 legacy FIZ archive, not the original 2006 vintage",
+    "units": "percent",
+    "status": "downloaded_and_validated"
+  },
+  {
+    "file": "data/raw/french_legacy_202412/F-F_ST_Reversal_Factor_CSV.zip",
+    "url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp_202412/F-F_ST_Reversal_Factor_CSV.zip",
+    "bytes": 5525,
+    "sha256": "2dc10c37c3cafe69ab78d8c26651e6c6c2623736a025bc0aed9426776b4162fb",
+    "first_date": "192602",
+    "last_date": "202412",
+    "downloaded_on": "2026-10-10",
+    "vintage": "December 2024 legacy FIZ archive, not the original 2006 vintage",
+    "units": "percent",
+    "status": "downloaded_and_validated"
+  },
+  {
+    "file": "data/raw/french_legacy_202412/F-F_ST_Reversal_Factor_daily_CSV.zip",
+    "url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp_202412/F-F_ST_Reversal_Factor_daily_CSV.zip",
+    "bytes": 84583,
+    "sha256": "bbdc90d3cd320203b98c5898493373c0607fe732f547a3f7c757cf5a1c77a33b",
+    "first_date": "19260126",
+    "last_date": "20241231",
+    "downloaded_on": "2026-10-10",
+    "vintage": "December 2024 legacy FIZ archive, not the original 2006 vintage",
+    "units": "percent",
+    "status": "downloaded_and_validated"
+  },
+  {
+    "file": "data/raw/french_legacy_202412/10_Portfolios_Prior_1_0_CSV.zip",
+    "url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp_202412/10_Portfolios_Prior_1_0_CSV.zip",
+    "bytes": 117335,
+    "sha256": "f8330f0c17b8baf42b85c7376d56f553943d14279900841fa04b7151844d9161",
+    "first_date": "192602",
+    "last_date": "202412",
+    "downloaded_on": "2026-10-10",
+    "vintage": "December 2024 legacy FIZ archive, not the original 2006 vintage",
+    "units": "percent",
+    "status": "downloaded_and_validated"
+  },
+  {
+    "file": "data/raw/french_legacy_202412/10_Portfolios_Prior_1_0_Daily_CSV.zip",
+    "url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp_202412/10_Portfolios_Prior_1_0_Daily_CSV.zip",
+    "bytes": 896082,
+    "sha256": "552127c6809bab4d52c02891dbc8e29d9e3d9fe40d71a14607ff6a62caeb5b95",
+    "first_date": "19260126",
+    "last_date": "20241231",
+    "downloaded_on": "2026-10-10",
+    "vintage": "December 2024 legacy FIZ archive, not the original 2006 vintage",
+    "units": "percent",
+    "status": "downloaded_and_validated"
+  }
+]

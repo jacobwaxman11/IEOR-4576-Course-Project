@@ -29,3 +29,6 @@ data/interim/crsp/
 data/interim/taq/
 data/processed/crsp/
 data/processed/taq/
+
+# Third-party licensed source workbooks stay local.
+data/raw/goyal_welch/
