@@ -1,0 +1,24 @@
+{
+  "original_file": "data/raw/crsp/daily_stocks_1961_2026q1.csv.gz",
+  "original_bytes": 4418976684,
+  "original_sha256": "345fcf6bb2473ded89377e18aa8b15ecf79dd3942d71fdeb8e3bdd7d3faab057",
+  "format": "Consecutive binary byte ranges of the original gzip archive; concatenate in listed order. Individual parts are not standalone gzip files.",
+  "parts": [
+    {
+      "file": "data/raw/crsp/daily_stocks_1961_2026q1.csv.gz.part-001",
+      "bytes": 1500000000,
+      "sha256": "5c737cd8a03d5a48df12673813cfbf53367499b38868ed309aa2cfb831825487"
+    },
+    {
+      "file": "data/raw/crsp/daily_stocks_1961_2026q1.csv.gz.part-002",
+      "bytes": 1500000000,
+      "sha256": "52315f7000c5dea5011c7ec55577a76195b24d0bcc1d07b9118918506fe45234"
+    },
+    {
+      "file": "data/raw/crsp/daily_stocks_1961_2026q1.csv.gz.part-003",
+      "bytes": 1418976684,
+      "sha256": "ae064a56cd3c2e80f1533de826f76475d355222dc1e8035b18ceffec0e7d5bc2"
+    }
+  ],
+  "verified_during_split": true
+}
