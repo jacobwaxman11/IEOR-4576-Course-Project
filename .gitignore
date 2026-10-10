@@ -22,13 +22,11 @@ results/**
 !results/**/
 !results/**/.gitkeep
 
-# Public/shareable data may be tracked. Licensed WRDS extracts stay local.
-data/raw/crsp/
+# The daily archive is tracked as three lossless LFS parts; ignore reassembly.
+data/raw/crsp/daily_stocks_1961_2026q1.csv.gz
+# Other data stages and any future TAQ extracts remain local.
 data/raw/taq/
 data/interim/crsp/
 data/interim/taq/
 data/processed/crsp/
 data/processed/taq/
-
-# Third-party licensed source workbooks stay local.
-data/raw/goyal_welch/

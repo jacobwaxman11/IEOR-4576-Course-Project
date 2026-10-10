@@ -88,5 +88,8 @@
   "requested_end": "2026-03-31",
   "gzip_integrity": "validated by reading to EOF",
   "downloaded_on": "2026-10-10",
-  "publication": "restricted_local_only"
+  "publication": "github_lfs",
+  "license_note": "Third-party vendor licensing remains applicable; repository hosting grants no additional rights.",
+  "storage_manifest": "data/metadata/daily_stocks_storage_parts.json",
+  "storage": "three consecutive binary parts; reassemble to reproduce the original archive"
 }

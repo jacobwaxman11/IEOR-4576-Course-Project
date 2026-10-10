@@ -81,5 +81,6 @@
   "requested_end": "2026-06-30",
   "gzip_integrity": "validated by reading to EOF",
   "downloaded_on": "2026-10-10",
-  "publication": "restricted_local_only"
+  "publication": "github_lfs",
+  "license_note": "Third-party vendor licensing remains applicable; repository hosting grants no additional rights."
 }

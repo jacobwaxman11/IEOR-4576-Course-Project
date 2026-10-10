@@ -1,2 +1,8 @@
 data/raw/french/** filter=lfs diff=lfs merge=lfs -text
 data/raw/french_legacy_202412/** filter=lfs diff=lfs merge=lfs -text
+data/raw/crsp/*.csv.gz filter=lfs diff=lfs merge=lfs -text
+data/raw/crsp/*.csv filter=lfs diff=lfs merge=lfs -text
+data/raw/crsp/*.part-* filter=lfs diff=lfs merge=lfs -text
+data/raw/goyal_welch/*.xls filter=lfs diff=lfs merge=lfs -text
+data/raw/goyal_welch/*.xlsx filter=lfs diff=lfs merge=lfs -text
+data/raw/goyal_welch/*.pdf filter=lfs diff=lfs merge=lfs -text

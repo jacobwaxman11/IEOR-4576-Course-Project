@@ -91,10 +91,14 @@ See [IBBOTSON_DATA_SOURCES.md](IBBOTSON_DATA_SOURCES.md) for source definitions,
 evidence and remaining gaps. Do not substitute Treasury yields or label CRSP
 `sprtrn` as a total return.
 
-The local manifests in `data/metadata/` contain hashes, counts and coverage.
+The manifests in `data/metadata/` contain hashes, counts and coverage.
 SQL exports are retained where WRDS supplies them; the daily/monthly stock
 parameters are transcribed as JSON from the saved WRDS output pages in
-`data/metadata/queries/`. Licensed observations remain local. Only the public French archives are included in this repository; licensed observations remain local.
+`data/metadata/queries/`. All acquired raw downloads are represented in Git LFS.
+The daily-stock archive is split into three consecutive binary parts; its original
+file checksum is preserved and `data/metadata/daily_stocks_storage_parts.json`
+records each part's size and checksum. See `data/raw/crsp/README.md` for reassembly.
+Third-party data remain subject to their vendor licenses.
 
 Validation read both full stock archives to the end, confirming gzip integrity,
 WRDS row counts, observed date bounds, and no missing dates; SHA-256 checksums

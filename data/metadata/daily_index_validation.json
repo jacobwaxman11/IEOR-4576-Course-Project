@@ -28,5 +28,6 @@
   "first_date": "1961-01-03",
   "last_date": "2026-06-30",
   "downloaded_on": "2026-10-10",
-  "publication": "restricted_local_only"
+  "publication": "github_lfs",
+  "license_note": "Third-party vendor licensing remains applicable; repository hosting grants no additional rights."
 }

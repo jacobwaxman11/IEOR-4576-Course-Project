@@ -50,8 +50,8 @@ Validation found:
 
 Hashes, file sizes and download URLs are in `data/metadata/goyal_welch_download.json`;
 coverage and comparisons are in `data/metadata/goyal_welch_validation.json`.
-The raw Goyal–Welch files remain local because their public availability on a researcher's
-site does not establish redistribution rights for the third-party series.
+The raw Goyal–Welch files are included using Git LFS. Their source attribution is
+preserved; public hosting does not establish additional rights to the third-party series.
 
 ## Available candidates: Treasury bills and large stocks
 
