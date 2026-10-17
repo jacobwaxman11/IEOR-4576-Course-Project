@@ -9,6 +9,7 @@ description = "Replication and extension of Gatev, Goetzmann, and Rouwenhorst (2
 requires-python = ">=3.10"
 dependencies = [
     "numpy",
+    "numba>=0.60",
     "pandas>=2.0",
     "statsmodels",
     "matplotlib",

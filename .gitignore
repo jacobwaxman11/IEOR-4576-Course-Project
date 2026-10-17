@@ -1,7 +1,11 @@
-# Credentials and local environments
+# Credentials and local environments. WRDS passwords belong in ~/.pgpass only.
 .env
 .env.*
 !.env.example
+.pgpass
+*pgpass*
+*credentials*
+*.secret
 .venv/
 venv/
 
@@ -30,3 +34,8 @@ data/interim/crsp/
 data/interim/taq/
 data/processed/crsp/
 data/processed/taq/
+data/processed/replication/
+# Pulls made through the WRDS API (licensed CRSP data) stay local.
+data/raw/wrds_api/
+# Public re-downloads (French library, Goyal-Welch); the LFS copies stay canonical.
+data/raw/public/

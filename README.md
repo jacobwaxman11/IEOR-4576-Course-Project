@@ -23,6 +23,22 @@ empty placeholders. `make all` exits with an explicit message until the pipeline
 is implemented; no results are generated yet. The initial sample periods,
 universe, parameters, and random seed are recorded in `configs/config.yaml`.
 
+### WRDS access
+
+Data are pulled with the official `wrds` Python package. Each teammate stores
+their own credentials once, outside the repository:
+
+```sh
+.venv/bin/python scripts/wrds_setup.py   # run in your own terminal; approve the Duo push
+```
+
+The script prompts for the password without echoing it and writes it to
+`~/.pgpass` (mode 600). Code connects with `project.data.wrds_connection()`,
+which reads that file and never takes a password argument. Each new connection
+can trigger a Duo push, so reuse one connection per session. API pulls land in
+the git-ignored `data/raw/wrds_api/`. Run `pre-commit install` once to block
+commits that contain secrets.
+
 The planned script order is:
 
 1. `scripts/01_get_data.py` — acquire source data.
