@@ -11,6 +11,7 @@ dependencies = [
     "numpy",
     "numba>=0.60",
     "pandas>=2.0",
+    "pyarrow",
     "statsmodels",
     "matplotlib",
     "pyyaml",
@@ -28,3 +29,7 @@ line-length = 100
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "conformance: paper-conformance regression guard (needs the CRSP daily panel; skipped when it is absent)",
+    "conformance_full: full-sample rebuild guard (minutes; runs only with REPLICATION_FULL=1)",
+]

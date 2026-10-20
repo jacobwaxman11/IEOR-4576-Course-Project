@@ -235,3 +235,464 @@ workers, against more than 30 minutes before.
   of the close day is drawn up over exactly [open day, close day]; also marking the close day
   would keep it up one day too long under `step(where="post")`.
 
+
+### 13c. Third review round (2026-10-18)
+
+- **Breakpoint set settled: CRSP = NYSE + AMEX common.** The reviewer
+  measured both readings on the 20-cohort sample (N+A any share 89.0 vs
+  N+A common 88.5) and preferred the common-share filter, which also keeps
+  `composition_stats`'s inputs honest; adopted in PR #7 with the key renamed
+  to `breakpoint_caps`. Full-sample Panel B after the rebuild:
+  avg_size_decile top20 3.11 (paper 2.71), all 4.65 (4.57);
+  weight_top3 top20 0.694 (0.74). The weighted full-sample score moves
+  137.5 -> 145.0 of 291 cells. The paper only says "using CRSP
+  breakpoints"; NYSE + AMEX common is our interpretation, chosen because
+  it fits Panel B best.
+- **The conformance threshold is the shipped sample score (88.5)**, so the
+  paper-conformance test is a regression guard: the weighted score must not
+  fall below the shipped sample score, and the assertion lists any cell
+  that is outside the 25% band.
+
+## 14. Frozen prices and the employed-capital denominator (2026-10-18)
+
+Two changes, each tested against alternatives on the full 474-cohort sample. Score = weighted
+cells of the replication check (✓ = 1, ~ = ½; 291 cells); "means" = the 8 Table 1 and 15
+Table 3 means measured in the paper's own standard errors (Table 1 `nw_se`, Table 3 mean / t).
+
+| run | score | T1 | T2A | T2B | T3 | T1 means within 2 SE (RMS z) | T3 means within 2 SE (RMS z) |
+|---|---|---|---|---|---|---|---|
+| main after #7/#8 | 145.0 | 30/25/33 | 13/8/3 | 24/5/11 | 39/40/60 | 7/8 (1.57) | 13/15 (1.50) |
+| + frozen-price exclusion | 160.0 | 43/25/20 | 13/8/3 | 24/5/11 | 40/42/57 | 7/8 (1.23) | 13/15 (1.52) |
+| + daily open count (shipped) | **161.5** | 47/22/19 | 13/8/3 | 24/5/11 | 37/46/56 | **8/8 (0.70)** | **14/15 (1.20)** |
+
+- **Frozen prices.** The worst top-5 months (1974-04, 1978-08, 1979-03, 1980-10, 1981-01) were
+  rank-1 pairs of two pre-1983 Nasdaq stocks whose quote did not change on 98-100% of formation
+  days (CRSP has no Nasdaq volume before Nov 1982, so `vol_common` keeps them). A constant
+  normalized price pairs at distance zero. `formation_universe` now also drops a stock whose
+  return is zero on every formation day: about one stock per cohort, all counts unchanged
+  (2,013 pairs per cohort, Financials 352). Top-5 Table 1 moves from 1.19% / std 2.99% /
+  min -20.3% to 1.39% / 2.49% / -14.5% (paper 1.31% / 2.28% / -10.6%).
+- **Thresholds instead (not adopted).** Dropping stocks whose quote is unchanged on more than a
+  share of quote-only days scores 138.0 (75%), 147.5 (85%), 156.0 (90%), 158.0 (95%),
+  163.0 (98%), 161.0 (99%). Strict rules (any unchanged quote: 139.0; `volpos_common`: 139.0;
+  `price_common`: 140.0) cut pairs from 2,013 to about 1,600 per cohort and Financials from 352
+  to 229-235 against the paper's 371 (the 50% threshold: 264), so GGR kept most of these
+  stocks. The 95-99% band only adds a tuned parameter, and 95% puts the
+  top-5 mean 2.7 SE above the paper.
+- **Employed capital = pairs open that day.** With the alive-gate and delisting fixes in, the
+  daily count reproduces the paper's fully-invested/committed ratios in every cell (ours
+  1.71/1.70/1.55/1.84 no wait, 1.71/1.70/1.54/1.88 one-day wait; paper 1.67/1.78/1.59/1.80 and
+  1.61/1.72/1.58/1.81). The period-average n̄ gives "all" 1.57, the reason the "all" mean sat at
+  0.85% (now 0.99%, paper 1.10%). A per-calendar-month count overshoots top 5 (ratio 2.2).
+- **Daily-rebalanced legs (not adopted).** Re-marking each pair to a $1/$1 position every day
+  (r_long − r_short compounded) fixes the "all" std in the dot-com months (2.16% -> 1.55%,
+  paper 1.67%) but lowers every mean and flattens the right tail ("all" kurtosis 25.5 -> 11.6,
+  paper 25.2): score 149.0. Buy-and-hold legs stay.
+- **Still open.**
+  - "All" pairs, Dec 1999 to Mar 2000: -8.4%, -18.7%, +15.4% months. Short legs that rose up to
+    27x, spread over 321 stocks; 1963-1998 alone matches the paper (std 1.62% vs 1.67%, min
+    -3.25% vs -2.72%), and our 1999-2002 top-20 matches the paper's hold-out (std 3.6% vs 3.8%
+    a year). GGR's all-pairs series has no such losses.
+  - Table 2 trigger: our top pairs are tighter (top-5 2σ 0.033 vs 0.048). Measuring the spread
+    around zero adds only 5%; the deviation on the signal day fits top 5/20 but overshoots
+    101-120 and "all", and the paper defines the row as an average of two standard deviations.
+    Dual-class pairs (e.g. permnos 17778/83443, 34 cohorts) are 5.5% of top-5 pairs and do not
+    explain it.
+- **Conformance guard.** The 20-cohort sample (every 24th cohort, so no cohorts overlap) moves
+  88.5 -> 86.0 while the full sample moves 145.0 -> 161.5; the threshold is reset to the new
+  shipped sample score. The sample is a weak proxy for the overlap-averaged tables.
+
+## 15. Attribution, SIC sensitivity and value-weighted books (2026-10-19)
+
+Marks are the check's: ✓ within 10% of the paper, ~ within 25%, ✗ further; score = ✓ + ½ ~
+over 291 cells. Every run is the full 474-cohort sample.
+
+**Attribution of section 14.** Splitting PR #10 into its two changes:
+
+| step | T1 ✓/~/✗ | T3 ✓/~/✗ | score |
+|---|---|---|---|
+| main after #7/#8 | 30/25/33 | 39/40/60 | 145.0 |
+| + frozen-price exclusion | 43/25/20 | 40/42/57 | 160.0 (+15.0) |
+| + daily open count | 47/22/19 | 37/46/56 | 161.5 (+1.5) |
+
+The frozen-price rule carries the gain. The daily open count flipped 63 cells in both
+directions for +1.5 net (Table 3: −1.0); it was chosen for the ratio fit, not the score.
+
+**SIC source does not drive Table 3.** A sector-only harness (same code path, verified to
+reproduce `table3.csv` exactly) ran all 474 cohorts under five SIC sources:
+
+| SIC source | U / T / F / I stocks per cohort (paper 156 / 61 / 371 / 1,729) | T3 return cells (of 135) |
+|---|---|---|
+| CRSP dated, own history, then header (shipped) | 161 / 61 / 352 / 1,726 | 56.0 |
+| CRSP dated only (unknown -> Industrials) | 159 / 59 / 321 / 1,762 | 61.5 |
+| CRSP header | 166 / 64 / 347 / 1,724 | 56.5 |
+| Compustat header (CCM link) | 174 / 63 / 349 / 1,714 | 61.0 |
+| Compustat historical SICH (1987+), else header | 176 / 63 / 345 / 1,716 | 62.0 |
+
+The spread is about 6 of 135 cells, almost all in tail rows, and every alternative worsens the
+counts. CRSP's December 2002 edition is the same security set (section 11) with 88 itemised SIC
+edits since, so the dated CRSP code is the code GGR had. Compustat SIC is newer and disagreed
+with CRSP on more than a third of firms at two digits in 1974-93 (Kahle and Walkling 1996). No
+SIC crosswalk for S&P's pre-GICS four groups was found. The 1999 NBER version's sector table
+(Table V, six-month cohort returns, 1962-97; it reports excess kurtosis, the RFS raw) gives the
+same ordering: 63-71.5 of 144 cells across sources.
+
+**Where Table 3 loses.** Location rows (mean, median, std, t, share negative) earned 44.5 of 75
+cells; tail rows (skew, kurtosis, min, max) 11.5 of 60. Two causes:
+
+- *Near-frozen pre-1983 Nasdaq stocks.* Quote-only micro-caps (about $2M) with zero returns on
+  85-99% of formation days pair at tiny distances in Industrials. Cohorts 1981-02 to 1982-10
+  lose 50-72% over six months in the top 5 (NBER worst: −23%), e.g. a short leg (permno 29699)
+  that rose 281% in the 1982 rally. The moves are genuine. Dropping 95%-stale stocks fixes the
+  tails but lifts the Industrials top-5 mean to 0.82% (paper 0.49%), so GGR kept them; no rule
+  the paper states removes them.
+- *February 2000.* Industrials "all" lost 20.4% that month under the count convention, spread
+  over about 2,200 of 2,600 pairs per cohort (the worst 10 pairs carry 20% of the loss): the
+  momentum peak hurting a contrarian rule. Up to 1998 the same series matches the paper (min
+  −3.2% vs −3.4%, mean 0.79% vs 0.71%).
+
+**Value-weighted books (adopted).** Eq. 2 says "the daily returns on the long and short
+positions are calculated as value-weighted returns", weights being each position's value since
+it opened. Read across the portfolio, fully invested = the value-weighted return of the long
+book minus that of the short book; committed scales it by the share of selected pairs holding a
+position. A short leg that has run up 3-5× now weighs in the short book instead of counting as a
+−300% to −500% loss on a $1 pair.
+
+| fully invested / committed | score | T1 ✓/~/✗ | T3 ✓/~/✗ | FI/committed "all" (paper 1.80 / 1.81) |
+|---|---|---|---|---|
+| period-average count n̄ / N | 160.0 | 43/25/20 | 40/42/57 | 1.57 / 1.58 |
+| daily count n_t / N | 161.5 | 47/22/19 | 37/46/56 | 1.84 / 1.88 |
+| value-weighted / N | 163.5 | 47/18/23 | 45/38/56 | 1.95 / 1.99 |
+| **value-weighted / scaled by n_t / N (shipped)** | **164.0** | 48/17/23 | 45/38/56 | **1.80 / 1.83** |
+
+Ratios for the shipped pair: 1.71/1.70/1.54/1.80 no wait and 1.70/1.70/1.53/1.83 one-day wait
+(paper 1.67/1.78/1.59/1.80 and 1.61/1.72/1.58/1.81). Industrials "all" February 2000 improves
+from −20.4% to −13.8% (paper min −3.4%) and its skew from −0.29 to +1.04 (paper 2.97). Table 1
+loses some tail cells it had matched ("all" kurtosis 23.4 -> 16.1, paper 25.2). Figure 1 and
+Table 2 are unchanged.
+
+**Realized cash flows (rejected).** Booking each trade's payoff on its close date, as the NBER
+text describes the cash flows, would remove the February 2000 mark-to-market loss but scores
+27-28 of 135 Table 3 cells (marked to market: 56). The RFS says positions are "marked-to-market
+daily".
+
+**Still open.** February 2000 (−13.8% vs a paper minimum of −3.4%) and the 1981-82 Industrials
+top-5 cohorts. Table 2 trigger (section 14).
+
+**Conformance guard.** The guard now has three parts. The shipped full-sample check must score
+at least 164.0; this always runs. The 20-cohort sample smoke test moves 86.0 -> 87.5 and its
+threshold rises with it. `make conformance-full` rebuilds all 474 cohorts and requires the
+shipped check's summary lines to be reproduced (about 70 s with 12 workers).
+
+## 16. The Table 2 Panel B decile-difference row reports the all-pairs average (2026-10-20)
+
+The paper's Table 2 Panel B row "Average decile difference for mixed pairs" is 0.97, 0.97,
+0.97 and 0.98 across the four portfolios. An average of |d1 - d2| over mixed-only pairs is
+at least 1 (integer CRSP decile gaps), so the paper's number cannot be a mixed-only average;
+its own text ("the stocks in mixed pairs differ on average by a single decile") reads like a
+rounded description of a value near 1. The only consistent reading is the average over all
+pairs, with same-decile pairs contributing 0. `composition_stats` now reports the all-pairs
+average in that row (the mixed-only value remains derivable as the all-pairs average divided
+by `share_mixed_decile_pairs`).
+
+Verification: the pinned evaluator (frozen paper values, mark recomputation) scores the full
+sample at 165.0 (from 164.0); the Table 2 Panel B cells move from 24/5/11 to 25/4/11.
+Rejected alternatives measured on the full sample: SIC 46xx to Utilities (+0.5, Utilities
+count 161 to 187 vs paper 156), all of 48xx to Utilities (+1.5, Utilities count 187), SIC
+47xx to Industrials (+1.0), near-frozen (>98% unchanged) exclusion (+0.0), converged-only
+round-trip counts (-2.0). The current SIC map stands: its sector counts (161/61/352/1730)
+are within 10% of the paper's 156/61/371/1729, and the map alternatives trade count cells
+for composition cells. The remaining ~90 miss cells are distribution tails (skew, kurtosis,
+min, max in Table 1 and Table 3) that trace to the pre-1983 Nasdaq stale-quote content of
+CRSP and the 2000-2002 dot-com months, which no rule stated in the paper removes.
+
+## 17. Score experiments under value-weighted books (2026-10-20)
+
+Marks are the check's (✓ within 10%, ~ within 25%, ✗ further; score = ✓ + ½ ~ over 291 cells).
+Every run is the full 474-cohort sample. The baseline is the pre-#13 check, 164.0; section 16
+(PR #13, merged) moves it to 165.0 through the Panel B decile row, which none of these
+experiments touches, so every delta below carries over to the 165.0 baseline.
+
+**Sensitivity, not shipped: Panel A over full six-month periods.** The cohorts starting 2002-08 to
+2002-12 trade for one to five months before the data end, while Panel A's rows are per six-month
+period. Averaging Panel A over the 469 full-period cohorts gives:
+
+| row (ours / paper) | top 5 | top 20 | 101-120 | all |
+|---|---|---|---|---|
+| std time open, all 474 cohorts (shipped) | 0.821 / 0.80 ✓ | 0.502 / 0.45 ~ | 0.448 / 0.38 ~ | 0.311 / 0.17 ✗ |
+| std time open, 469 full periods | 0.786 / 0.80 ✓ | 0.454 / 0.45 ✓ | 0.376 / 0.38 ✓ | 0.198 / 0.17 ~ |
+
+That would move Panel A from 13/8/3 to 15/7/2 (164.0 -> 165.5 on the pre-#13 baseline). The paper's Table 2 caption reads
+"between July 1963 and December 2002 (474 months)" and says nothing about dropping cut-off
+cohorts, so the shipped check keeps all 474.
+
+**Not adopted.**
+
+| test | score | T1 ✓/~/✗ | T2A | T2B | T3 ✓/~/✗ |
+|---|---|---|---|---|---|
+| baseline (value-weighted books) | 164.0 | 48/17/23 | 13/8/3 | 24/5/11 | 45/38/56 |
+| drop stocks with unchanged quote-only days > 99% | 163.5 | 48/17/23 | 13/8/3 | 24/5/11 | 43/41/55 |
+| same, > 98% | 164.0 | 49/13/26 | 13/8/3 | 27/3/10 | 41/44/54 |
+| same, > 95% | 158.5 | 37/25/26 | 15/6/3 | 30/1/9 | 37/47/55 |
+| cohorts weighted by open positions ("desk" capital) | 164.0 | 38/24/26 | 13/8/3 | 24/5/11 | 52/37/50 |
+| eq. (3) weights compounded from trading day 1 | 159.5 | 44/20/24 | 13/8/3 | 24/5/11 | 43/38/58 |
+| eq. (3) weights = formation-normalized price | 163.0 | 42/21/25 | 13/8/3 | 24/5/11 | 49/36/54 |
+| no pair of two securities of one company (same permco) | 163.0 | 41/25/22 | 16/7/1 | 24/4/12 | 45/38/56 |
+
+- *Near-frozen quotes, under value-weighted books.* The filter now fixes Panel B composition
+  (95%: top-5 size decile 2.71 vs 2.54, utilities 0.66 vs 0.72) but costs Table 1 and Table 3 as
+  much as it gains, and barely moves the top-5 trigger (0.033 -> 0.035). Section 15's reading
+  stands: GGR kept these stocks.
+- *Desk weighting.* Weighting each cohort's fully invested return by its open positions, rather
+  than the paper's equal-weighted average of the six portfolios, gains 6.5 Table 3 cells but
+  lowers every Table 1 mean by 10-20% (top 5 1.31% -> 1.10%, paper 1.31%). The paper's text is
+  the equal-weighted average; not adopted.
+- *Eq. (3) read literally.* The paper's weight is w_i,t = (1+r_i,1)...(1+r_i,t-1), which could
+  start on the first trading day rather than when the position opens. Compounding from trading
+  day 1 loses 4.5 points; weighting by the formation-normalized price gains Table 3 (49 ✓) but
+  loses Table 1. Weights from the open date stay.
+- *Same-company pairs.* 21% of top-5 pair slots (498 of 2,370) are two share classes of one firm
+  (Viacom/Paramount A/B, Citizens Utilities A/B, Berkshire A/B, A.C. Nielsen A/B, Comcast, ...),
+  pairing at σ ≈ 0.01. Barring them fixes most of Panel A (top-5 trigger 0.033 -> 0.037, round
+  trips 2.31 -> 2.18 vs 2.02) and the top-5 utilities weight (0.59 -> 0.69 vs 0.72), but the
+  top-5 Table 1 mean falls from 1.31% (paper 1.31%) to 1.07%. The paper does not mention share
+  classes; not adopted.
+- *Trigger averaging.* Averaging 2σ over opened pairs, over trades or by median gives 0.032-0.034
+  for top 5 (paper 0.048); the gap is in the pairs, not the averaging.
+
+**Diagnosed, not changed.** The worst top-5 month, April 1974 (−13.9%, paper minimum −10.6%), is
+one stock, Consolidated Edison (permno 11404), held long across all six cohorts while it fell after
+its dividend omission.
+The Utilities 101-120 maximum (25.7% in January 2001, paper 12.1%) is one cohort, 2001-01, earning
+94% fully invested in its first month. Neither is a code error.
+
+### Second edition and sub-period checks (2026-10-20)
+
+The February 2006 draft in the repo has the same Tables 1-3 and text as the RFS; the 1999 NBER
+draft (`w7032`) is a different experiment with its own Tables I-II: 408 cohorts (1963-07 to
+1997-06), 6-month cohort returns, Table II in the no-wait version. Scored with the same marks
+(1999 Table I 72 cells, Table II 24 cells; its kurtosis is excess, its "employed" capital is
+about committed x N / pairs opened):
+
+| run | RFS check (291) | 1999 Table I (72) | 1999 Table II (24) |
+|---|---|---|---|
+| baseline | 164.0 | 33.5 | 22.5 |
+| stale-quote filter > 99% | 163.5 | 35.0 | 22.5 |
+| > 98% | 164.0 | 39.5 | 22.5 |
+| > 95% | 158.5 | 46.5 | 22.5 |
+| literal eq. (3), from trading day 1 | 159.5 | 33.0 | 22.5 |
+| no same-company pairs | 163.0 | 29.5 | 23.5 |
+| wait-1 signal must persist on the open day | 154.5 | 32.5 | 22.5 |
+| no new signal on the day a position closes | 163.5 | 34.0 | 22.5 |
+| both wait-1 changes | 155.5 | 33.0 | 22.5 |
+
+- *The engine is right.* On the 1999 sample (wait 0) round trips are 2.47/2.28/1.93/1.73 vs
+  2.4/2.2/1.9/1.7, time open 3.9/4.0/4.2/4.1 vs 3.8/3.8/4.0/3.9, pairs opened 4.88/19.67/19.73/1,726
+  vs 4.97/19.81/19.77/1,814; 21 of 24 cells ✓, none ✗. The 1999 trigger is 0.0399/0.0449/0.0683/0.1518
+  (ours 0.0343/0.0413/0.0668/0.1544). The 2006 Table 2 differs from the 1999 one by more than our
+  engine does, so the editions are not the same experiment. The one-day-wait rule is not the lever:
+  none of the three variants above helps either edition.
+- *Near-frozen quotes matter before 1989 in both editions.* On the 1999 sample the 95% filter
+  lifts the top-20 minimum from -24.7% (cohort 1982-11, Nasdaq micro-caps whose short legs rose
+  3x) to -8.4% (paper -7.9%), the share of negative cohorts from 12.3% to 7.8% (paper 9%), skew
+  from -0.12 to 0.81 (paper 0.98). Table 8 (wait 1, fully invested, 1963-88) agrees:
+
+| 1963-88 | top 5 | top 20 | 101-120 | all |
+|---|---|---|---|---|
+| paper mean / std | 1.034 / 2.259 | 1.181 / 1.689 | 1.052 / 1.527 | 0.992 / 1.651 |
+| baseline | 0.812 / 2.475 | 1.044 / 1.766 | 0.885 / 1.555 | 0.995 / 1.524 |
+| filter > 95% | 1.091 / 2.245 | 1.263 / 1.626 | 0.926 / 1.543 | 1.002 / 1.527 |
+
+- *After 1988 the filter changes nothing, and we are too high.* 1989-2002 means (paper / ours):
+  top 5 0.217 / 0.443, 101-120 0.327 / 0.605, all 0.212 / 0.396; "all" std 1.295 / 2.324, entirely
+  from 1999-2002 (ours 3.80; 1989-98 is 1.37). The unfiltered full-sample match therefore pairs a
+  pre-1989 shortfall with a post-1988 excess that offset; the filter fixes the first and exposes
+  the second, which is why the RFS full-sample score falls (158.5) while both pre-1989 checks and
+  the 1999 edition rise.
+- *The hold-out sentence is about the no-wait rule.* "Using the original model" the top-20 fully
+  invested portfolio earned 10.4% a year (std 3.8%, t 4.82) in 1999-2002. Ours: no wait 7.6% (std
+  3.8%, t 4.0); wait 1 3.8% (std 3.5%, t 2.2).
+- *Not shipped.* The filter is a tuned threshold the paper does not state ("one or more days with
+  no trade" read strictly cuts Financials to 229-235 vs 371), and it lowers the RFS score. It is
+  the one convention that improves three independent checks (1999 Tables I-II, Table 8 pre-1989)
+  while lowering the fourth, so it stays a sensitivity.
+
+**Joint scorecard (both editions, Table 1 only).** RFS Table 1 is 88 cells; the 1999 Table I is 72.
+
+| run | RFS Table 1 | 1999 Table I | RFS total | Table 8 (16) |
+|---|---|---|---|---|
+| baseline | 56.5 | 33.5 | 164.0 | 8.5 |
+| stale-quote filter > 99% | 56.5 | 35.0 | 163.5 | 8.5 |
+| > 98% | 55.5 | 39.5 | 164.0 | 8.5 |
+| > 95% | 49.5 | 46.5 | 158.5 | 9.5 |
+| no new signal on the day a position closes | 57.0 | 34.0 | 163.5 | n/a |
+| wait-1 signal must persist | 54.0 | 32.5 | 154.5 | n/a |
+| literal eq. (3), formation-normalized weights | 52.5 | 31.5 | 163.0 | n/a |
+| no same-company pairs | 53.5 | 29.5 | 163.0 | n/a |
+
+No convention lifts both Table 1s by more than noise. The > 98% filter leaves the RFS total
+unchanged and lifts the 1999 Table I by 6; the > 95% filter lifts the 1999 side most and costs the
+RFS side most, because the RFS sample adds 1989-2002, where we are too high.
+
+- *Capital conventions do not explain post-1988.* Top-5 1989-2002 mean is 0.43-0.44 under the
+  volume-weighted and the count-based fully invested series alike (paper 0.217).
+- *Footnote 4 calibration.* The paper reports that treating a delisted long as -100% lowers the
+  top-20 no-wait fully invested mean from 1.436% to 1.32% and raises the std from 1.69% to 1.9%.
+  On our data the same assumption moves it from 1.333% to 1.169% (std 1.74% to 2.07%): about 1.4x
+  the mean effect and 1.6x the std effect. Our long legs carry more delisting exposure than the
+  paper's, or milder actual delisting returns; 140 of 20,774 top-20 trades close on a delisting.
+  The extreme assumption itself scores 129.5 (Table 1: 18 of 88 within 10%), so the paper's own
+  figure is not our data's.
+
+- *Missing delisting returns do not explain post-1988.* The CIZ delisting table (local,
+  `delisting.parquet`, 29,727 rows) has no return for 62% of for-cause (GDR) delistings before 1989
+  and 19% after; the panel build zero-fills them, i.e. "the last available price" the paper names.
+  Filling them with -30% (Shumway) instead gives RFS 163.0, 1999 Table I 33.5, Table 8 8.0/16, and
+  post-1988 top-5 stays at 0.44% (paper 0.217%); a -100% fill gives 150.0 / 30.0 / 6.5. Only 140 of
+  20,774 top-20 no-wait trades close on a delisting, so the paper's footnote-4 sensitivity
+  (every delisted long at -100%, including mergers) is driven by the merged names, not by the
+  missing returns.
+
+### Time-profile checks against Tables 5, 8 and Figures 2-3 (2026-10-20)
+
+Diagnostics for the Table 1 gap, not extra targets. All use the shipped (vw_base) one-day-wait fully
+invested series.
+
+- *Table 5 (monthly, one-day wait).* Our 1% quantile and minimum match for the top 5 (−4.28% vs
+  −4.32%; min −15.2% vs −12.6%) and the minimum for the top 20 (−8.13% in April 1974 vs −8.22%;
+  Figure 2 draws the paper's minimum in 1974 too). The top-20 1% (−2.97% vs −1.94%) and the "all"
+  tail do not: "all" minimum −12.3% vs −2.95%, 1% −2.84% vs −1.99%.
+- *Serial correlation and co-movement.* Top 20 serial correlation 0.28 (paper 0.24); 101-120 0.05
+  (0.19); "all" 0.07 (0.12). Correlation of the top-20 and 101-120 series: 0.35 full sample, 0.41
+  pre-1989, 0.06 post-1988 (paper 0.48 / 0.51 / 0.18). Post-1988 the paper's looser portfolios still
+  share a common component and ours do not.
+- *Where "all" loses (Table 1 shape rows).* Skew 1.28 vs 3.42, kurtosis 16.1 vs 25.3, min −12.6% vs
+  −2.7%, std 1.99% vs 1.67% (no wait). Every row is the dot-com window: December 1999 −5.8%,
+  February 2000 −12.3%, September 2000 −4.3%, March 2000 +11.1%, January 2001 +12.5%.
+- *February 2000 is the data, not a bug.* Cohort 1999-09 closes 5,420 trades that month; the 2,532
+  that run to the end of the window average −65% of a $1 pair (mean +29% for the 2,638 that
+  converged). 97% of the loss is on Nasdaq short legs (SIC 73, 28, 36, 35, 38), ranks 1,000-3,300
+  (loosely matched pairs). The worst short is permno 79006: +135% on 16 Feb 2000 alone, +12.5x
+  over the window. Booking payoffs on the close date (realized, committed x 1.8) still gives
+  February 2000 −7.7% (min −7.7%, max +8.0%), so the mark-to-market convention is not the cause.
+- *Figure 3 (digitized, ±0.15 pp/month).* Cumulative top-20 fully invested: paper 24.1 at 1989, 40.0
+  at 2002; ours 23.8 and 45.3. The totals agree, the years do not: 1989-93 paper 0.25 vs ours
+  0.63 %/month, 1994-98 0.42 vs 0.26. Pre-1989 the yearly profile differs by 0.75 rmse (1980 and
+  1982: ours 0.9 and −1.2 vs 2.1 and 0.6). The >95% stale-quote variant cuts that rmse to 0.60 and
+  lifts the profile correlation 0.54 → 0.71; nothing we tried moves post-1988 (0.31-0.37, near the
+  digitization noise). So the stale-quote question is a pre-1989 matter and the post-1988 gap is in
+  the looser portfolios (top 5, 101-120, "all"), which no figure shows.
+- *Figure 2.* The paper's maximum (about +13.5%, about nine months after the April 1974 minimum,
+  i.e. January 1975) is +5.0% in our top-20 series (our maximum 7.6%, January 1974). This is the
+  Table 1 top-20 "max" cell (paper 13.3% no wait; ours 9.8%).
+
+### Same-issuer pairs plus stale quotes: the first joint gain (2026-10-20)
+
+Aligning the small portfolios first (top 5, top 20, 101-120) turned up one structural cause. 21% of
+the top-5 pair slots are two share classes of one issuer (same PERMCO): 0% in the 1960s, 13% in the
+1970s, 43% in the 1990s and 80% in 2000-02 (Berkshire A/B, Paramount, Raytheon, Comcast), with
+spreads of 0.005-0.011 against 0.018 for other pairs. Together with the near-frozen Nasdaq quotes
+this explains the too-tight top pairs. Neither does it alone.
+
+| run (all unshipped) | RFS score | 1999 Table I + II | top-5 trigger (paper 0.0476) | top-5 utilities (0.72) | top-5 / top-20 mean post-1988 (0.217 / 0.375) |
+|---|---|---|---|---|---|
+| baseline (pre-#13 shipped) | 164.0 | 33.5 + 22.5 | 0.033 | 0.587 | 0.443 / 0.412 |
+| no same-PERMCO pairs | 163.0 | 29.5 + 23.5 | 0.037 | 0.690 | 0.299 / 0.429 |
+| stale > 95% | 158.5 | 46.5 + 22.5 | n/a | n/a | n/a |
+| **both** | **169.0** | **46.5 + 23.5** | **0.039** | **0.777** | **0.299 / 0.429** |
+
+Both together: pre-1989 mean / std (Table 8: paper) top 5 1.01 / 2.31 (1.03 / 2.26), top 20 1.26 /
+1.64 (1.18 / 1.69), 101-120 0.94 / 1.52 (1.05 / 1.53), all 1.00 / 1.53 (0.99 / 1.65); post-1988 top 20
+0.43 / 0.99 (0.375 / 0.987). Table 5 top-20 quantiles (ours / paper): 1% −2.35 / −1.94, 5% −0.99 /
+−1.00, 10% −0.58 / −0.58, 25% +0.01 / +0.05, P(<0) 0.25 / 0.23, serial 0.25 / 0.24. Table 2 Panel B top
+5 / top 20: size decile 2.65 / 2.74 (2.54 / 2.71), top-3 weight 0.77 / 0.74 (0.78 / 0.74). RFS cells
+✓/~/✗: Table 1 50/16/22, Table 2A 14/9/1, Table 2B 27/2/11, Table 3 41/47/51.
+
+Still off: 101-120 post-1988 (0.59 / 1.37 vs 0.327 / 1.12), "all" post-1988 (0.40 / 2.33 vs 0.212 /
+1.30), top-5 post-1988 std (1.45 vs 1.66), the Table 2 trigger (top 5 0.039 vs 0.048, top 20 0.045
+vs 0.053). The 1989-2002 101-120 pairs are ordinary loose pairs (1% related names, 32% utilities).
+
+Not shipped: neither rule is in the paper (the 1999 draft and the RFS both say only that stocks
+with a no-trade day are screened out), so both stay sensitivities until the paper's words support
+them. Diff: scratchpad `exp/nsf_s95.diff` (env `NOSAMEFIRM=1 STALE_MAX=0.95`).
+
+### Table 2 trigger, Table 7 long/short books and 101-120 (2026-10-20)
+
+Follow-up to the same-issuer + stale-quote run (unshipped; env `NOSAMEFIRM=1 STALE_MAX=0.95`).
+
+- **Table 7 (long and short book mean monthly return, one-day wait, full sample).** Value-weighted
+  books from the engine's per-leg payoffs (diff `exp/nsf_ls_books.diff`). Long / short, in %:
+
+  | run | top 5 | top 20 | 101-120 | all |
+  |---|---|---|---|---|
+  | paper | 1.245 / 0.501 | 1.330 / 0.435 | 1.458 / 0.663 | 1.623 / 0.908 |
+  | baseline | 1.140 / 0.435 | 1.293 / 0.465 | 1.467 / 0.667 | 1.500 / 0.702 |
+  | no same-PERMCO | 1.166 / 0.543 | 1.290 / 0.473 | 1.462 / 0.684 | 1.501 / 0.702 |
+  | stale > 95% | 1.272 / 0.380 | 1.360 / 0.387 | 1.468 / 0.643 | 1.503 / 0.701 |
+  | both | 1.265 / 0.476 | 1.363 / 0.388 | 1.479 / 0.654 | 1.504 / 0.700 |
+
+  The top-5 books are closest with both rules (long +1.6%, short −5%; baseline −8%, −13%). 101-120
+  matches under every variant (the level there is right). "All" is low in both books under every
+  variant (long −7%, short −23%): the paper's all-pairs stocks earn more raw return, and no
+  convention we tested changes that.
+- **101-120 post-1988 is a timing split, not a level error.** Full-sample 101-120 fully invested is
+  0.825% (paper 0.795%), but ours is 0.947% pre-1989 (paper 1.052%) and 0.603% post-1988 (0.327%).
+  Our series declines less across 1989 than the paper's in every portfolio (post/pre ratio top 5 0.32
+  vs 0.21, top 20 0.35 vs 0.32, 101-120 0.64 vs 0.31, all 0.40 vs 0.21). The post-1988 pairs
+  are ordinary loose pairs (1% related names, 32% utilities).
+- **Table 2 trigger (not resolved).** Formation 2σ with both rules: 0.039 / 0.045 / 0.069 / 0.166
+  (paper 0.0476 / 0.0528 / 0.0756 / 0.1689); the paper/ours ratio falls with looseness
+  (1.21 / 1.18 / 1.10 / 1.02). Tried and rejected: RMS about zero (0.041 / 0.047 / 0.072 / 0.173),
+  trading-period std (2x too high), 18-month RMS (2x), median. The realized deviation at the signal
+  (0.049 / 0.054 / 0.083 / 0.200) fits top 5 and top 20 but overshoots "all" by 18%, and the table
+  note defines the row as the cross-sectional average of two standard deviations of the pair-price
+  difference. The 1999 draft's Table II (0.0399 / 0.0449 / 0.0683 / 0.1518) fits our 2σ, so the two
+  editions disagree on this row by more than the sample extension explains.
+- **Where the pairs earn.** Mean payoff per pair by exchange mix and size (every third cohort):
+  post-1988 only the Big Board pairs (NN +0.0115) are positive; Nasdaq-Nasdaq −0.0086, mixed −0.006;
+  pairs ranked > 1,600 lose −0.0176 after 1988. No attribute isolates the 101-120 excess.
+
+## 18. Same-issuer and near-frozen-quote exclusions are now on by default (2026-10-20)
+
+`03_replicate.py` now runs with `--same-issuer exclude` and `--max-stale-share 0.95`; the stack
+before it (#14 ledger, #15 options) shipped them off. The shipped check moves 165.0 -> 169.5.
+
+| RFS cells ✓/~/✗ | before (165.0) | now (169.5) |
+|---|---|---|
+| Table 1 (88) | 48/17/23 | 50/16/22 |
+| Table 2 Panel A (24) | 13/8/3 | 14/9/1 |
+| Table 2 Panel B (40) | 24/7/9 | 27/3/10 |
+| Table 3 (139) | 45/38/56 | 41/47/51 |
+
+The 20-cohort smoke sample moves 87.5 -> 91.0, and Figure 1 is unchanged (pair rank 4, trades
+within 3 days). The 1999 draft's Tables I-II, which this change was not tuned on, move from
+33.5 + 22.5 to 46.5 + 23.5.
+
+**What is and is not in the paper.** Section 2.1 says only that stocks "that have one or more
+days with no trade" are screened out. A stock whose quote is frozen (no volume field, price
+unchanged) and a second share class of the same company are not mentioned. Both rules are our
+reading, and the check's header says so. They are shipped because they are the only change that
+raises both editions together and the improvement shows up in tables the rules were not fitted to:
+
+- *Table 2 composition (top 5 / top 20, ours vs paper):* utilities 0.78 / 0.77 (0.72 / 0.71),
+  average size decile 2.65 / 2.74 (2.54 / 2.71), top-3 deciles 0.77 / 0.74 (0.78 / 0.74).
+- *Table 5 (top 20, one-day wait):* 5% −0.99% (−1.00%), 10% −0.58% (−0.58%), serial correlation 0.25
+  (0.24).
+- *Table 7 (long / short books, top 5):* 1.265 / 0.476 (1.245 / 0.501), baseline 1.140 / 0.435.
+- *Table 8, pre-1989 (mean / std):* top 5 1.01 / 2.31 (1.03 / 2.26), top 20 1.26 / 1.64 (1.18 /
+  1.69), 101-120 0.94 / 1.52 (1.05 / 1.53), all 1.00 / 1.53 (0.99 / 1.65).
+
+Neither rule helps alone (pre-#13 baseline 164.0): same-issuer only 163.0, stale only 158.5. The
+rules are why section 17's "not adopted" rows lose points one at a time and win together.
+
+**Switching them off.** `--same-issuer allow --max-stale-share none` reproduces the 165.0 check.
+
+**Still open** (none of it changes with these rules):
+
+- Table 1 "all" tails: skew 1.28 vs 3.42, kurtosis 16 vs 25, min −12.6% vs −2.7%, all from December
+  1999 to January 2001 (section 17).
+- 101-120 and "all" after 1988 (0.59% / 0.40% vs 0.327% / 0.212%): the level is right over the whole
+  sample (Table 7), the split between 1963-88 and 1989-2002 is not.
+- Table 2 trigger: 0.039 / 0.045 / 0.069 / 0.166 vs 0.0476 / 0.0528 / 0.0756 / 0.1689. The 1999
+  draft's trigger (0.0399 / 0.0449 / 0.0683 / 0.1518) fits our 2σ, so the editions disagree.
+- Table 3: ✓ falls 45 -> 41 while ~ rises 38 -> 47; the Table 3 total is about even.

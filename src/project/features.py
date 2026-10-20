@@ -28,13 +28,18 @@ def normalized_prices(returns: pd.DataFrame) -> pd.DataFrame:
     return prices / prices.iloc[0]
 
 
-def ssd_matrix(prices: pd.DataFrame) -> np.ndarray:
+def ssd_matrix(prices: pd.DataFrame, issuers: pd.Series | None = None) -> np.ndarray:
     """Pairwise sum of squared deviations over the rows of ``prices``.
 
     ``D_ij = sum_t (P_it - P_jt)^2``, computed float64 via
     ``(a - b)^2 = a^2 + b^2 - 2ab``. The diagonal is set to +inf so a stock
     is never its own nearest neighbour. Shape is (n_stocks, n_stocks) in the
     column order of ``prices``. An empty window (no rows) raises ``ValueError``.
+
+    ``issuers`` (permno -> issuer id, default ``None``) bars a stock from
+    matching another stock of the same issuer: their distance is set to +inf,
+    as the diagonal's is. A stock missing from ``issuers``, or with a NaN id, is
+    never barred: NaN equals no id, so only matching non-NaN ids bar a pair.
     """
     A = np.asarray(prices, dtype=np.float64)
     if A.ndim != 2:
@@ -48,16 +53,22 @@ def ssd_matrix(prices: pd.DataFrame) -> np.ndarray:
     D = sq[:, None] + sq[None, :] - 2.0 * gram
     np.maximum(D, 0.0, out=D)
     np.fill_diagonal(D, np.inf)
+    if issuers is not None:
+        ids = issuers.reindex(prices.columns).to_numpy(dtype=float)
+        same = (ids[:, None] == ids[None, :]) & ~np.isnan(ids)[:, None]
+        D[same] = np.inf
     return D
 
 
-def select_pairs(prices: pd.DataFrame) -> pd.DataFrame:
+def select_pairs(prices: pd.DataFrame, issuers: pd.Series | None = None) -> pd.DataFrame:
     """Exhaustive minimum-distance pairing on normalized formation prices.
 
     Each stock i is matched with ``j* = argmin_{j != i} D_ij``; the pair set is
     the unique unordered ``{i, j*}``. Pairs are ranked by distance ascending,
     ties broken by (permno_1, permno_2). ``sigma`` is the standard deviation of
-    the spread of formation-normalized prices with ddof=0.
+    the spread of formation-normalized prices with ddof=0. With ``issuers`` (see
+    ``ssd_matrix``) a stock is matched to the nearest stock of another issuer,
+    and a stock with no such partner is left unpaired.
 
     Returns a DataFrame with columns rank, permno_1, permno_2 (permno_1 <
     permno_2), distance, sigma.
@@ -74,7 +85,7 @@ def select_pairs(prices: pd.DataFrame) -> pd.DataFrame:
     if n < 2:
         return pd.DataFrame(columns)
 
-    D = ssd_matrix(prices)
+    D = ssd_matrix(prices, issuers)
     P = np.asarray(prices, dtype=np.float64)
     nearest = np.argmin(D, axis=1)
 
@@ -82,6 +93,8 @@ def select_pairs(prices: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for i in range(n):
         j = int(nearest[i])
+        if not np.isfinite(D[i, j]):
+            continue
         lo, hi = sorted((int(permnos[i]), int(permnos[j])))
         if (lo, hi) in seen:
             continue
@@ -98,6 +111,8 @@ def select_pairs(prices: pd.DataFrame) -> pd.DataFrame:
             }
         )
 
+    if not rows:
+        return pd.DataFrame(columns)
     pairs = pd.DataFrame(rows)
     pairs = pairs.sort_values(
         ["distance", "permno_1", "permno_2"], kind="mergesort"
@@ -106,7 +121,9 @@ def select_pairs(prices: pd.DataFrame) -> pd.DataFrame:
     return pairs
 
 
-def select_pairs_within_groups(prices: pd.DataFrame, groups: pd.Series) -> pd.DataFrame:
+def select_pairs_within_groups(
+    prices: pd.DataFrame, groups: pd.Series, issuers: pd.Series | None = None,
+) -> pd.DataFrame:
     """Sector-restricted pairing (paper §2.1, Table 3).
 
     ``groups`` maps each permno (column of ``prices``) to a group label, e.g.
@@ -120,7 +137,7 @@ def select_pairs_within_groups(prices: pd.DataFrame, groups: pd.Series) -> pd.Da
     frames = []
     for label in sorted(labels.dropna().unique()):
         cols = labels.index[labels.eq(label)]
-        pairs = select_pairs(prices[cols])
+        pairs = select_pairs(prices[cols], issuers)
         if len(pairs):
             frames.append(pairs.assign(group=label))
     if not frames:

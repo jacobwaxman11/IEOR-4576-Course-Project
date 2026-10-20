@@ -299,7 +299,9 @@ def trading_calendar(start, end) -> pd.DatetimeIndex:
     return pd.DatetimeIndex(dates[(dates >= start_ts) & (dates <= end_ts)])
 
 
-def formation_universe(start, end, universe: str = "vol_common") -> pd.Index:
+def formation_universe(
+    start, end, universe: str = "vol_common", max_stale_share: float | None = None,
+) -> pd.Index:
     """PERMNOs eligible per INTERFACES.md §2.1 over [start, end].
 
     A stock qualifies when it has a row on every calendar date of the window,
@@ -307,11 +309,50 @@ def formation_universe(start, end, universe: str = "vol_common") -> pd.Index:
     implemented as a qualifying-row count compared with the number of calendar
     days (no per-stock loop). Defaults to the primary ``vol_common`` variant;
     ``universe="price_common"`` reproduces the stage-1 rule exactly.
+
+    A stock whose daily return is zero on every day of the window is also
+    excluded: its price never moved, so there is no evidence it traded (in
+    practice a pre-1983 Nasdaq stock quoted at an unchanged bid/ask with no
+    volume field). Its normalized price is constant, so two such stocks would
+    pair at a distance of exactly zero and take the top ranks.
+
+    ``max_stale_share`` (default ``None``: no limit) extends that rule to
+    near-frozen quotes: a stock is also excluded when more than that share of
+    the window's days carry no recorded volume (neither zero nor positive) and
+    an unchanged price.
     """
     n_days = len(trading_calendar(start, end))
     if n_days == 0:
         return pd.Index([], name="permno")
-    panel = load_daily(start, end, _universe_panel_columns(universe))
+    extra = ["vol_zero", "vol_pos"] if max_stale_share is not None else []
+    columns = list(dict.fromkeys([*_universe_panel_columns(universe), "ret", *extra]))
+    panel = load_daily(start, end, columns)
     flags = universe_flags(panel, universe)
     counts = panel.loc[flags].groupby("permno").size()
-    return pd.Index(counts[counts == n_days].index.sort_values(), name="permno")
+    rows = panel.loc[flags]
+    moved = rows["ret"].fillna(0.0).ne(0.0).groupby(rows["permno"]).any()
+    full = counts[counts == n_days].index
+    keep = full[moved.reindex(full, fill_value=False).to_numpy()]
+    if max_stale_share is not None:
+        stale_day = ~rows["vol_zero"] & ~rows["vol_pos"] & rows["ret"].fillna(0.0).eq(0.0)
+        share = stale_day.groupby(rows["permno"]).mean()
+        keep = keep[(share.reindex(keep, fill_value=0.0) <= max_stale_share).to_numpy()]
+    return pd.Index(keep.sort_values(), name="permno")
+
+
+SECURITY_HEADER_FILE = WRDS_API_DIR / "security_info_header.parquet"
+
+
+def issuer_map(path: Path = SECURITY_HEADER_FILE) -> pd.Series:
+    """Per permno, the CRSP permco of its issuer (the CIZ security header).
+
+    Two share classes of one company have different permnos and one permco.
+    Raises ``ValueError`` if the header holds more than one row for a permno.
+    """
+    hdr = pd.read_parquet(path, columns=["permno", "permco"])
+    if hdr["permno"].duplicated().any():
+        raise ValueError(f"{path.name} has more than one row per permno")
+    permco = pd.to_numeric(hdr["permco"], errors="coerce")
+    return pd.Series(permco.to_numpy(), index=hdr["permno"].to_numpy(), name="permco").astype(
+        "float64"
+    )

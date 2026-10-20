@@ -50,6 +50,10 @@ class CohortResult:
     opened: pd.Series
     trades: pd.DataFrame
     pair_payoffs: pd.DataFrame | None = None
+    long_payoffs: pd.DataFrame | None = None
+    long_values: pd.DataFrame | None = None
+    short_payoffs: pd.DataFrame | None = None
+    short_values: pd.DataFrame | None = None
 
 
 def _empty_result(dates: pd.Index) -> CohortResult:
@@ -58,6 +62,10 @@ def _empty_result(dates: pd.Index) -> CohortResult:
         opened=pd.Series(dtype=bool),
         trades=pd.DataFrame(columns=TRADE_COLUMNS),
         pair_payoffs=pd.DataFrame(index=dates, columns=[], dtype=float),
+        long_payoffs=pd.DataFrame(index=dates, columns=[], dtype=float),
+        long_values=pd.DataFrame(index=dates, columns=[], dtype=float),
+        short_payoffs=pd.DataFrame(index=dates, columns=[], dtype=float),
+        short_values=pd.DataFrame(index=dates, columns=[], dtype=float),
     )
 
 
@@ -74,6 +82,10 @@ def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait):
     n = col1.shape[0]
     pair_ret = np.zeros((T, n))
     pair_pay = np.zeros((T, n))
+    long_pay = np.zeros((T, n))
+    long_val = np.zeros((T, n))
+    short_pay = np.zeros((T, n))
+    short_val = np.zeros((T, n))
     opened = np.zeros(n, dtype=np.bool_)
     is_open = np.zeros(n, dtype=np.bool_)
     pending = np.zeros(n, dtype=np.bool_)
@@ -107,6 +119,10 @@ def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait):
                 pi = (new_l - L[k]) - (new_s - S[k])
                 pair_ret[t, k] = pi / w[k]
                 pair_pay[t, k] = pi
+                long_pay[t, k] = new_l - L[k]
+                long_val[t, k] = L[k]
+                short_pay[t, k] = new_s - S[k]
+                short_val[t, k] = S[k]
                 w[k] += pi
                 L[k] = new_l
                 S[k] = new_s
@@ -183,7 +199,7 @@ def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait):
                     pending[k] = True
                     pending_sign[k] = sign
 
-    return (pair_ret, pair_pay, opened, tr_pair[:m], tr_open[:m], tr_close[:m], tr_reason[:m],
+    return (pair_ret, pair_pay, long_pay, long_val, short_pay, short_val, opened, tr_pair[:m], tr_open[:m], tr_close[:m], tr_reason[:m],
             tr_long[:m], tr_short[:m], tr_payoff[:m])
 
 
@@ -270,7 +286,8 @@ def simulate_cohort(
     sigma = pairs["sigma"].to_numpy(float)
     ranks = pairs["rank"].to_numpy()
 
-    (pair_ret, pair_pay, opened, k, o, c, reason, lc, sc, payoff) = _simulate_kernel(
+    (pair_ret, pair_pay, long_pay, long_val, short_pay, short_val, opened, k, o, c, reason, lc,
+     sc, payoff) = _simulate_kernel(
         np.ascontiguousarray(P, dtype=np.float64),
         np.ascontiguousarray(R, dtype=np.float64),
         np.ascontiguousarray(term),
@@ -301,4 +318,8 @@ def simulate_cohort(
         opened=pd.Series(opened, index=rank_index, name="opened"),
         trades=trades,
         pair_payoffs=pd.DataFrame(pair_pay, index=dates, columns=rank_index),
+        long_payoffs=pd.DataFrame(long_pay, index=dates, columns=rank_index),
+        long_values=pd.DataFrame(long_val, index=dates, columns=rank_index),
+        short_payoffs=pd.DataFrame(short_pay, index=dates, columns=rank_index),
+        short_values=pd.DataFrame(short_val, index=dates, columns=rank_index),
     )

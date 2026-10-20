@@ -1,0 +1,14 @@
+{
+  "metric": "weighted_matching_cells",
+  "threshold": 91.0,
+  "baseline": 91.0,
+  "tolerance_full": 0.1,
+  "tolerance_half": 0.25,
+  "sample": "every 24th cohort of 1963-07..2002-12 (20 cohorts)",
+  "note": "the sample score is computed by tests/test_replication_conformance.py from the sample tables against frozen paper constants; the threshold is the shipped sample score, so the weighted score must not fall below it. The sample is a smoke test: full_sample guards the reported result",
+  "full_sample": {
+    "threshold": 169.5,
+    "check": "report/replication/REPLICATION_CHECK.md",
+    "note": "the shipped full-sample check (all 474 cohorts) must score at least this; REPLICATION_FULL=1 also rebuilds the full sample and requires it to reproduce the shipped check's summary"
+  }
+}

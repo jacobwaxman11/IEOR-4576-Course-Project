@@ -10,21 +10,17 @@ Conventions (see ``report/replication/INTERFACES.md``):
 * ``simulate_cohort`` reports ``r_p,t = pi_p,t / w_p,t-1`` with
   ``w_p,t-1 = prod_{s<=t-1}(1 + r_p,s)``, so the dollar payoff is recovered
   exactly as ``pi_p,t = r_p,t * w_p,t-1``.
-* Portfolio daily return: the sum of the pairs' dollar payoffs divided by a
-  pair COUNT (paper §2.3, PDF p. 14): every selected pair ("committed"), or
-  the pairs holding a position ("employed", the paper's fully-invested
-  return). The paper's own Table 1 pins down the employed denominator: its
-  fully-invested/committed ratio (1.78 top-20, 1.80 "all") equals
-  N_selected / (average number of pairs holding a position per day), with no
-  covariance term. Dividing each day's payoffs by that day's open count and
-  compounding instead inflates "all" by the E[1/n] > 1/E[n] Jensen convexity
-  of the wildly varying daily open count (measured corr(sum pi, 1/n_t) ~ 0),
-  which reproduced the old 2x "all" gap. So "employed" divides by the
-  portfolio's PERIOD-AVERAGE open count (a constant), reproducing the paper's
-  ratios and levels ("all" 1.03-1.12% vs paper 1.10% in all four
-  universe x wait cells). The superseded readings survive as
-  "employed_openday", "employed_literal", "committed_account" and
-  "employed_account" for comparison.
+* Portfolio daily return ("employed", the paper's fully-invested return on
+  actual employed capital): eq. (2) applied across the portfolio, the
+  value-weighted return of all long positions minus that of all short
+  positions, each weighted by its value since the trade opened (paper §2.3,
+  PDF p. 14). "committed" scales it by the share of selected pairs holding a
+  position that day. Both reproduce the paper's own fully-invested/committed
+  ratios (ours 1.53-1.83 vs paper 1.58-1.81, "all" 1.80 and 1.83 vs 1.80 and
+  1.81). The count-based readings survive for comparison: "employed_count"
+  and "committed_count" (payoffs over the pairs open that day or over all
+  selected pairs), "employed_nbar" (period-average count),
+  "employed_literal", "committed_account" and "employed_account".
 * "Fully invested" in Table 1 is the employed-capital measure; "average excess
   return on committed capital" is the committed-capital mean.
 """
@@ -133,12 +129,15 @@ def _open_mask(result, index: pd.DatetimeIndex, ranks: list) -> np.ndarray:
 CAPITAL_CHOICES = (
     "committed",
     "employed",
-    "employed_openday",
+    "committed_count",
+    "employed_count",
+    "employed_nbar",
     "employed_literal",
     "committed_account",
     "employed_account",
 )
-MASK_CAPITALS = frozenset({"employed", "employed_openday", "employed_account"})
+VW_CAPITALS = frozenset({"employed", "committed"})
+MASK_CAPITALS = frozenset({"employed_count", "employed_nbar", "employed_account"})
 
 
 def _payoffs_and_accounts(result, sel: list, T: int) -> tuple[np.ndarray, np.ndarray]:
@@ -155,6 +154,33 @@ def _payoffs_and_accounts(result, sel: list, T: int) -> tuple[np.ndarray, np.nda
     w_prev = np.ones_like(r)
     w_prev[1:] = np.cumprod(1.0 + r, axis=0)[:-1]
     return w_prev * r, w_prev
+
+
+def _vw_legs(result, sel: list, index: pd.Index) -> tuple[np.ndarray, np.ndarray]:
+    """Value-weighted long-book minus short-book daily return, and the open count.
+
+    Eq. (2): r_P,t = sum_i w_i,t r_i,t / sum_i w_i,t over the long (short)
+    positions of the portfolio, w_i,t the position's value since it opened.
+    Returns (excess, n_open) per day; excess is NaN on a day with no position.
+    A position counts as open while either leg has value, and a book whose
+    value has fallen to zero contributes no return.
+    """
+    T = len(index)
+    if not sel:
+        return np.full(T, np.nan), np.zeros(T)
+    if getattr(result, "long_values", None) is None:
+        raise ValueError("value-weighted capital needs the engine's per-leg payoffs and values")
+    lp = result.long_payoffs[sel].to_numpy(dtype=float).sum(axis=1)
+    lv = result.long_values[sel].to_numpy(dtype=float)
+    sp = result.short_payoffs[sel].to_numpy(dtype=float).sum(axis=1)
+    sv = result.short_values[sel].to_numpy(dtype=float)
+    n_open = ((lv > 0) | (sv > 0)).sum(axis=1).astype(float)
+    lv, sv = lv.sum(axis=1), sv.sum(axis=1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        long_ret = np.where(lv > 0, lp / lv, 0.0)
+        short_ret = np.where(sv > 0, sp / sv, 0.0)
+    excess = np.where(n_open > 0, long_ret - short_ret, np.nan)
+    return excess, n_open
 
 
 def portfolio_daily(result, ranks, capital: str) -> pd.Series:
@@ -180,18 +206,24 @@ def portfolio_daily(result, ranks, capital: str) -> pd.Series:
         are selected" (committed) and "divides the payoffs by the number of
         pairs that open" (fully invested):
 
-        - "committed": ``sum_p pi_p,t / N`` over the N selected pairs.
-        - "employed" (fully invested): ``sum_p pi_p,t / n_bar``, ``n_bar`` = the
-          average number of pairs holding a position per day over the cohort's
-          trading period (one constant per cohort; NaN if no pair ever opens).
-          This is our inference, not the paper's wording: the paper's own
-          fully-invested/committed ratios (1.61-1.81 in Table 1) equal
-          N / n_bar, the inverse share of pair-days open; neither the share of
-          pairs that ever open (~0.97) nor a day-by-day count fits.
-        - "employed_openday": ``sum_p pi_p,t / n_t`` with ``n_t`` the pairs open
-          on day t. Superseded: dividing by small early-period counts and
-          compounding adds a convexity premium (E[1/n] > 1/E[n]) that inflated
-          the "all" portfolio about 1.8x. Kept for comparison.
+        - "employed" (fully invested): eq. (2) read across the portfolio, the
+          value-weighted daily return of the long book minus that of the short
+          book, each position weighted by its value since it opened
+          (``sum dL / sum L_{t-1} - sum dS / sum S_{t-1}`` over open positions;
+          NaN on a day with none, which ``cohort_monthly`` skips).
+        - "committed": "employed" scaled by ``n_t / N``, ``n_t`` the pairs
+          holding a position on day t and N the pairs selected (0 on a day
+          with none). The two reproduce the paper's fully-invested/committed
+          ratios (ours 1.53-1.83 vs paper 1.58-1.81) and are the conventions
+          since 2026-10-19.
+        - "committed_count": ``sum_p pi_p,t / N`` over the N selected pairs.
+        - "employed_count": ``sum_p pi_p,t / n_t`` (NaN on a day with no
+          position), the convention of 2026-10-18.
+        - "employed_nbar": ``sum_p pi_p,t / n_bar``, ``n_bar`` = the average
+          number of pairs holding a position per day over the cohort's trading
+          period (one constant per cohort; NaN if no pair ever opens). The
+          convention until 2026-10-18; its "all" ratio is 1.57 vs the paper's
+          1.80. Kept for comparison.
         - "employed_literal": ``sum_p pi_p,t / n`` with ``n`` = pairs that open
           at least once in the period (the text read literally).
         - "committed_account", "employed_account": the superseded reading,
@@ -209,19 +241,24 @@ def portfolio_daily(result, ranks, capital: str) -> pd.Series:
     index = pr.index
     sel = _resolve_ranks(pr, ranks)
     nan = pd.Series(np.nan, index=index)
+    if capital in VW_CAPITALS:
+        excess, n_open = _vw_legs(result, sel, index)
+        if capital == "committed":
+            excess = np.nan_to_num(excess) * n_open / len(sel) if sel else excess
+        return pd.Series(excess, index=index)
     payoff, w_prev = _payoffs_and_accounts(result, sel, len(index))
     num = np.nansum(payoff, axis=1)
     mask = _open_mask(result, index, sel) if capital in MASK_CAPITALS else None
 
-    if capital == "committed":
+    if capital == "committed_count":
         return pd.Series(num / len(sel), index=index) if sel else nan
-    if capital == "employed":
-        avg_n = mask.sum(axis=1).mean() if len(index) else np.nan
-        return pd.Series(num / avg_n, index=index) if avg_n > 0 else nan
-    if capital == "employed_openday":
+    if capital == "employed_count":
         n_open = mask.sum(axis=1).astype(float)
         n_open[n_open == 0] = np.nan
         return pd.Series(num / n_open, index=index)
+    if capital == "employed_nbar":
+        avg_n = mask.sum(axis=1).mean() if len(index) else np.nan
+        return pd.Series(num / avg_n, index=index) if avg_n > 0 else nan
     if capital == "employed_literal":
         n_opened = sum(bool(result.opened.get(c, False)) for c in sel)
         return pd.Series(num / n_opened, index=index) if n_opened else nan
@@ -271,24 +308,25 @@ def overlap_average(cohort_months: dict[pd.Timestamp, pd.Series]) -> pd.Series:
     )
 
 
-def size_deciles(caps: pd.Series, nyse_caps: pd.Series) -> pd.Series:
+def size_deciles(caps: pd.Series, breakpoint_caps: pd.Series) -> pd.Series:
     """CRSP-style size deciles, 1 = largest.
 
-    The breakpoints are the 10th..90th percentiles of ``nyse_caps`` (the NYSE
-    stocks, per the CRSP convention), so NYSE names are split roughly evenly
-    and other exchanges are classified against them.  A cap at or above the
-    90th NYSE percentile is decile 1; a cap below the 10th percentile is
-    decile 10.  A cap exactly on a breakpoint falls in the larger-cap decile.
-    NaN caps (and NaN when ``nyse_caps`` is empty) map to NaN deciles.
+    The breakpoints are the 10th..90th percentiles of ``breakpoint_caps`` (the
+    CRSP breakpoint set: NYSE and AMEX common securities, per the paper's "CRSP
+    breakpoints"), so those names are split roughly evenly and other exchanges
+    are classified against them.  A cap at or above the 90th percentile is
+    decile 1; a cap below the 10th percentile is decile 10.  A cap exactly on a
+    breakpoint falls in the larger-cap decile.
+    NaN caps (and NaN when ``breakpoint_caps`` is empty) map to NaN deciles.
     Non-positive caps are dropped from the breakpoints (CRSP market cap is
     positive when present); they still receive a decile if finite.
     """
     caps = pd.Series(caps, dtype=float)
-    nyse = pd.Series(nyse_caps, dtype=float).to_numpy(dtype=float)
-    nyse = nyse[np.isfinite(nyse) & (nyse > 0)]
-    if nyse.size == 0:
+    brk = pd.Series(breakpoint_caps, dtype=float).to_numpy(dtype=float)
+    brk = brk[np.isfinite(brk) & (brk > 0)]
+    if brk.size == 0:
         return pd.Series(np.nan, index=caps.index, dtype=float)
-    breaks = np.percentile(nyse, [90, 80, 70, 60, 50, 40, 30, 20, 10])
+    breaks = np.percentile(brk, [90, 80, 70, 60, 50, 40, 30, 20, 10])
     arr = caps.to_numpy(dtype=float)
     dec = np.full(arr.shape, np.nan)
     valid = np.isfinite(arr)
@@ -309,9 +347,11 @@ def composition_stats(pairs_info: dict, ranks) -> pd.Series:
         ``permno_2`` (``permno_1 < permno_2``), as cached per cohort.
         ``"caps"``: Series indexed by permno with the CRSP market cap on the
         last trading day of the formation window, for the pair's stocks.
-        ``"nyse_caps"``: caps of the NYSE common stocks on that date (primary
-        breakpoint set); ``"all_caps"``: caps of every panel row on that date
-        (all-panel breakpoint sensitivity).  ``"siccd"``: Series indexed by
+        ``"breakpoint_caps"``: caps of the CRSP breakpoint set on that date (NYSE
+        and AMEX common securities, per the paper's "CRSP breakpoints"; other
+        exchanges such as NASDAQ are classified against them); ``"all_caps"``:
+        caps of every panel row on that date (all-panel breakpoint
+        sensitivity).  ``"siccd"``: Series indexed by
         permno with the SIC code of the formation-end row (0 = unknown).
         ``"sectors"`` (optional): Series indexed by permno with resolved sector
         labels (``project.sectors.sectors_for``); used instead of ``"siccd"``.
@@ -343,7 +383,7 @@ def composition_stats(pairs_info: dict, ranks) -> pd.Series:
             dec.reindex(p2).to_numpy(dtype=float),
         )
 
-    for row, brk in (("", "nyse_caps"), ("_allpanel", "all_caps")):
+    for row, brk in (("", "breakpoint_caps"), ("_allpanel", "all_caps")):
         d1, d2 = _deciles(pd.Series(pairs_info[brk], dtype=float))
         both = np.concatenate([d1, d2])
         both = both[np.isfinite(both)]
@@ -357,9 +397,7 @@ def composition_stats(pairs_info: dict, ranks) -> pd.Series:
                 diff = np.abs(d1 - d2)
                 mixed = d1[ok] != d2[ok]
                 out["share_mixed_decile_pairs"] = float(mixed.mean())
-                out["avg_decile_diff_mixed_pairs"] = (
-                    float(diff[ok][mixed].mean()) if mixed.any() else 0.0
-                )
+                out["avg_decile_diff_mixed_pairs"] = float(diff[ok].mean())
                 out["avg_decile_diff_all_pairs"] = float(diff[ok].mean())
 
     if pairs_info.get("sectors") is not None:
