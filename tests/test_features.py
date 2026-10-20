@@ -153,3 +153,52 @@ def test_ssd_matrix_rejects_an_empty_window():
 
 def test_ssd_matrix_without_stocks_is_empty():
     assert ssd_matrix(pd.DataFrame(index=[0, 1])).shape == (0, 0)
+
+
+def _share_class_prices():
+    return pd.DataFrame(
+        {
+            1: [1.00, 1.10, 1.20, 1.30],
+            2: [1.00, 1.10, 1.21, 1.30],
+            3: [1.00, 1.05, 1.30, 1.45],
+            4: [1.00, 0.90, 0.70, 0.50],
+        },
+        index=DATES[:4],
+    )
+
+
+def test_select_pairs_without_issuers_pairs_two_share_classes():
+    pairs = select_pairs(_share_class_prices())
+    assert (pairs.iloc[0]["permno_1"], pairs.iloc[0]["permno_2"]) == (1, 2)
+
+
+def test_select_pairs_with_issuers_matches_across_issuers():
+    issuers = pd.Series({1: 10, 2: 10, 3: 11, 4: 12})
+    pairs = select_pairs(_share_class_prices(), issuers)
+    got = {(int(a), int(b)) for a, b in zip(pairs["permno_1"], pairs["permno_2"])}
+    assert (1, 2) not in got
+    assert got == {(1, 3), (1, 4), (2, 3)}
+
+
+def test_ssd_matrix_bars_same_issuer_and_ignores_unlisted_stocks():
+    P = _share_class_prices()
+    D = ssd_matrix(P, pd.Series({1: 10, 2: 10}))
+    assert np.isinf(D[0, 1]) and np.isinf(D[1, 0])
+    assert np.isfinite(D[0, 2]) and np.isfinite(D[2, 3])
+    assert np.array_equal(np.isinf(ssd_matrix(P, pd.Series(dtype=float))), np.isinf(ssd_matrix(P)))
+
+
+def test_stock_with_only_same_issuer_partners_is_left_unpaired():
+    P = pd.DataFrame({1: [1.0, 1.1, 1.2], 2: [1.0, 1.1, 1.21]}, index=DATES[:3])
+    assert select_pairs(P, pd.Series({1: 7, 2: 7})).empty
+    assert len(select_pairs(P, pd.Series({1: 7, 2: 8}))) == 1
+
+
+def test_within_groups_passes_issuers_through():
+    P = pd.DataFrame(
+        {1: [1.0, 1.1, 1.2], 2: [1.0, 1.1, 1.21], 3: [1.0, 1.0, 1.4]}, index=DATES[:3]
+    )
+    groups = pd.Series({1: "A", 2: "A", 3: "A"})
+    pairs = select_pairs_within_groups(P, groups, pd.Series({1: 7, 2: 7, 3: 8}))
+    got = {(int(a), int(b)) for a, b in zip(pairs["permno_1"], pairs["permno_2"])}
+    assert (1, 2) not in got and got

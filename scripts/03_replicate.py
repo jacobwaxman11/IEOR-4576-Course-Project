@@ -11,9 +11,11 @@ Usage:
         [--start 1963-07] [--end 2002-12] [--wait 0,1] [--workers N]
         [--limit-cohorts K] [--force] [--universe vol_common]
         [--normalization continued|rebased] [--aggregate-only]
+        [--same-issuer exclude|allow] [--max-stale-share SHARE|none]
 
 Cohorts are cached under data/processed/replication/{NAME}/cohorts/, stamped
-with their trading normalization and cache format in cache_meta.json. Outputs
+with their trading normalization, cache format and formation options in
+cache_meta.json. Outputs
 go to results/replication/tables/ and results/replication/figures/ for the
 primary universe and to a {NAME} subfolder for other variants. Reruns are
 incremental; --force rebuilds every cohort; --aggregate-only only reads a
@@ -25,6 +27,7 @@ from __future__ import annotations
 import argparse
 import calendar
 import json
+import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -34,7 +37,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from project.data import formation_universe, load_daily, trading_calendar
+from project.data import formation_universe, issuer_map, load_daily, trading_calendar
 from project.evaluation import (
     PORTFOLIOS,
     cohort_monthly,
@@ -224,7 +227,7 @@ PAPER_SECTOR_COUNTS = {"Utilities": 156, "Transportation": 61, "Financials": 371
 TABLE3_PORTFOLIOS = {
     "top5": range(1, 6), "top20": range(1, 21), "101-120": range(101, 121), "all": None,
 }
-TABLE3_CAPITALS = ("employed", "committed")
+TABLE3_CAPITALS = ("employed", "committed", "employed_count")
 
 FIGURE1 = {
     "cohort": (1963, 8),
@@ -239,23 +242,34 @@ PRIMARY_UNIVERSE = "vol_common"
 STEPS = ("tables", "table3", "figure1", "check")
 _SIC_FALLBACKS: tuple[pd.Series, ...] = ()
 
+CACHE_ROOT_OVERRIDE: Path | None = None
+OUT_ROOT_OVERRIDE: Path | None = None
+FORMATION_OPTIONS: dict = {}
+_ISSUERS: pd.Series | None = None
+
 
 def cohort_dir(universe: str) -> Path:
+    if CACHE_ROOT_OVERRIDE is not None:
+        return CACHE_ROOT_OVERRIDE / "cohorts"
     return ROOT / "data" / "processed" / "replication" / universe / "cohorts"
 
 
 def tables_dir(universe: str) -> Path:
+    if OUT_ROOT_OVERRIDE is not None:
+        return OUT_ROOT_OVERRIDE / "tables"
     base = ROOT / "results" / "replication" / "tables"
     return base if universe == PRIMARY_UNIVERSE else base / universe
 
 
 def figures_dir(universe: str) -> Path:
+    if OUT_ROOT_OVERRIDE is not None:
+        return OUT_ROOT_OVERRIDE / "figures"
     base = ROOT / "results" / "replication" / "figures"
     return base if universe == PRIMARY_UNIVERSE else base / universe
 
 
-CACHE_FORMAT = 2
-T1_CAPITALS = ("committed", "employed", "employed_literal")
+CACHE_FORMAT = 4
+T1_CAPITALS = ("committed", "employed", "committed_count", "employed_count", "employed_literal")
 
 
 def read_cache_meta(universe: str) -> dict | None:
@@ -264,7 +278,11 @@ def read_cache_meta(universe: str) -> dict | None:
 
 
 def _expected_meta(continued: bool) -> dict:
-    return {"normalization": "continued" if continued else "rebased", "format": CACHE_FORMAT}
+    return {
+        "normalization": "continued" if continued else "rebased",
+        "format": CACHE_FORMAT,
+        **FORMATION_OPTIONS,
+    }
 
 
 def verify_cache(universe: str, continued: bool) -> None:
@@ -286,6 +304,14 @@ def verify_cache(universe: str, continued: bool) -> None:
             f"{universe} cache was built with {meta.get('normalization')} normalization; "
             f"pass --normalization {meta.get('normalization')} or rebuild with --force"
         )
+    for key in ("exclude_same_issuer", "max_stale_share"):
+        if meta.get(key) != want.get(key):
+            built = f"{key}={meta[key]}" if key in meta else f"no {key} stamp"
+            now = f"{key}={want[key]}" if key in want else f"no {key}"
+            raise SystemExit(
+                f"{universe} cache was built with {built}, this run uses {now}; "
+                "match the formation flags or rebuild with --force"
+            )
 
 
 def stamp_cache(universe: str, continued: bool, force: bool) -> None:
@@ -334,12 +360,22 @@ class Job:
     waits: tuple[int, ...]
     universe: str
     continued: bool = True
+    cohorts_root: str | None = None
+    exclude_same_issuer: bool = False
+    max_stale_share: float | None = None
 
 
 def init_worker(fallbacks: tuple[pd.Series, ...]) -> None:
     """Process-pool initializer: the SIC fallbacks used for sector labels."""
     global _SIC_FALLBACKS
     _SIC_FALLBACKS = fallbacks
+
+
+def _issuer_series() -> pd.Series:
+    global _ISSUERS
+    if _ISSUERS is None:
+        _ISSUERS = issuer_map()
+    return _ISSUERS
 
 
 def _monthly_rows(table: str, sector: str, wait: int, pname: str, capital: str,
@@ -366,13 +402,16 @@ def build_cohort(job: Job) -> tuple[int, int]:
     """
     form_start = month_start(*shift_month(job.year, job.month, -12))
     form_end = month_end(*shift_month(job.year, job.month, -1))
-    universe = formation_universe(form_start, form_end, universe=job.universe)
+    universe = formation_universe(
+        form_start, form_end, universe=job.universe, max_stale_share=job.max_stale_share
+    )
     form = load_daily(form_start, form_end, ["permno", "date", "ret"])
     form["date"] = pd.to_datetime(form["date"])
     form = form[form["permno"].isin(set(universe))]
     prices = normalized_prices(form.pivot(index="date", columns="permno", values="ret").sort_index())
     del form
-    pairs = select_pairs(prices)
+    issuers = _issuer_series() if job.exclude_same_issuer else None
+    pairs = select_pairs(prices, issuers)
 
     form_cal = trading_calendar(form_start, form_end)
     if len(form_cal) == 0:
@@ -381,7 +420,7 @@ def build_cohort(job: Job) -> tuple[int, int]:
     row = load_daily(end_day, end_day, ["permno", "cap", "exch", "common", "siccd"])
     row = row.set_index("permno")
     labels = sectors_for(row["siccd"].reindex(universe).fillna(0), *_SIC_FALLBACKS)
-    sector_pairs = select_pairs_within_groups(prices, labels)
+    sector_pairs = select_pairs_within_groups(prices, labels, issuers)
     levels = prices.iloc[-1] if job.continued else None
     del prices
 
@@ -404,7 +443,8 @@ def build_cohort(job: Job) -> tuple[int, int]:
     )
     del trd
 
-    coh_dir = cohort_dir(job.universe) / f"{job.year:04d}-{job.month:02d}"
+    base = Path(job.cohorts_root) if job.cohorts_root else cohort_dir(job.universe)
+    coh_dir = base / f"{job.year:04d}-{job.month:02d}"
     coh_dir.mkdir(parents=True, exist_ok=True)
     (coh_dir / "summary.json").unlink(missing_ok=True)
     pairs.to_parquet(coh_dir / "pairs.parquet")
@@ -435,7 +475,7 @@ def build_cohort(job: Job) -> tuple[int, int]:
     info = {
         "pairs": pairs,
         "caps": caps,
-        "nyse_caps": caps[row["exch"].eq("N") & row["common"].eq(True)],
+        "breakpoint_caps": caps[row["exch"].isin(("N", "A")) & row["common"].eq(True)],
         "all_caps": caps,
         "siccd": row["siccd"],
         "sectors": labels,
@@ -663,8 +703,9 @@ def write_comparison(
     if 0 in waits or 1 in waits:
         lines += [
             (
-                "'Fully invested' = return on currently deployed capital (denominator ="
-                " pairs with an open position); 'committed capital' = all selected pairs."
+                "'Fully invested' = value-weighted return of the open long positions minus"
+                " that of the open short positions (eq. 2); 'committed capital' scales it by"
+                " the share of selected pairs holding a position."
                 " `mean_employed_literal` (table1.csv only) uses INTERFACES.md's literal"
                 " denominator for comparison."
             ),
@@ -683,7 +724,8 @@ def write_comparison(
         lines += [
             "## Table 2 Panel B (composition; wait-independent)",
             "",
-            "Size deciles use NYSE breakpoints (exch == 'N' and common share type)",
+            "Size deciles use CRSP breakpoints (NYSE + AMEX common securities, per",
+            "the paper's 'using CRSP breakpoints')",
             "on the last trading day of the formation window, 1 = largest. The",
             "`_allpanel` rows (table2_panelB.csv only) use breakpoints from every",
             "panel row on that date. The paper's 'average decile difference for",
@@ -802,12 +844,21 @@ def write_replication_check(out_dir: Path, fig_dir: Path, universe: str) -> Path
         "Cells show ours / paper. ✓ within 10% of the paper, ~ within 25%, ✗ further.",
         "",
         "Conventions that are our reading of the paper, not its words: fully invested",
-        "returns divide each cohort's daily payoffs by n̄, the average number of pairs",
-        "holding a position per day (inferred from the paper's own committed/fully-invested",
-        "ratios of 1.61-1.81, which equal N / n̄); trading prices continue the formation",
-        "normalization (GGR Figure 1); a no-trade day is a day with recorded zero volume.",
+        "returns are eq. (2) across the portfolio, the value-weighted return of the long",
+        "positions minus that of the short positions, and committed returns scale it by",
+        "the share of selected pairs holding a position (this reproduces the paper's own",
+        "fully-invested/committed ratios of 1.58-1.81); trading prices continue the",
+        "formation normalization (GGR Figure 1); a no-trade day is a day with recorded",
+        "zero volume, a stock whose price never moves in the formation window is",
+        "excluded, and so is a stock with no recorded volume and an unchanged price on",
+        "more than 95% of the formation days (near-frozen quotes); a stock is never",
+        "matched with another security of its own issuer (same CRSP permco, e.g. two",
+        "share classes). The paper states none of these three exclusions beyond",
+        "screening out stocks with a no-trade day; REVIEW_NOTES section 18 gives the",
+        "evidence and the score without them (165.0).",
         "",
     ]
+    header_len = len(lines)
     summary = []
 
     fig_file = fig_dir / "figure1.json"
@@ -892,7 +943,7 @@ def write_replication_check(out_dir: Path, fig_dir: Path, universe: str) -> Path
         lines += [_tally_line(tally), ""]
         summary.append("Table 3: " + _tally_line(tally))
 
-    lines[10:10] = ["## Summary", ""] + [f"- {s}" for s in summary] + [""]
+    lines[header_len:header_len] = ["## Summary", ""] + [f"- {s}" for s in summary] + [""]
     path = out_dir / "replication_check.md"
     path.write_text("\n".join(lines))
     return path
@@ -904,7 +955,13 @@ def run_jobs(jobs: list[Job], workers: int) -> None:
     The numba kernel is compiled once in the parent first, so forked workers
     reuse it instead of each compiling their own copy.
     """
-    fallbacks = (earliest_known_sic(), header_sic())
+    try:
+        header = header_sic()
+    except (FileNotFoundError, OSError) as err:
+        print(f"warning: security-header SIC fallback unavailable ({err}); "
+              "sector labels may shift", file=sys.stderr)
+        header = pd.Series(dtype="float64", name="siccd")
+    fallbacks = (earliest_known_sic(), header)
     init_worker(fallbacks)
     warm = pd.DataFrame({"rank": [1], "permno_1": [1], "permno_2": [2], "distance": [0.0],
                          "sigma": [1.0]})
@@ -927,6 +984,17 @@ def run_jobs(jobs: list[Job], workers: int) -> None:
             if i % 10 == 0 or i == len(jobs):
                 print(f"  built {i}/{len(jobs)} cohorts "
                       f"({time.perf_counter() - started:.0f}s)", flush=True)
+
+
+def _share(text: str) -> float:
+    value = float(text)
+    if not 0.0 <= value <= 1.0:
+        raise argparse.ArgumentTypeError(f"{text} is not a share between 0 and 1")
+    return value
+
+
+def _stale_share(text: str) -> float | None:
+    return None if text.lower() == "none" else _share(text)
 
 
 def parse_month(text: str) -> tuple[int, int]:
@@ -952,12 +1020,33 @@ def main() -> None:
              "Figure 1) or are rebased to 1 on the first trading day",
     )
     parser.add_argument(
+        "--same-issuer", choices=("allow", "exclude"), default="exclude",
+        help="exclude pairs of two securities of one issuer (same CRSP permco); default exclude",
+    )
+    parser.add_argument(
+        "--max-stale-share", type=_stale_share, default=0.95,
+        help="drop stocks with no recorded volume and an unchanged price on more than "
+             "this share of the formation days; 'none' keeps them (default 0.95)",
+    )
+    parser.add_argument(
         "--aggregate-only", action="store_true",
         help="regenerate Tables 1 and 2 from the cohort cache; error if any cohort is missing",
     )
     parser.add_argument(
         "--steps", default=",".join(STEPS),
         help=f"comma-separated subset of {','.join(STEPS)}",
+    )
+    parser.add_argument(
+        "--stride", type=int, default=1,
+        help="build/aggregate every Nth cohort (deterministic samples for benchmarks)",
+    )
+    parser.add_argument(
+        "--cache-root", default=None,
+        help="redirect the cohort cache (and its stamp) to this directory",
+    )
+    parser.add_argument(
+        "--out-root", default=None,
+        help="redirect tables/figures output to this directory",
     )
     args = parser.parse_args()
 
@@ -969,7 +1058,23 @@ def main() -> None:
     end = parse_month(args.end)
     waits = tuple(int(w) for w in args.wait.split(","))
     continued = args.normalization == "continued"
+    global CACHE_ROOT_OVERRIDE, OUT_ROOT_OVERRIDE, FORMATION_OPTIONS
+    exclude_same_issuer = args.same_issuer == "exclude"
+    FORMATION_OPTIONS = {}
+    if exclude_same_issuer:
+        FORMATION_OPTIONS["exclude_same_issuer"] = True
+    if args.max_stale_share is not None:
+        FORMATION_OPTIONS["max_stale_share"] = args.max_stale_share
+    cohorts_root = None
+    if args.cache_root:
+        CACHE_ROOT_OVERRIDE = Path(args.cache_root).resolve()
+        cohorts_root = str(CACHE_ROOT_OVERRIDE / "cohorts")
+    if args.out_root:
+        OUT_ROOT_OVERRIDE = Path(args.out_root).resolve()
+    args.cohorts_root = cohorts_root
     cohorts = cohort_months(start, end)
+    if args.stride > 1:
+        cohorts = cohorts[:: args.stride]
     if args.limit_cohorts is not None:
         cohorts = cohorts[: args.limit_cohorts]
     out_dir = tables_dir(args.universe)
@@ -992,7 +1097,8 @@ def main() -> None:
         else:
             stamp_cache(args.universe, continued, args.force)
             jobs = [
-                Job(y, m, end, waits, args.universe, continued)
+                Job(y, m, end, waits, args.universe, continued, args.cohorts_root,
+                    exclude_same_issuer, args.max_stale_share)
                 for y, m in cohorts
                 if args.force or not cohort_cache_complete(y, m, waits, args.universe)
             ]

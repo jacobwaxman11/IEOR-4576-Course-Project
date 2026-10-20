@@ -1,5 +1,6 @@
 """Tests for the replication driver: output folders, cache stamp and the replication check."""
 
+import argparse
 import importlib.util
 import json
 import sys
@@ -37,6 +38,38 @@ def test_cache_stamp_and_verify(tmp_path, monkeypatch):
         rep.stamp_cache("u", continued=False, force=False)
     rep.stamp_cache("u", continued=False, force=True)
     rep.verify_cache("u", continued=False)
+
+
+def test_cache_stamp_records_and_checks_formation_options(tmp_path, monkeypatch):
+    monkeypatch.setattr(rep, "cohort_dir", lambda universe: tmp_path / universe / "cohorts")
+    monkeypatch.setattr(rep, "FORMATION_OPTIONS", {"exclude_same_issuer": True, "max_stale_share": 0.95})
+    meta = tmp_path / "u" / "cohorts" / "cache_meta.json"
+    rep.stamp_cache("u", continued=True, force=False)
+    assert json.loads(meta.read_text()) == {
+        "normalization": "continued", "format": rep.CACHE_FORMAT,
+        "exclude_same_issuer": True, "max_stale_share": 0.95,
+    }
+    rep.verify_cache("u", continued=True)
+    monkeypatch.setattr(rep, "FORMATION_OPTIONS", {})
+    with pytest.raises(SystemExit, match="exclude_same_issuer=True, this run uses no exclude"):
+        rep.verify_cache("u", continued=True)
+    with pytest.raises(SystemExit, match="--force"):
+        rep.stamp_cache("u", continued=True, force=False)
+
+
+def test_verify_names_an_unstamped_option(tmp_path, monkeypatch):
+    monkeypatch.setattr(rep, "cohort_dir", lambda universe: tmp_path / universe / "cohorts")
+    rep.stamp_cache("u", continued=True, force=False)
+    monkeypatch.setattr(rep, "FORMATION_OPTIONS", {"max_stale_share": 0.95})
+    with pytest.raises(SystemExit, match="no max_stale_share stamp"):
+        rep.verify_cache("u", continued=True)
+
+
+def test_share_argument_is_a_unit_interval_value():
+    assert rep._share("0.95") == 0.95 and rep._share("0") == 0.0 and rep._share("1") == 1.0
+    for bad in ("1.5", "-0.1"):
+        with pytest.raises(argparse.ArgumentTypeError):
+            rep._share(bad)
 
 
 def test_verify_refuses_an_old_format_cache(tmp_path, monkeypatch):
@@ -77,7 +110,9 @@ def test_cohort_job_caches_everything_the_tables_need(tmp_path, monkeypatch):
     monkeypatch.setattr(rep, "load_daily", load_daily)
     monkeypatch.setattr(rep, "trading_calendar", lambda s, e: dates[(dates >= pd.Timestamp(s))
                                                                    & (dates <= pd.Timestamp(e))])
-    monkeypatch.setattr(rep, "formation_universe", lambda s, e, universe: [1, 2, 3, 4, 5, 6])
+    monkeypatch.setattr(
+        rep, "formation_universe", lambda s, e, universe, max_stale_share=None: [1, 2, 3, 4, 5, 6]
+    )
     rep.init_worker((pd.Series(dtype="int64"), pd.Series(dtype="int64")))
 
     job = rep.Job(2020, 7, (2020, 12), (0, 1), "u", True)

@@ -193,6 +193,7 @@ def _variant_panel(tmp_path, monkeypatch) -> None:
       400 closed-end fund FUND/CEF/NS -> vol_ns only
       500 sharetype SB throughout   -> eligible nowhere
       600 zero-volume day (else TR) -> price_common only
+      800 clean but zero return every day -> eligible nowhere
     """
     rows = []
     for d in DATES:
@@ -211,6 +212,7 @@ def _variant_panel(tmp_path, monkeypatch) -> None:
         rows.append({"permno": 500, "dlycaldt": d, "dlyret": 0.004, "sharetype": "SB"})
         rows.append({"permno": 600, "dlycaldt": d, "dlyret": 0.003,
                      "dlyvol": 0.0 if d == DATES[1] else 600.0})
+        rows.append({"permno": 800, "dlycaldt": d, "dlyret": 0.0})
 
     _write_processed_files(tmp_path / "processed", {2000: pdata._clean_year(_raw_frame(rows))})
     _write_index_file(tmp_path / "index.parquet", DATES)
@@ -365,7 +367,7 @@ def test_offexchange_delisting_row_survives_build_and_load(tmp_path, monkeypatch
             {"permno": 1, "dlycaldt": dt.date(2001, 1, 2), "dlyret": 0.01},
             {"permno": 1, "dlycaldt": dt.date(2001, 1, 3), "primaryexch": "X",
              "dlydelflg": "Y", "dlyret": -0.40, "dlyprcflg": "DP", "dlyvol": None},
-            {"permno": 2, "dlycaldt": dt.date(2001, 1, 2)},
+            {"permno": 2, "dlycaldt": dt.date(2001, 1, 2), "dlyret": 0.01},
             {"permno": 2, "dlycaldt": dt.date(2001, 1, 3)},
         ]
     )
@@ -388,3 +390,42 @@ def test_offexchange_delisting_row_survives_build_and_load(tmp_path, monkeypatch
     assert row["ret"].item() == pytest.approx(-0.40)
     for name in VARIANTS:
         assert list(pdata.formation_universe("2001-01-02", "2001-01-03", universe=name)) == [2]
+
+
+def _stale_panel(tmp_path, monkeypatch) -> None:
+    rows = []
+    for i, d in enumerate(DATES):
+        rows.append({"permno": 100, "dlycaldt": d, "dlyret": 0.01})
+        rows.append({"permno": 900, "dlycaldt": d, "dlyret": 0.01 if i == 0 else 0.0,
+                     "dlyprcflg": "BA", "dlyvol": None})
+        rows.append({"permno": 901, "dlycaldt": d, "dlyret": 0.01 if i == 0 else 0.0})
+    _write_processed_files(tmp_path / "processed", {2000: pdata._clean_year(_raw_frame(rows))})
+    _write_index_file(tmp_path / "index.parquet", DATES)
+    monkeypatch.setattr(pdata, "PROCESSED_DIR", tmp_path / "processed")
+    monkeypatch.setattr(pdata, "DAILY_INDEX_FILE", tmp_path / "index.parquet")
+
+
+def test_max_stale_share_drops_near_frozen_quotes(tmp_path, monkeypatch) -> None:
+    """Stock 900 has no recorded volume and an unchanged price on 2 of 3 days;
+    stock 901 has recorded volume on every day, so it is never stale."""
+    _stale_panel(tmp_path, monkeypatch)
+    start, end = DATES[0], DATES[-1]
+    assert list(pdata.formation_universe(start, end)) == [100, 900, 901]
+    assert list(pdata.formation_universe(start, end, max_stale_share=0.7)) == [100, 900, 901]
+    assert list(pdata.formation_universe(start, end, max_stale_share=0.5)) == [100, 901]
+    assert list(pdata.formation_universe(start, end, max_stale_share=0.0)) == [100, 901]
+
+
+def test_issuer_map_reads_permco_per_permno(tmp_path) -> None:
+    path = tmp_path / "header.parquet"
+    pd.DataFrame({"permno": [10, 11, 12], "permco": [5, 5, None]}).to_parquet(path)
+    ids = pdata.issuer_map(path)
+    assert ids.loc[10] == ids.loc[11] == 5.0
+    assert pd.isna(ids.loc[12])
+
+
+def test_issuer_map_rejects_duplicate_permnos(tmp_path) -> None:
+    path = tmp_path / "header.parquet"
+    pd.DataFrame({"permno": [10, 10], "permco": [5, 6]}).to_parquet(path)
+    with pytest.raises(ValueError, match="more than one row per permno"):
+        pdata.issuer_map(path)

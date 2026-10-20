@@ -11,6 +11,7 @@ import statsmodels.api as sm
 
 from project.evaluation import (
     CAPITAL_CHOICES,
+    VW_CAPITALS,
     cohort_monthly,
     overlap_average,
     portfolio_daily,
@@ -50,20 +51,20 @@ class TestPortfolioDaily:
 
         pi_d1, pi_d2 = 0.05, 1.05 * -0.02
 
-        committed = portfolio_daily(result, [1, 2], "committed")
+        committed = portfolio_daily(result, [1, 2], "committed_count")
         assert np.isclose(committed[D0], 0.0)
         assert np.isclose(committed[D1], pi_d1 / 2)
         assert np.isclose(committed[D2], pi_d2 / 2)
 
-        employed = portfolio_daily(result, [1, 2], "employed")
-        assert np.isclose(employed[D0], 0.0)
-        assert np.isclose(employed[D1], pi_d1 / (2 / 3))
-        assert np.isclose(employed[D2], pi_d2 / (2 / 3))
+        employed = portfolio_daily(result, [1, 2], "employed_count")
+        assert np.isnan(employed[D0])
+        assert np.isclose(employed[D1], pi_d1)
+        assert np.isclose(employed[D2], pi_d2)
 
-        openday = portfolio_daily(result, [1, 2], "employed_openday")
-        assert np.isnan(openday[D0])
-        assert np.isclose(openday[D1], pi_d1)
-        assert np.isclose(openday[D2], pi_d2)
+        nbar = portfolio_daily(result, [1, 2], "employed_nbar")
+        assert np.isclose(nbar[D0], 0.0)
+        assert np.isclose(nbar[D1], pi_d1 / (2 / 3))
+        assert np.isclose(nbar[D2], pi_d2 / (2 / 3))
 
         literal = portfolio_daily(result, [1, 2], "employed_literal")
         assert np.isclose(literal[D0], 0.0)
@@ -83,15 +84,15 @@ class TestPortfolioDaily:
               "long_permno": 10, "short_permno": 20, "payoff": 0.01}]
         )
         result = CohortStub(pair_returns=pr, opened=opened, trades=trades)
-        committed = portfolio_daily(result, [1, 2], "committed")
-        employed = portfolio_daily(result, [1, 2], "employed")
+        committed = portfolio_daily(result, [1, 2], "committed_count")
+        employed = portfolio_daily(result, [1, 2], "employed_count")
         literal = portfolio_daily(result, [1, 2], "employed_literal")
         assert np.isclose(committed[D1], 0.01 / 2.0)
-        assert np.isclose(employed[D0], 0.0)
-        assert np.isclose(employed[D1], 0.01 / 0.5)
-        openday = portfolio_daily(result, [1, 2], "employed_openday")
-        assert np.isnan(openday[D0])
-        assert np.isclose(openday[D1], 0.01)
+        assert np.isnan(employed[D0])
+        assert np.isclose(employed[D1], 0.01)
+        nbar = portfolio_daily(result, [1, 2], "employed_nbar")
+        assert np.isclose(nbar[D0], 0.0)
+        assert np.isclose(nbar[D1], 0.01 / 0.5)
         assert np.isclose(literal[D0], 0.0)
         assert np.isclose(literal[D1], 0.01)
 
@@ -99,8 +100,8 @@ class TestPortfolioDaily:
         pr = pd.DataFrame({1: [0.0, 0.0], 2: [0.0, 0.0]}, index=[D0, D1])
         opened = pd.Series({1: False, 2: False})
         result = CohortStub(pair_returns=pr, opened=opened)
-        committed = portfolio_daily(result, [1, 2], "committed")
-        employed = portfolio_daily(result, [1, 2], "employed")
+        committed = portfolio_daily(result, [1, 2], "committed_count")
+        employed = portfolio_daily(result, [1, 2], "employed_count")
         literal = portfolio_daily(result, [1, 2], "employed_literal")
         assert np.allclose(committed, 0.0)
         assert employed.isna().all()
@@ -110,10 +111,10 @@ class TestPortfolioDaily:
         pr = pd.DataFrame({1: [0.02, 0.0], 2: [0.10, 0.01]}, index=[D0, D1])
         opened = pd.Series({1: True, 2: True})
         result = CohortStub(pair_returns=pr, opened=opened)
-        only1 = portfolio_daily(result, [1], "committed")
+        only1 = portfolio_daily(result, [1], "committed_count")
         assert np.isclose(only1[D0], 0.02)
         assert np.isclose(only1[D1], 0.0)
-        both = portfolio_daily(result, range(1, 6), "committed")
+        both = portfolio_daily(result, range(1, 6), "committed_count")
         assert np.isclose(both[D1], (1.02 * 0.0 + 1.10 * 0.01) / 2)
 
     def test_invalid_capital(self):
@@ -125,7 +126,7 @@ class TestPortfolioDaily:
     def test_negative_account_does_not_flip_the_sign(self):
         pr = pd.DataFrame({1: [-2.0, 0.10]}, index=[D0, D1])
         result = CohortStub(pair_returns=pr, opened=pd.Series({1: True}))
-        committed = portfolio_daily(result, [1], "committed")
+        committed = portfolio_daily(result, [1], "committed_count")
         assert np.isclose(committed[D1], -0.10)
         assert np.isclose(portfolio_daily(result, [1], "committed_account")[D1], 0.10)
 
@@ -319,7 +320,7 @@ def _info_cohort1() -> dict:
     return {
         "pairs": _pairs([(1, 1, 2), (2, 3, 4), (3, 5, 6)]),
         "caps": pd.Series({1: 100.0, 2: 90.0, 3: 80.0, 4: 20.0, 5: 10.0, 6: 5.0}),
-        "nyse_caps": _NYSE,
+        "breakpoint_caps": _NYSE,
         "all_caps": _ALLPANEL,
         "siccd": _SICCD,
     }
@@ -329,7 +330,7 @@ def _info_cohort2() -> dict:
     return {
         "pairs": _pairs([(1, 1, 3), (2, 5, 6), (3, 7, 8)]),
         "caps": pd.Series({1: 100.0, 3: 80.0, 5: 10.0, 6: 5.0, 7: np.nan, 8: 50.0}),
-        "nyse_caps": _NYSE,
+        "breakpoint_caps": _NYSE,
         "all_caps": _ALLPANEL,
         "siccd": _SICCD,
     }
@@ -363,7 +364,10 @@ class TestCompositionStats:
         assert np.isclose(stats["weight_top3_deciles_allpanel"], 0.4)
         assert np.isclose(stats["weight_top5_deciles_allpanel"], 0.6)
         assert np.isclose(stats["share_mixed_decile_pairs"], 0.5)
-        assert np.isclose(stats["avg_decile_diff_mixed_pairs"], 2.0)
+        # The paper's "Average decile difference for mixed pairs" is 0.97 (< 1),
+        # impossible for an average over mixed-only pairs, so the row reports the
+        # all-pairs average (see REVIEW_NOTES section 16).
+        assert np.isclose(stats["avg_decile_diff_mixed_pairs"], 1.0)
         assert np.isclose(stats["avg_decile_diff_all_pairs"], 1.0)
         assert np.isclose(stats["weight_utilities"], 1 / 6)
         assert np.isclose(stats["weight_transportation"], 1 / 6)
@@ -405,7 +409,7 @@ def test_missing_return_keeps_the_next_days_payoff():
     pr = pd.DataFrame({1: [0.0, np.nan, 0.10, 0.0]}, index=idx)
     res = SimpleNamespace(pair_returns=pr, opened=pd.Series({1: True}),
                           trades=pd.DataFrame(columns=["rank", "open_date", "close_date"]))
-    daily = portfolio_daily(res, None, "committed")
+    daily = portfolio_daily(res, None, "committed_count")
     np.testing.assert_allclose(daily.to_numpy(), [0.0, 0.0, 0.10, 0.0])
 
 
@@ -420,7 +424,70 @@ def test_engine_payoffs_match_the_return_rebuild():
     res = simulate_cohort(pairs, rets, pd.DataFrame(False, index=idx, columns=rets.columns))
     assert len(res.trades)
     rebuilt = type(res)(pair_returns=res.pair_returns, opened=res.opened, trades=res.trades)
-    for capital in CAPITAL_CHOICES:
+    for capital in sorted(set(CAPITAL_CHOICES) - VW_CAPITALS):
         a = portfolio_daily(res, None, capital).to_numpy()
         b = portfolio_daily(rebuilt, None, capital).to_numpy()
         np.testing.assert_allclose(a, b, rtol=1e-12, atol=1e-15, equal_nan=True)
+
+
+def _legs_stub(long_pay, long_val, short_pay, short_val, idx):
+    from types import SimpleNamespace
+
+    frame = lambda a: pd.DataFrame(np.asarray(a, dtype=float), index=idx, columns=[1, 2])
+    lp, lv, sp, sv = frame(long_pay), frame(long_val), frame(short_pay), frame(short_val)
+    return SimpleNamespace(pair_returns=lp * 0.0, pair_payoffs=lp - sp, opened=pd.Series({1: True, 2: True}),
+                           trades=pd.DataFrame(columns=["rank", "open_date", "close_date"]),
+                           long_payoffs=lp, long_values=lv, short_payoffs=sp, short_values=sv)
+
+
+def test_value_weighted_books_hand_calc():
+    idx = pd.bdate_range("2020-01-06", periods=3)
+    long_val = [[0.0, 0.0], [1.0, 1.0], [1.1, 0.0]]
+    long_pay = [[0.0, 0.0], [0.1, -0.05], [0.11, 0.0]]
+    short_val = [[0.0, 0.0], [1.0, 1.0], [3.0, 0.0]]
+    short_pay = [[0.0, 0.0], [0.02, 0.0], [0.3, 0.0]]
+    res = _legs_stub(long_pay, long_val, short_pay, short_val, idx)
+    employed = portfolio_daily(res, [1, 2], "employed")
+    committed = portfolio_daily(res, [1, 2], "committed")
+    assert np.isnan(employed.iloc[0])
+    assert np.isclose(employed.iloc[1], 0.05 / 2.0 - 0.02 / 2.0)
+    assert np.isclose(employed.iloc[2], 0.11 / 1.1 - 0.3 / 3.0)
+    assert np.isclose(committed.iloc[0], 0.0)
+    assert np.isclose(committed.iloc[1], employed.iloc[1])
+    assert np.isclose(committed.iloc[2], employed.iloc[2] / 2.0)
+
+
+def test_value_weighting_caps_a_runaway_short_leg():
+    idx = pd.bdate_range("2020-01-06", periods=2)
+    res = _legs_stub([[0.0, 0.0], [0.0, 0.0]], [[1.0, 1.0], [1.0, 1.0]],
+                     [[0.0, 0.0], [0.5, 0.0]], [[1.0, 1.0], [5.0, 1.0]], idx)
+    assert np.isclose(portfolio_daily(res, [1, 2], "employed").iloc[1], -0.5 / 6.0)
+    assert np.isclose(portfolio_daily(res, [1, 2], "committed_count").iloc[1], -0.5 / 2.0)
+
+
+def test_engine_legs_sum_to_pair_payoffs():
+    from project.models import simulate_cohort
+
+    rng = np.random.default_rng(5)
+    idx = pd.bdate_range("2020-01-01", periods=60)
+    rets = pd.DataFrame(rng.normal(0, 0.02, (60, 4)), index=idx, columns=range(1, 5))
+    pairs = pd.DataFrame({"rank": [1, 2], "permno_1": [1, 3], "permno_2": [2, 4],
+                          "distance": 0.0, "sigma": 0.02})
+    res = simulate_cohort(pairs, rets, pd.DataFrame(False, index=idx, columns=rets.columns))
+    assert len(res.trades)
+    np.testing.assert_allclose(res.long_payoffs - res.short_payoffs, res.pair_payoffs, atol=1e-15)
+    held = res.long_values.gt(0)
+    assert held.equals(res.short_values.gt(0))
+    single = portfolio_daily(res, [1], "employed")
+    on = held[1].to_numpy()
+    expected = (res.long_payoffs[1] / res.long_values[1] - res.short_payoffs[1] / res.short_values[1])[on]
+    np.testing.assert_allclose(single[on], expected)
+
+
+def test_value_weighted_books_survive_a_worthless_long_leg():
+    idx = pd.bdate_range("2020-01-06", periods=2)
+    res = _legs_stub([[0.0, 0.0], [0.0, 0.0]], [[1.0, 0.0], [0.0, 0.0]],
+                     [[0.0, 0.0], [0.1, 0.0]], [[1.0, 0.0], [1.0, 0.0]], idx)
+    employed = portfolio_daily(res, [1, 2], "employed")
+    assert np.isclose(employed.iloc[1], -0.1)
+    assert np.isclose(portfolio_daily(res, [1, 2], "committed").iloc[1], -0.05)

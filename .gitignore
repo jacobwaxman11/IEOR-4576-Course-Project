@@ -6,7 +6,7 @@
 *pgpass*
 *credentials*
 *.secret
-.venv/
+.venv
 venv/
 
 # Python, packaging, and notebook caches
@@ -32,10 +32,14 @@ data/raw/crsp/daily_stocks_1961_2026q1.csv.gz
 data/raw/taq/
 data/interim/crsp/
 data/interim/taq/
-data/processed/crsp/
+data/processed/crsp
 data/processed/taq/
 data/processed/replication/
 # Pulls made through the WRDS API (licensed CRSP data) stay local.
-data/raw/wrds_api/
+data/raw/wrds_api
 # Public re-downloads (French library, Goyal-Welch); the LFS copies stay canonical.
 data/raw/public/
+
+# Replication harness scratch output
+.dream-rsi/
+eval/
