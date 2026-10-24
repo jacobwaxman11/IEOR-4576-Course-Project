@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 import statsmodels.api as sm
 
+from project import evaluation
 from project.evaluation import (
     CAPITAL_CHOICES,
     VW_CAPITALS,
@@ -491,3 +492,81 @@ def test_value_weighted_books_survive_a_worthless_long_leg():
     employed = portfolio_daily(res, [1, 2], "employed")
     assert np.isclose(employed.iloc[1], -0.1)
     assert np.isclose(portfolio_daily(res, [1, 2], "committed").iloc[1], -0.05)
+
+
+class TestWindowCensored:
+    """``_window_censored``: a calendar that spans fewer than six months and
+    runs edge-to-edge (first trading day of its first month to the last of its
+    last month) was cut by the sample end; anything else is complete."""
+
+    @pytest.fixture(autouse=True)
+    def _stubbed_month_edges(self, monkeypatch):
+        def month_edges(start, end):
+            return pd.Timestamp(start), pd.Timestamp(end)
+
+        monkeypatch.setattr(evaluation, "_month_edges", month_edges)
+
+    @staticmethod
+    def _calendar(months, last_day=None):
+        # trading days at month boundaries: first day of each month plus the
+        # given (or the month's own) last timestamp
+        points = [p.start_time for p in months[:-1]]
+        points.append(last_day if last_day is not None else months[-1].end_time)
+        return pd.DatetimeIndex(points)
+
+    def test_cut_at_sample_end_is_censored(self):
+        months = pd.period_range("2002-08", "2002-12", freq="M")
+        assert evaluation._window_censored(self._calendar(months)) is True
+
+    def test_mid_month_stop_is_a_partial_extract(self):
+        months = pd.period_range("2002-08", "2002-12", freq="M")
+        assert evaluation._window_censored(
+            self._calendar(months, pd.Timestamp("2002-12-15"))) is False
+
+    def test_six_month_span_is_complete(self):
+        months = pd.period_range("2002-08", "2003-01", freq="M")
+        assert evaluation._window_censored(self._calendar(months)) is False
+
+    def test_empty_calendar_is_complete(self):
+        assert evaluation._window_censored(pd.DatetimeIndex([])) is False
+
+
+class TestCompletedComponents:
+    def _cache(self, root, labels, last_month):
+        coh = root / "data" / "processed" / "replication" / "u1" / "cohorts"
+        for label in labels:
+            frame = pd.DataFrame({"month_end": pd.to_datetime([f"{label}-28"])})
+            if label == max(labels):
+                frame = pd.DataFrame({"month_end": pd.to_datetime([last_month])})
+            (coh / label).mkdir(parents=True, exist_ok=True)
+            frame.to_parquet(coh / label / "monthly.parquet")
+
+    def test_stored_flags_win(self):
+        keep = {"trigger": 1.0, "censored": False}
+        drop = {"trigger": 2.0, "censored": True}
+        assert evaluation._completed_components([drop, keep]) == [keep]
+
+    def test_no_labels_keeps_unfiltered_aggregation(self):
+        parts = [{"trigger": float(i)} for i in range(3)]
+        assert evaluation._completed_components(parts) == parts
+
+    def test_exact_label_match_filters_censored(self, tmp_path, monkeypatch):
+        # sample end 2002-08: the 2002-01 window (ends 2002-06) completes,
+        # the 2002-08 window (ends 2003-01) is cut.
+        self._cache(tmp_path, ["2002-01", "2002-08"], "2002-08-31")
+        monkeypatch.setattr(evaluation, "ROOT", tmp_path)
+        parts = [{"trigger": 1.0}, {"trigger": 2.0}]
+        out = evaluation._completed_components(parts, ["2002-01", "2002-08"])
+        assert out == [{"trigger": 1.0}]
+
+    def test_count_match_with_other_labels_is_rejected(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        # same component count, but the aggregated cohorts are not the cached
+        # ones: identity, not count, must gate the cache-derived flags.
+        self._cache(tmp_path, ["2002-01", "2002-08"], "2002-08-31")
+        monkeypatch.setattr(evaluation, "ROOT", tmp_path)
+        parts = [{"trigger": 1.0}, {"trigger": 2.0}]
+        out = evaluation._completed_components(parts, ["2002-02", "2002-09"])
+        assert out == parts  # unfiltered fallback
+        assert "completion flags unavailable" in capsys.readouterr().err

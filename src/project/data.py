@@ -347,8 +347,13 @@ def issuer_map(path: Path = SECURITY_HEADER_FILE) -> pd.Series:
     """Per permno, the CRSP permco of its issuer (the CIZ security header).
 
     Two share classes of one company have different permnos and one permco.
-    Raises ``ValueError`` if the header holds more than one row for a permno.
+    Raises ``FileNotFoundError`` (with the download step to run) if the header
+    file is missing, and ``ValueError`` if it holds more than one row for a permno.
     """
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found: run scripts/01_get_data.py to download the CIZ security header"
+        )
     hdr = pd.read_parquet(path, columns=["permno", "permco"])
     if hdr["permno"].duplicated().any():
         raise ValueError(f"{path.name} has more than one row per permno")
