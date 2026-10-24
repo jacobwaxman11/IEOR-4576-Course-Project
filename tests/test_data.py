@@ -424,6 +424,11 @@ def test_issuer_map_reads_permco_per_permno(tmp_path) -> None:
     assert pd.isna(ids.loc[12])
 
 
+def test_issuer_map_missing_header_names_the_download_step(tmp_path) -> None:
+    with pytest.raises(FileNotFoundError, match="01_get_data.py"):
+        pdata.issuer_map(tmp_path / "absent.parquet")
+
+
 def test_issuer_map_rejects_duplicate_permnos(tmp_path) -> None:
     path = tmp_path / "header.parquet"
     pd.DataFrame({"permno": [10, 10], "permco": [5, 6]}).to_parquet(path)

@@ -9,6 +9,11 @@ below is our reading of the S&P groups; see report/replication/PAIR_FORMATION.md
 CRSP codes an unknown SIC as 0. About 106 stocks per cohort (mostly 1970s-80s
 Nasdaq listings) have a dated SIC of 0 on the formation-end day, so
 ``resolve_sic`` fills them from fallback sources before mapping.
+
+Telephone utilities are SIC 4811, the 1972 manual's telephone code, which CRSP
+carries before 1987 (AT&T and the Bell operating companies). 4810 is CRSP's
+three-digit filler, which holds the 1990s Nasdaq telecoms, and 4812-4813 are the
+1987 manual's codes. ``telephone="481x"`` keeps the older 4810-4819 map.
 """
 
 from __future__ import annotations
@@ -22,21 +27,25 @@ from project.paths import WRDS_API_DIR
 
 SECTORS = ["Utilities", "Transportation", "Financials", "Industrials"]
 
+TELEPHONE_CODES = {"4811": frozenset({4811}), "481x": frozenset(range(4810, 4820))}
+
 HEADER_FILE = WRDS_API_DIR / "security_info_header.parquet"
 PANEL_DIR = WRDS_API_DIR.parents[1] / "processed" / "crsp" / "daily"
 
 
-def sector_of(siccd) -> str:
+def sector_of(siccd, telephone: str = "4811") -> str:
     """GGR (2006) sector for one SIC code.
 
-    Utilities: 49xx and telephone 481x; Transportation: 40xx-47xx;
-    Financials: 60xx-69xx; Industrials: everything else, including 0
-    (unknown). Resolve unknown codes with ``resolve_sic`` first.
+    Utilities: 49xx and telephone (4811, or 4810-4819 with
+    ``telephone="481x"``), but not waste management (4950-4959), which GICS
+    puts in Industrials; Transportation: 40xx-47xx; Financials: 60xx-69xx;
+    Industrials: everything else, including 0 (unknown). Resolve unknown codes
+    with ``resolve_sic`` first.
     """
     sic = int(siccd)
     if 4000 <= sic <= 4799:
         return "Transportation"
-    if 4810 <= sic <= 4819 or 4900 <= sic <= 4999:
+    if sic in TELEPHONE_CODES[telephone] or (4900 <= sic <= 4999 and not 4950 <= sic <= 4959):
         return "Utilities"
     if 6000 <= sic <= 6999:
         return "Financials"
@@ -64,9 +73,10 @@ def resolve_sic(siccd: pd.Series, *fallbacks: pd.Series) -> pd.Series:
 def earliest_known_sic(panel_dir: Path = PANEL_DIR) -> pd.Series:
     """Per permno, the earliest nonzero dated SIC in the processed daily panel.
 
-    This is the stock's own CRSP record, so it is the preferred fallback; it
-    can postdate the formation window (CRSP often added a code later in a
-    stock's life), which only affects the sector label, not trading.
+    This is the stock's own CRSP record, but it can postdate the formation
+    window (CRSP often added a code later in a stock's life), which only
+    affects the sector label, not trading; the security-header SIC is tried
+    before it (see ``run_jobs`` in the driver).
     """
     parts = []
     for path in sorted(Path(panel_dir).glob("*.parquet")):
@@ -89,11 +99,11 @@ def header_sic(path: Path = HEADER_FILE) -> pd.Series:
     )
 
 
-def sectors_for(siccd: pd.Series, *fallbacks: pd.Series) -> pd.Series:
+def sectors_for(siccd: pd.Series, *fallbacks: pd.Series, telephone: str = "4811") -> pd.Series:
     """Sector label per permno: ``resolve_sic`` then ``sector_of``."""
     resolved = resolve_sic(siccd, *fallbacks)
     return pd.Series(
-        np.array([sector_of(s) for s in resolved.to_numpy()], dtype=object),
+        np.array([sector_of(s, telephone) for s in resolved.to_numpy()], dtype=object),
         index=resolved.index,
         name="sector",
     )

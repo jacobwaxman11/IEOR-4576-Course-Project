@@ -23,16 +23,25 @@ Conventions (see ``report/replication/INTERFACES.md``):
   "employed_literal", "committed_account" and "employed_account".
 * "Fully invested" in Table 1 is the employed-capital measure; "average excess
   return on committed capital" is the committed-capital mean.
+* Table 2 Panel A averages cohorts whose six-month trading window completes
+  inside the sample: a cohort whose window is cut by the sample end is
+  force-closed early, so its time open is censored and the across-cohort
+  dispersion rows are biased (``_window_censored``, ``_completed_components``).
 """
 
 from __future__ import annotations
 
+import re
+import sys
 from collections import defaultdict
+from functools import lru_cache
 
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
+from project.data import trading_calendar
+from project.paths import ROOT
 from project.sectors import SECTORS, sector_of
 
 PORTFOLIOS: dict[str, range | None] = {
@@ -65,6 +74,12 @@ TRADING_ROWS = [
 ]
 
 TRADING_DAYS_PER_MONTH = 21.0
+
+#: A cohort trades the ``COHORT_TRADING_MONTHS`` calendar months after its
+#: formation month (GGR §2.1: "traded over the subsequent 6 month period").
+COHORT_TRADING_MONTHS = 6
+
+_COHORT_DIR = re.compile(r"\d{4}-\d{2}\Z")
 
 COMPOSITION_ROWS = [
     "avg_size_decile",
@@ -497,6 +512,13 @@ def trading_stats(results: dict, ranks) -> pd.Series:
       consistent with a total, not a per-trade, duration.
     * ``std_time_open_months`` (0.45): the across-cohort (ddof=1) standard
       deviation of the per-cohort average total time open.
+
+    Only cohorts whose six-month trading window completes inside the sample
+    enter the cross-cohort moments: a window cut by the sample end is
+    force-closed early, censoring its time open downward and biasing the
+    dispersion rows (``_completed_components``).  The paper states neither
+    the count nor the treatment of such cohorts; its "all" std of time open
+    (0.17) matches the completed-window reading.
     """
     components = [
         trading_components(results[key]["result"], results[key]["sigma"], ranks)
@@ -505,14 +527,130 @@ def trading_stats(results: dict, ranks) -> pd.Series:
     return trading_stats_from_components(components)
 
 
-def trading_components(result, sigma, ranks) -> dict[str, float]:
+@lru_cache(maxsize=512)
+def _month_edges(start: pd.Timestamp, end: pd.Timestamp):
+    """First and last trading day of ``[start, end]``, or None if unknown."""
+    try:
+        cal = trading_calendar(start, end)
+    except Exception:
+        return None
+    if len(cal) == 0:
+        return None
+    return cal[0], cal[-1]
+
+
+def _window_censored(index) -> bool:
+    """True when a cohort trading calendar was cut short by the sample end.
+
+    A cohort trades the ``COHORT_TRADING_MONTHS`` calendar months after its
+    formation month, and the sample end always cuts on the last trading day
+    of a month, so a cut calendar spans fewer than six calendar months while
+    still starting on the first and ending on the last trading day of its
+    boundary months.  A calendar that stops on any other day is a partial
+    extract, not a sample-end cut, and counts as complete; so does a calendar
+    outside the trading-day extract (no evidence of a cut).
+    """
+    try:
+        idx = pd.DatetimeIndex(index)
+        if len(idx) == 0:
+            return False
+        months = idx.to_period("M")
+        if len(months.unique()) >= COHORT_TRADING_MONTHS:
+            return False
+        head = _month_edges(months[0].start_time, months[0].end_time)
+        tail = _month_edges(months[-1].start_time, months[-1].end_time)
+        if head is None or tail is None:
+            return False
+        return bool(idx[0] == head[0] and idx[-1] == tail[-1])
+    except Exception:
+        return False
+
+
+def _cached_censored_flags(cohorts: list[str]) -> list[bool] | None:
+    """Per-cohort completion flags derived from the cohort cache, or None.
+
+    For caches whose per-cohort trading summaries predate the ``censored``
+    flag: the caller supplies the cohort labels it aggregated (``YYYY-MM``,
+    in summary order), and the flags are taken from the one cached universe
+    whose cohort directories are *exactly* those labels — identity, not a
+    count match, so stride/subset runs and synthetic inputs never borrow
+    another run's flags.  The sample end is the newest cohort's last cached
+    monthly month; a cohort is censored when its six-month window would end
+    past it.  Any ambiguity — no single exact-match universe, an unreadable
+    cache, or every cohort censored — returns None so callers fall back to
+    the unfiltered aggregation rather than guess.
+    """
+    wanted = sorted(cohorts)
+    if not wanted or not all(_COHORT_DIR.match(name) for name in wanted):
+        return None
+    root = ROOT / "data" / "processed" / "replication"
+    try:
+        universes = sorted(p for p in root.iterdir() if p.is_dir())
+    except OSError:
+        return None
+    matches = []
+    for uni in universes:
+        coh = uni / "cohorts"
+        try:
+            dirs = sorted(d.name for d in coh.iterdir()
+                          if d.is_dir() and _COHORT_DIR.match(d.name))
+        except OSError:
+            continue
+        if dirs == wanted:
+            matches.append((coh, dirs))
+    if len(matches) != 1:
+        return None
+    coh, dirs = matches[0]
+    try:
+        months = pd.read_parquet(coh / dirs[-1] / "monthly.parquet",
+                                 columns=["month_end"])["month_end"]
+        sample_end = pd.Period(months.max(), freq="M")
+    except Exception:
+        return None
+    flags = []
+    for name in cohorts:
+        window_end = pd.Period(name, freq="M") + COHORT_TRADING_MONTHS - 1
+        flags.append(bool(window_end > sample_end))
+    if all(flags):
+        return None
+    return flags
+
+
+def _completed_components(components: list[dict], cohorts: list[str] | None = None) -> list[dict]:
+    """Table 2 Panel A inputs of the cohorts that completed their window.
+
+    Uses the stored per-cohort ``censored`` flag when the components carry
+    one; otherwise derives the flags from the cohort cache, and only when the
+    caller supplied the cohort labels it aggregated (``cohorts``).  Falls
+    back to every component whenever the flags are unavailable or would drop
+    all of them, so stride/subset runs, synthetic inputs and old caches keep
+    today's aggregation; a label-mismatch fallback prints a stderr note.
+    """
+    if not components:
+        return components
+    if any("censored" in c for c in components):
+        keep = [c for c in components if not c.get("censored")]
+        return keep or components
+    if cohorts is None:
+        return components
+    flags = _cached_censored_flags(cohorts)
+    if flags is None:
+        print("warning: cohort completion flags unavailable; Panel A keeps the "
+              "unfiltered aggregation (all cohorts)", file=sys.stderr)
+        return components
+    keep = [c for c, censored in zip(components, flags) if not censored]
+    return keep or components
+
+
+def trading_components(result, sigma, ranks) -> dict[str, float | bool]:
     """One cohort's inputs to ``trading_stats``: mean trigger, pairs opened,
-    mean round trips per opened pair and mean total days open / 21."""
+    mean round trips per opened pair, mean total days open / 21, and whether
+    the cohort's trading window was cut short by the sample end."""
     sel = _resolve_ranks(result.pair_returns, ranks)
     trigger = float((2.0 * pd.Series(sigma, dtype=float).reindex(sel)).mean())
     opened = [c for c in sel if bool(result.opened.get(c, False))]
     out = {"trigger": trigger, "n_opened": float(len(opened)), "round_trips": 0.0,
-           "time_open": 0.0}
+           "time_open": 0.0, "censored": _window_censored(result.pair_returns.index)}
     trades = result.trades
     if not opened or trades is None or len(trades) == 0:
         return out
@@ -527,11 +665,20 @@ def trading_components(result, sigma, ranks) -> dict[str, float]:
     return out
 
 
-def trading_stats_from_components(components: list[dict[str, float]]) -> pd.Series:
-    """Table 2 Panel A rows from per-cohort ``trading_components``."""
+def trading_stats_from_components(
+    components: list[dict], cohorts: list[str] | None = None,
+) -> pd.Series:
+    """Table 2 Panel A rows from per-cohort ``trading_components``.
+
+    Cohorts whose trading window was cut by the sample end are dropped before
+    the cross-cohort moments (``_completed_components``); components without
+    completion information keep the unfiltered aggregation.  ``cohorts``, the
+    ``YYYY-MM`` labels in summary order, enables the cache-derived flags for
+    components that predate the stored ``censored`` flag.
+    """
     if not components:
         return pd.Series(np.nan, index=TRADING_ROWS, dtype=float)
-    frame = pd.DataFrame(components)
+    frame = pd.DataFrame(_completed_components(list(components), cohorts))
 
     def _xs_std(values: pd.Series) -> float:
         return float(values.std(ddof=1)) if len(values) > 1 else np.nan

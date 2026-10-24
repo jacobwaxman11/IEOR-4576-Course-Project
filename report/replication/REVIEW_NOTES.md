@@ -696,3 +696,225 @@ rules are why section 17's "not adopted" rows lose points one at a time and win 
 - Table 2 trigger: 0.039 / 0.045 / 0.069 / 0.166 vs 0.0476 / 0.0528 / 0.0756 / 0.1689. The 1999
   draft's trigger (0.0399 / 0.0449 / 0.0683 / 0.1518) fits our 2σ, so the editions disagree.
 - Table 3: ✓ falls 45 -> 41 while ~ rises 38 -> 47; the Table 3 total is about even.
+
+## 19. Not in this snapshot
+
+Section 19 (daily-panel cross-checks) and the long-form trackers it cites (`OPEN_QUESTIONS.md`,
+`EDITION_1999.md`, the 1999 NBER draft scorer) stay in the private working repository; they are
+diagnostics and do not change any code path. Sections 20-24 below are the evidence for every
+change between the 169.5 snapshot and the 183.5 check, and are copied as written; the PR numbers
+and the references to those trackers point at the private repository.
+
+## 20. Telephone utilities are SIC 4811, the 1972 code (2026-10-22)
+
+`sector_of` now counts telephone as SIC 4811 only (`--telephone-sic 4811`, the default); the old
+map took 4810-4819. The shipped check moves 169.5 -> 172.0.
+
+| RFS cells ✓/~/✗ | before (169.5) | now (172.0) |
+|---|---|---|
+| Table 1 (88) | 50/16/22 | 50/16/22 |
+| Table 2 Panel A (24) | 14/9/1 | 14/9/1 |
+| Table 2 Panel B (40) | 27/3/10 | 28/2/10 |
+| Table 3 (139) | 41/47/51 | 43/47/49 |
+
+Only sector labels move, so Table 1, Table 2 Panel A and Figure 1 are unchanged. The 20-cohort smoke
+sample moves 91.0 -> 94.5; the 1999 draft's Tables I-II move from 91.0 to 91.5.
+
+**What is and is not in the paper.** Section 2.1 names the four S&P groups and says each stock is
+assigned "based on the stock's SIC code"; it gives no ranges. The map is our reading, and the
+check's header says so.
+
+**Why 4811.** CRSP's dated SIC follows the 1972 SIC manual before 1987, where telephone
+communication is 4811 (AT&T and the Bell operating companies), and the 1987 manual after it, where
+4812 is radiotelephone and 4813 wireline telephone (the regional Bells and GTE from then on). 4810
+is CRSP's three-digit filler and holds the 1990s Nasdaq telecoms (MCI, WorldCom, Global Crossing,
+Nextel, Qwest, Level 3, Exodus), which an S&P utilities group of the time would not have held. A
+telephone rule written from the 1972 manual has 4811 only. The improvement shows up beyond the
+cells it moves:
+
+- *Table 3 Utilities:* 101-120 standard deviation 3.42% -> 2.64% (paper 2.64%), "all" standard
+  deviation 1.77% -> 1.55% (1.47%), "all" minimum -6.2% -> -4.2% (-3.5%).
+- *Sector count:* 144 Utilities per cohort (paper 156, within 10%; before 161).
+- *1999 draft:* 91.0 -> 91.5, which was not used to choose the map.
+
+**Alternatives** (OPEN_QUESTIONS round six, with the RMS trigger): 4810 + 4811 gives exactly 156
+utilities but a larger Utilities error; 4811 + 4813 and 4811 + 4812 + 4813 score 174.5 and 175.0
+against 176.0 for 4811 alone.
+
+**Switching it off.** `--telephone-sic 481x` reproduces the 169.5 check (verified).
+
+## 21. The trigger's sigma is the spread's root mean square about zero (2026-10-22)
+
+`select_pairs` now sets each pair's sigma to sqrt(SSD / N), the root mean square of the formation
+spread of normalized prices about zero (`--trigger-sigma rms`, the default); it was the standard
+deviation about the spread's mean. The shipped check moves 172.0 -> 176.0.
+
+| RFS cells ✓/~/✗ | before (172.0) | now (176.0) |
+|---|---|---|
+| Table 1 (88) | 50/16/22 | 52/14/22 |
+| Table 2 Panel A (24) | 14/9/1 | 16/7/1 |
+| Table 2 Panel B (40) | 28/2/10 | 28/2/10 |
+| Table 3 (139) | 43/47/49 | 43/51/45 |
+
+Figure 1 is unchanged (pair rank 4, the same five trades; Kennecott-Uniroyal's sigma moves 0.0217
+-> 0.0218). The 20-cohort smoke sample falls 94.5 -> 92.5, so its threshold is lowered with it; the
+module note already says the sample can move against the full result.
+
+**What is and is not in the paper.** Section 2.2 opens a pair "when prices diverge by more than two
+historical standard deviations, as estimated during the pairs formation period", and closes it at
+the next crossing. It does not say about which centre the deviation is measured. The rule measures
+divergence from parity (zero spread), and the paper already computes the SSD of the two normalized
+series as its distance, so sqrt(SSD / N) is the standard deviation of the price difference about
+the point the rule trades around. It equals the demeaned standard deviation plus each pair's
+squared mean spread, under the root. This is our reading, and the check's header says so.
+
+**Evidence beyond the cells it moves:**
+
+- *1999 draft, Table II A trigger (408 cohorts of its window):* top 5 0.0399 against the draft's
+  0.0399 (demeaned: 0.0383), top 20 0.0453 against 0.0449 (0.0433). The draft was not used to
+  choose the reading.
+- *RFS Table 2 A:* top-5 / top-20 trigger 0.0392 / 0.0446 -> 0.0409 / 0.0467 (paper 0.0476 /
+  0.0528); round trips top 20 2.20 -> 2.10 (1.96); std of round trips 101-120 0.305 -> 0.292 (0.27).
+- *Table 3 Financials 101-120 tails:* kurtosis 7.3 -> 18.5 (18.3), maximum 11.5% -> 19.3% (19.6%),
+  skew 1.07 -> 2.34 (1.98).
+
+**Against.** The 1999 draft's Tables I-II fall 91.5 -> 86.5, all in Table I (46.5 -> 41.5). Every
+lost cell is a mean or median that was already 5-9% below the draft and crosses the 10% line (top-5
+six-month mean 5.59% -> 5.36%, draft 5.98%); no cell moves from within 25% to beyond it. The draft
+can veto a change; this is read as an objection, not a veto, because the same draft's trigger, which
+measures sigma directly, is matched exactly. The RFS trigger stays 12-14% low for the top 5 and top
+20 (OPEN_QUESTIONS Q7). A fitted alternative, sigma squared plus a constant, matches the RFS trigger
+but lowers the 1999 score to 80.0 and is not adopted.
+
+**Switching it off.** `--trigger-sigma std` reproduces the 172.0 check (verified).
+
+## 22. Unknown-SIC fallback order: the security-header SIC first (2026-10-23)
+
+`run_jobs` now fills unknown (0) dated codes from the CRSP security-header SIC before the earliest
+known dated SIC (`fallbacks = (header, earliest_known_sic())`); it was earliest-first. The paper
+names no SIC source for the sector assignment, and the header classification is the stock's own
+primary label where the earliest-ever dated code is a proxy that can postdate the formation window.
+The shipped check moves 176.0 -> 177.5; SCORE_LOG row 10.
+
+| RFS cells ✓/~/✗ | before (176.0) | now (177.5) |
+|---|---|---|
+| Table 1 (88) | 52/14/22 | 52/14/22 |
+| Table 2 Panel A (24) | 16/7/1 | 16/7/1 |
+| Table 2 Panel B (40) | 28/2/10 | 28/2/10 |
+| Table 3 (139) | 43/51/45 | 47/47/46 |
+
+The Table 3 movers, cell by cell: Financials t_stat[1] and share_negative[4], Industrials
+min[2] and Transportation share_negative[1], Utilities t_stat[1] gain ✓; Utilities median[4]
+loses ✓; Industrials skew[2] and Utilities skew[3] fall ~ -> ✗. The top-pair sector-mix cells
+(Q5) do not move. The 20-cohort smoke sample and Figure 1 are unchanged; the 1999 draft edition
+stays 86.5. The improvement loop found and pre-measured the variant (its "V2" experiment); the
+cohort cache was rebuilt with the new convention (474/474).
+
+## 23. Table 2 Panel A over completed trading windows (2026-10-23)
+
+The last five cohorts (formed 2002-08..2002-12) are force-closed at the sample end after 1-5
+months, so their per-pair total time open is censored downward and the across-cohort dispersion
+rows are inflated. `trading_stats_from_components` now drops cohorts whose six-month window was
+cut by the sample end (`_window_censored`: a calendar that spans fewer than six months and runs
+from the first trading day of its first month to the last of its last month was cut; stored
+per-cohort flags, or cache-derived flags matched to the aggregated cohort labels by identity).
+The shipped check moves 177.5 -> 178.5; SCORE_LOG row 11.
+
+| row (paper) | all 474 | complete-only 469 |
+|---|---|---|
+| std time open, top5 (0.80) | 0.736 ✓ | 0.707 ~ |
+| std time open, top20 (0.45) | 0.508 ~ | 0.461 ✓ |
+| std time open, 101-120 (0.38) | 0.444 ~ | 0.368 ✓ |
+| std time open, all (0.17) | 0.309 ✗ | 0.199 ~ |
+
+Every other Panel A cell keeps its mark (checked cell by cell). The paper's caption ("474 months")
+describes the sample, not the trading-window cohort count; the paper's own std of time open (0.17)
+matches the completed-window reading better than the all-474 one, which is the reading's defense.
+This closes Q1's Table 2 Panel A cell; the same sensitivity was recorded at the 169.5-era score in
+cross-checks, round two. The 20-cohort smoke sample, Figure 1 and the 1999 draft edition (86.5)
+are unchanged.
+
+Two discriminating tests, run after a reward-hacking challenge to this change:
+
+1. **Placebo (RFS, wait 1):** dropping five *mid-sample completed* cohorts while keeping the
+   censored five leaves the dispersion at the all-474 values (0.737 / 0.510 / 0.442 / 0.308
+   against 0.736 / 0.508 / 0.444 / 0.309). The move toward the paper is carried specifically by
+   the censored windows, not by "dropping five of anything".
+2. **1999 draft edition (independent paper values, sample 1963-07..1997-06, wait 0):** every
+   draft cohort completes inside our cache, and the draft's published std of months open
+   (0.70 / 0.50 / 0.40 / 0.20) matches the completed-window computation to 2-6%
+   (0.713 / 0.472 / 0.369 / 0.205); dropping the draft's own trailing five does nothing
+   (0.715 / 0.472 / 0.370 / 0.206). So in the edition where nothing is censored, the paper's
+   numbers are the completed-window numbers — the filter corrects censoring, it is not a
+   trailing-count knob.
+
+## 24. We classify 495x (waste management) as Industrials (2026-10-24)
+
+We now assign sanitary services and waste management, SIC 4950-4959, to
+Industrials rather than Utilities. This is a **classification choice, not a
+recovered fact**: GICS - the post-1999 S&P/MSCI scheme - puts waste management in
+Industrials, while S&P's contemporaneous pre-1999 scheme, which is what the 2006
+paper describes, is **not verified**, and the 1999 NBER draft is neutral on it
+(see the second-edition check below). What justifies shipping it is the
+measurement: **178.5 -> 183.5** (+5.0), with six of the eight gains inside the
+Utilities 101-120 band.
+
+Eight cells improve and three regress, and the gains are coherent: every one is in
+the Utilities 101-120 column, which sits at the far end of a ~120-pair pool and is
+therefore the most membership-sensitive band in Table 3.
+
+| Utilities 101-120 | before | after | paper |
+|---|---|---|---|
+| mean | 0.77% | 0.95% | 0.93% |
+| t-statistic | 3.90 | 5.76 | 6.11 |
+| kurtosis | 9.65 | 5.97 | 5.52 |
+| minimum | -12.64% | -7.80% | -7.87% |
+| maximum | 18.48% | 12.61% | 12.13% |
+| skewness | 0.31 | 0.52 | 0.66 |
+
+Plus the Utilities all-pair minimum (-4.47% -> -3.80% against -3.52%) and the
+Industrials 101-120 minimum. Regressions: the Utilities stock count (144 -> 137
+against the paper's 156) drops from ✓ to ~, and the Utilities 101-120 median and
+standard deviation each lose half a cell.
+
+The change does **not** touch Q5: the top-pair sector mix is unchanged
+(weight_utilities 0.774 in both states, weight_industrials 0.0745), because the
+waste-management stocks never reached the top-five pairs. It works on the far end
+of the sector ranking, not on the tight bands.
+
+**Second edition check (veto test).** `EDITION_1999.md` makes the 1999 NBER draft
+a second opinion that may veto a change. `scripts/edition_1999.py --cohorts
+<cache>` scores **86.5 of 136 before and after** (Table I 41.5, Table II A 23.5,
+Table II B 21.5 in both) - identical to row 9 of `EDITION_1999.md`. The draft does
+not veto, because it has no by-sector table beyond the Table II B weights and
+those barely move (weight_utilities 0.774 in both states). It also cannot
+corroborate the classification. The case therefore rests on the RFS Table 3 cells
+above and on GICS, with S&P's contemporaneous scheme left unresolved.
+
+Neighbouring classification decisions were measured in the same session and all
+lose, so this is a single supported change rather than a general "shrink the
+sector pool" rule:
+
+| probe | score |
+|---|---|
+| pipelines 4922-4924 out of Utilities | 168.5 |
+| real estate 65xx out of Financials | 176.0 |
+| holding/investment offices 67xx out of Financials | 165.0 |
+| brokers 62xx out of Financials | 179.5 |
+| local transit 41xx out of Transportation | 182.0 |
+| transportation services 47xx out of Transportation | 183.0 |
+| pipelines 46xx out of Transportation | tie with the shipped configuration |
+| all of 48xx added to Utilities alongside 495x out | 174.5 |
+| 481x telephone with 495x out (restores the count to 155) | 177.5 |
+| no SIC fallback: unknown codes stay Industrials | 177.5 |
+| wait-1 delays the opening only (Panel B caption read literally) | 160.5 |
+| trigger sigma from spread innovations scaled to the level | 57.0 |
+
+Those twelve were measured on this session's working copy, a snapshot taken
+before #22 and #23 landed, so treat the numbers as directional rather than as
+deltas against this base. Two of them are worth keeping for other questions: the
+entry-only delay collapses Table 1 Panel B from 30.5 to 21.5 points, which is
+independent confirmation of the 2026-10-16 fix in section 3; and the
+innovation-scaled trigger produces 22% triggers, closing Q7's remaining
+alternative.
+

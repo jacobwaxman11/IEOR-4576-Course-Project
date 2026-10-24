@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from pathlib import Path
+
 from project.sectors import earliest_known_sic, resolve_sic, sector_of, sectors_for
 
 
@@ -20,13 +22,19 @@ class TestSectorOf:
             (4799, "Transportation"),
             (4800, "Industrials"),
             (4809, "Industrials"),
-            (4810, "Utilities"),
-            (4813, "Utilities"),
-            (4819, "Utilities"),
+            (4810, "Industrials"),
+            (4811, "Utilities"),
+            (4812, "Industrials"),
+            (4813, "Industrials"),
+            (4819, "Industrials"),
             (4820, "Industrials"),
             (4899, "Industrials"),
             (4900, "Utilities"),
             (4911, "Utilities"),
+            (4941, "Utilities"),
+            (4950, "Industrials"),
+            (4959, "Industrials"),
+            (4960, "Utilities"),
             (4999, "Utilities"),
             (5999, "Industrials"),
             (6000, "Financials"),
@@ -37,6 +45,11 @@ class TestSectorOf:
     )
     def test_boundaries(self, sic, expected):
         assert sector_of(sic) == expected
+
+    @pytest.mark.parametrize("sic", [4810, 4811, 4813, 4819])
+    def test_older_telephone_map_keeps_481x(self, sic):
+        assert sector_of(sic, telephone="481x") == "Utilities"
+        assert sector_of(4820, telephone="481x") == "Industrials"
 
 
 class TestResolveSic:
@@ -58,7 +71,7 @@ class TestResolveSic:
         assert out.to_dict() == {1: 0, 2: 2834}
 
     def test_sectors_for_maps_resolved_codes(self):
-        dated = pd.Series({1: 0, 2: 4813, 3: 0})
+        dated = pd.Series({1: 0, 2: 4811, 3: 0})
         out = sectors_for(dated, pd.Series({1: 6799}))
         assert out.to_dict() == {
             1: "Financials",
@@ -85,3 +98,26 @@ def test_earliest_known_sic_uses_dates_not_row_order(tmp_path):
     }).to_parquet(tmp_path / "1989.parquet")
     out = earliest_known_sic(tmp_path)
     assert out.to_dict() == {7: 6020, 8: 3711}
+
+
+class TestWasteManagementIsIndustrials:
+    """REVIEW_NOTES section 24: sanitary services move out of Utilities."""
+
+    def test_waste_management_is_not_a_utility_under_any_telephone_map(self):
+        for telephone in ("4811", "481x"):
+            for sic in (4950, 4953, 4959):
+                assert sector_of(sic, telephone=telephone) == "Industrials"
+
+    def test_the_utilities_branch_still_owns_its_neighbours(self):
+        assert sector_of(4941) == "Utilities"   # water
+        assert sector_of(4960) == "Utilities"   # just above the range
+        assert sector_of(4924) == "Utilities"   # pipelines stay, measured worse
+
+
+class TestProductionFallbackOrder:
+    def test_driver_passes_header_sic_before_earliest_known(self):
+        """The shipped convention (SCORE_LOG row 10): unknown dated codes fill
+        from the security-header SIC first, the earliest known dated SIC second."""
+        driver = Path(__file__).resolve().parents[1] / "scripts" / "03_replicate.py"
+        source = driver.read_text(encoding="utf-8")
+        assert "fallbacks = (header, earliest_known_sic())" in source

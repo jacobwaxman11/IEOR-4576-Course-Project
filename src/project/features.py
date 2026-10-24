@@ -60,13 +60,18 @@ def ssd_matrix(prices: pd.DataFrame, issuers: pd.Series | None = None) -> np.nda
     return D
 
 
-def select_pairs(prices: pd.DataFrame, issuers: pd.Series | None = None) -> pd.DataFrame:
+def select_pairs(
+    prices: pd.DataFrame, issuers: pd.Series | None = None, sigma: str = "rms",
+) -> pd.DataFrame:
     """Exhaustive minimum-distance pairing on normalized formation prices.
 
     Each stock i is matched with ``j* = argmin_{j != i} D_ij``; the pair set is
     the unique unordered ``{i, j*}``. Pairs are ranked by distance ascending,
-    ties broken by (permno_1, permno_2). ``sigma`` is the standard deviation of
-    the spread of formation-normalized prices with ddof=0. With ``issuers`` (see
+    ties broken by (permno_1, permno_2). ``sigma`` is the spread of
+    formation-normalized prices measured about zero, ``sqrt(SSD / N)`` (the
+    root mean square, default ``"rms"``), or about its mean with ddof=0
+    (``"std"``). The rule opens at a divergence from parity and closes at a
+    crossing, so ``"rms"`` measures from the same point. With ``issuers`` (see
     ``ssd_matrix``) a stock is matched to the nearest stock of another issuer,
     and a stock with no such partner is left unpaired.
 
@@ -107,7 +112,9 @@ def select_pairs(prices: pd.DataFrame, issuers: pd.Series | None = None) -> pd.D
                 "permno_1": lo,
                 "permno_2": hi,
                 "distance": float(D[i, j]),
-                "sigma": float(np.std(spread, ddof=0)),
+                "sigma": float(
+                    np.sqrt(np.mean(spread**2)) if sigma == "rms" else np.std(spread, ddof=0)
+                ),
             }
         )
 
@@ -123,6 +130,7 @@ def select_pairs(prices: pd.DataFrame, issuers: pd.Series | None = None) -> pd.D
 
 def select_pairs_within_groups(
     prices: pd.DataFrame, groups: pd.Series, issuers: pd.Series | None = None,
+    sigma: str = "rms",
 ) -> pd.DataFrame:
     """Sector-restricted pairing (paper §2.1, Table 3).
 
@@ -137,7 +145,7 @@ def select_pairs_within_groups(
     frames = []
     for label in sorted(labels.dropna().unique()):
         cols = labels.index[labels.eq(label)]
-        pairs = select_pairs(prices[cols], issuers)
+        pairs = select_pairs(prices[cols], issuers, sigma)
         if len(pairs):
             frames.append(pairs.assign(group=label))
     if not frames:

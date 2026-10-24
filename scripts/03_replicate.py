@@ -12,6 +12,7 @@ Usage:
         [--limit-cohorts K] [--force] [--universe vol_common]
         [--normalization continued|rebased] [--aggregate-only]
         [--same-issuer exclude|allow] [--max-stale-share SHARE|none]
+        [--telephone-sic 4811|481x] [--trigger-sigma rms|std]
 
 Cohorts are cached under data/processed/replication/{NAME}/cohorts/, stamped
 with their trading normalization, cache format and formation options in
@@ -304,7 +305,7 @@ def verify_cache(universe: str, continued: bool) -> None:
             f"{universe} cache was built with {meta.get('normalization')} normalization; "
             f"pass --normalization {meta.get('normalization')} or rebuild with --force"
         )
-    for key in ("exclude_same_issuer", "max_stale_share"):
+    for key in ("exclude_same_issuer", "max_stale_share", "telephone_sic", "trigger_sigma"):
         if meta.get(key) != want.get(key):
             built = f"{key}={meta[key]}" if key in meta else f"no {key} stamp"
             now = f"{key}={want[key]}" if key in want else f"no {key}"
@@ -363,6 +364,8 @@ class Job:
     cohorts_root: str | None = None
     exclude_same_issuer: bool = False
     max_stale_share: float | None = None
+    telephone_sic: str = "4811"
+    trigger_sigma: str = "rms"
 
 
 def init_worker(fallbacks: tuple[pd.Series, ...]) -> None:
@@ -411,7 +414,7 @@ def build_cohort(job: Job) -> tuple[int, int]:
     prices = normalized_prices(form.pivot(index="date", columns="permno", values="ret").sort_index())
     del form
     issuers = _issuer_series() if job.exclude_same_issuer else None
-    pairs = select_pairs(prices, issuers)
+    pairs = select_pairs(prices, issuers, job.trigger_sigma)
 
     form_cal = trading_calendar(form_start, form_end)
     if len(form_cal) == 0:
@@ -419,8 +422,9 @@ def build_cohort(job: Job) -> tuple[int, int]:
     end_day = form_cal[-1].date()
     row = load_daily(end_day, end_day, ["permno", "cap", "exch", "common", "siccd"])
     row = row.set_index("permno")
-    labels = sectors_for(row["siccd"].reindex(universe).fillna(0), *_SIC_FALLBACKS)
-    sector_pairs = select_pairs_within_groups(prices, labels, issuers)
+    labels = sectors_for(row["siccd"].reindex(universe).fillna(0), *_SIC_FALLBACKS,
+                         telephone=job.telephone_sic)
+    sector_pairs = select_pairs_within_groups(prices, labels, issuers, job.trigger_sigma)
     levels = prices.iloc[-1] if job.continued else None
     del prices
 
@@ -533,6 +537,7 @@ def _strategy_series(frame: pd.DataFrame, end_ts: pd.Timestamp) -> pd.Series:
 
 def aggregate(
     monthly: pd.DataFrame, summaries: list[dict], waits: tuple[int, ...], end: tuple[int, int],
+    cohorts: list[tuple[int, int]] | None = None,
 ) -> tuple[dict, dict, dict, pd.Series]:
     """Tables 1 and 2 from cached cohort summaries.
 
@@ -557,8 +562,9 @@ def aggregate(
     }
     trading = {}
     if 1 in waits:
+        labels = [f"{year:04d}-{month:02d}" for year, month in cohorts] if cohorts else None
         trading = {
-            p: trading_stats_from_components([s["trading"][p] for s in summaries])
+            p: trading_stats_from_components([s["trading"][p] for s in summaries], labels)
             for p in PORTFOLIOS
         }
     composition = {
@@ -833,6 +839,13 @@ def _tally_line(tally: list) -> str:
             f"(within 25%), ✗ {tally.count('✗')}.")
 
 
+def _score_line(marks: list) -> str:
+    """The weighted total the scorer, the conformance test and SCORE_LOG.md all use."""
+    n = sum(m != "" for m in marks)
+    return (f"Score: {marks.count('✓') + 0.5 * marks.count('~'):.1f} of {n} compared cells "
+            "(✓ = 1, ~ = ½, ✗ = 0); history in SCORE_LOG.md.")
+
+
 PCT_STATS = {"mean", "nw_se", "median", "std", "min", "max", "committed_mean"}
 
 
@@ -855,11 +868,26 @@ def write_replication_check(out_dir: Path, fig_dir: Path, universe: str) -> Path
         "matched with another security of its own issuer (same CRSP permco, e.g. two",
         "share classes). The paper states none of these three exclusions beyond",
         "screening out stocks with a no-trade day; REVIEW_NOTES section 18 gives the",
-        "evidence and the score without them (165.0).",
+        "evidence, and SCORE_LOG.md the score without them. Telephone utilities are",
+        "SIC 4811, the 1972 telephone code that CRSP carries before 1987 (4810 and the",
+        "1987 codes 4812-4819 are Industrials); the paper gives no SIC ranges, and",
+        "REVIEW_NOTES section 20 gives the evidence. Waste management (SIC",
+        "4950-4959) is Industrials, following GICS; S&P's contemporaneous scheme is",
+        "unverified and the 1999 draft is neutral on it, so this is a classification",
+        "choice worth five cells in the Utilities 101-120 band (REVIEW_NOTES section",
+        "24). The trigger's sigma is the",
+        "formation spread's root mean square about zero, sqrt(SSD/N), not its standard",
+        "deviation about its mean; the paper says \"historical standard deviations\",",
+        "and REVIEW_NOTES section 21 gives the evidence.",
+        "",
+        "The score total, its history and how it is counted live in SCORE_LOG.md. The",
+        "open gaps are in OPEN_QUESTIONS.md; the 1999 NBER draft is scored separately",
+        "in EDITION_1999.md.",
         "",
     ]
     header_len = len(lines)
     summary = []
+    marks: list = []
 
     fig_file = fig_dir / "figure1.json"
     lines += ["## Figure 1 (Kennecott vs Uniroyal, trading Aug 1963 - Jan 1964, no wait)", ""]
@@ -903,6 +931,7 @@ def write_replication_check(out_dir: Path, fig_dir: Path, universe: str) -> Path
             lines.append("")
         lines += [_tally_line(tally), ""]
         summary.append("Table 1: " + _tally_line(tally))
+        marks += tally
 
     for fname, paper_tab, title in (
         ("table2_panelA.csv", PAPER_TABLE2A, "Table 2 Panel A (one-day wait)"),
@@ -920,6 +949,7 @@ def write_replication_check(out_dir: Path, fig_dir: Path, universe: str) -> Path
             lines.append(f"| {stat} | " + " | ".join(cells) + " |")
         lines += ["", _tally_line(tally), ""]
         summary.append(f"{title.split(' (')[0]}: " + _tally_line(tally))
+        marks += tally
 
     if (out_dir / "table3.csv").exists():
         t3 = pd.read_csv(out_dir / "table3.csv").set_index(["sector", "portfolio", "capital"])
@@ -942,7 +972,10 @@ def write_replication_check(out_dir: Path, fig_dir: Path, universe: str) -> Path
             lines.append("")
         lines += [_tally_line(tally), ""]
         summary.append("Table 3: " + _tally_line(tally))
+        marks += tally
 
+    if any(marks):
+        summary.append(_score_line(marks))
     lines[header_len:header_len] = ["## Summary", ""] + [f"- {s}" for s in summary] + [""]
     path = out_dir / "replication_check.md"
     path.write_text("\n".join(lines))
@@ -961,7 +994,10 @@ def run_jobs(jobs: list[Job], workers: int) -> None:
         print(f"warning: security-header SIC fallback unavailable ({err}); "
               "sector labels may shift", file=sys.stderr)
         header = pd.Series(dtype="float64", name="siccd")
-    fallbacks = (earliest_known_sic(), header)
+    # Unknown (0) dated codes fill from the CRSP security-header SIC first (a
+    # stock's own header classification), then the earliest known dated SIC.
+    # SCORE_LOG.md row 10 records the move and the cell shifts.
+    fallbacks = (header, earliest_known_sic())
     init_worker(fallbacks)
     warm = pd.DataFrame({"rank": [1], "permno_1": [1], "permno_2": [2], "distance": [0.0],
                          "sigma": [1.0]})
@@ -1029,6 +1065,16 @@ def main() -> None:
              "this share of the formation days; 'none' keeps them (default 0.95)",
     )
     parser.add_argument(
+        "--telephone-sic", choices=("4811", "481x"), default="4811",
+        help="SIC codes of telephone utilities: 4811, the 1972 code CRSP carries before "
+             "1987 (default), or the older 4810-4819 map",
+    )
+    parser.add_argument(
+        "--trigger-sigma", choices=("rms", "std"), default="rms",
+        help="sigma of the 2-sigma rule: the formation spread's root mean square about "
+             "zero, sqrt(SSD/N) (default), or its standard deviation about its mean",
+    )
+    parser.add_argument(
         "--aggregate-only", action="store_true",
         help="regenerate Tables 1 and 2 from the cohort cache; error if any cohort is missing",
     )
@@ -1065,6 +1111,10 @@ def main() -> None:
         FORMATION_OPTIONS["exclude_same_issuer"] = True
     if args.max_stale_share is not None:
         FORMATION_OPTIONS["max_stale_share"] = args.max_stale_share
+    if args.telephone_sic == "4811":
+        FORMATION_OPTIONS["telephone_sic"] = "4811"
+    if args.trigger_sigma == "rms":
+        FORMATION_OPTIONS["trigger_sigma"] = "rms"
     cohorts_root = None
     if args.cache_root:
         CACHE_ROOT_OVERRIDE = Path(args.cache_root).resolve()
@@ -1098,7 +1148,8 @@ def main() -> None:
             stamp_cache(args.universe, continued, args.force)
             jobs = [
                 Job(y, m, end, waits, args.universe, continued, args.cohorts_root,
-                    exclude_same_issuer, args.max_stale_share)
+                    exclude_same_issuer, args.max_stale_share, args.telephone_sic,
+                    args.trigger_sigma)
                 for y, m in cohorts
                 if args.force or not cohort_cache_complete(y, m, waits, args.universe)
             ]
@@ -1111,7 +1162,8 @@ def main() -> None:
             run_jobs(jobs, args.workers)
         monthly, summaries = load_summaries(cohorts, args.universe)
         if "tables" in steps:
-            strategy, trading, composition, uni_summary = aggregate(monthly, summaries, waits, end)
+            strategy, trading, composition, uni_summary = aggregate(
+                monthly, summaries, waits, end, cohorts)
             write_outputs(strategy, trading, waits, len(cohorts), out_dir, composition, uni_summary)
             print(f"Tables 1 and 2 written to {out_dir}", flush=True)
         if "table3" in steps:

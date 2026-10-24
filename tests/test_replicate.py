@@ -63,6 +63,12 @@ def test_verify_names_an_unstamped_option(tmp_path, monkeypatch):
     monkeypatch.setattr(rep, "FORMATION_OPTIONS", {"max_stale_share": 0.95})
     with pytest.raises(SystemExit, match="no max_stale_share stamp"):
         rep.verify_cache("u", continued=True)
+    monkeypatch.setattr(rep, "FORMATION_OPTIONS", {"telephone_sic": "4811"})
+    with pytest.raises(SystemExit, match="no telephone_sic stamp"):
+        rep.verify_cache("u", continued=True)
+    monkeypatch.setattr(rep, "FORMATION_OPTIONS", {"trigger_sigma": "rms"})
+    with pytest.raises(SystemExit, match="no trigger_sigma stamp"):
+        rep.verify_cache("u", continued=True)
 
 
 def test_share_argument_is_a_unit_interval_value():
@@ -197,3 +203,4 @@ def test_check_scores_table1_cells_against_the_paper(tmp_path):
     n = 2 * len(rep.PORTFOLIOS) * len(rep.PAPER_TABLE1["A"]["top5"])
     assert f"Table 1: Cells: {n}; ✓ {n - 1} (within 10%), ~ 0 (within 25%), ✗ 1." in text
     assert "Figure 1 (Kennecott vs Uniroyal" in text and "Not run" in text
+    assert f"- Score: {n - 1:.1f} of {n} compared cells" in text

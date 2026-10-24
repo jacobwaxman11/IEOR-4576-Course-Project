@@ -68,9 +68,13 @@ cross-sectional average of two standard deviations".
 
 **Implementation** (`select_pairs`, column `sigma`).
 
-    σ = std over the formation window of (P_1t − P_2t),   ddof = 0
+    σ = sqrt(SSD / N) = sqrt(mean over the formation window of (P_1t − P_2t)²)
 
-computed on the same normalized prices as the distance. In trading, a pair
+the root mean square of the spread about zero, computed on the same
+normalized prices as the distance (`--trigger-sigma rms`, the default since
+REVIEW_NOTES section 21). `--trigger-sigma std` gives the standard deviation
+about the spread's mean (ddof = 0), which this section described until then;
+the checks below were run with it. In trading, a pair
 opens when `|P_1t − P_2t| > 2σ` with both stocks rebased to 1 at the start
 of the trading window. σ was recomputed independently for the top-20 pairs of
 5 cohorts (1966-03, 1977-09, 1985-06, 1994-11, 2001-04) and agrees to 1e-9.
@@ -101,9 +105,13 @@ weights (PDF p. 36).
 | Sector | SIC codes |
 |---|---|
 | Transportation | 4000–4799 |
-| Utilities | 4900–4999 and telephone 4810–4819 |
+| Utilities | 4900–4999 and telephone 4811 |
 | Financials | 6000–6999 |
 | Industrials | everything else |
+
+The telephone code was 4810–4819 until REVIEW_NOTES section 20 narrowed it to
+4811, the 1972 manual's telephone code (`--telephone-sic 481x` restores the
+old map). The tables below were run with 4810–4819.
 
 **Unknown SIC (new in this PR)** (`resolve_sic`, `sectors_for`). CRSP codes
 an unknown SIC as 0. On the formation-end day, about 106 stocks per cohort
@@ -150,19 +158,33 @@ Financials / Industrials per cohort):
 | Backfilled: legacy `hsiccd` | 165.0 | 63.7 | 343.9 | 1,722.9 | F −7.3% |
 | Dropping unknown-SIC stocks | 158.5 | 59.0 | 318.7 | 1,653.2 | F −14.1% |
 
-| SIC map variant (with this PR's fallback) | U | T | F | I | worst cell |
+**Stocks per cohort by sector, before and after the 495x change (current check):**
+
+| map | U | T | F | I | worst cell |
 |---|---:|---:|---:|---:|---|
-| **This PR: U = 481x + 49xx** | 161 | 61 | 350 | 1,723 | F −5.7% |
+| shipped until 2026-10-24: U = 4811 + 49xx | 144 | 61.4 | 347 | 1,740 | U −7.7% |
+| shipped from 2026-10-24: 495x moved to Industrials | 137 | 61.4 | 347 | 1,755 | U −12.2% |
+
+The change moves seven Utilities stocks to Industrials and leaves Financials alone; the earlier
+draft of this section read 161 / 350 / 1,723 for the pre-change row, which was the 2026-10-17
+configuration before the telephone code, the header-SIC fallback and the RMS trigger. Those
+older figures, and the variant rows below, are directional only:
+
+| SIC map variant (measured 2026-10-17, before #22/#25/#26/#29) | U | T | F | I | worst cell |
+|---|---:|---:|---:|---:|---|
 | U = all of 48xx + 49xx | 187 | 61 | 350 | 1,697 | U +19.8% |
 | U = 49xx only | 136 | 61 | 350 | 1,748 | U −13.0% |
 | U excludes sanitary services 495x | 154 | 61 | 350 | 1,730 | F −5.7% |
 | F excludes real estate 65xx | 161 | 61 | 333 | 1,740 | F −10.3% |
 
-The telephone-plus-49xx Utilities group fits best. Moving waste management
-(495x) to Industrials, as GICS does, puts Utilities, Transportation and
-Industrials within 1.3% of the paper; how S&P's pre-1999 scheme classified
-it is **not verified**, so the map keeps 495x in Utilities. It does not move
-Table 2 Panel B weights visibly.
+The telephone-plus-49xx Utilities group fits best. **Update 2026-10-24:** the map
+now classifies waste management (495x) as Industrials, following GICS. How S&P's
+contemporaneous scheme classified it is still **not verified**, and the 1999
+NBER draft is neutral on it (its edition score is unchanged), so this is a
+classification choice rather than a recovered fact. It was adopted because it
+scores 178.5 -> 183.5, with six of the eight gains inside the Utilities 101-120
+band (REVIEW_NOTES section 24); the cost is the Utilities count, now 137 against
+the paper's 156. It does not move the Table 2 Panel B top-pair weights.
 
 **Review point D: the remaining Financials gap (about 21 stocks).** No SIC
 timing rule or map variant tested moves Financials past 350. About 70
