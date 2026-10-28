@@ -1,0 +1,112 @@
+{
+  "source": "Gatev, Goetzmann and Rouwenhorst (2006), Review of Financial Studies 19(3), Table 1 Panel B (p. 806) and Table 9 Panel A (p. 824); every value is parsed from pdftotext -layout output of the paper PDF by --from-pdf.",
+  "universe": "Panel A: pairs formed only from stocks in the top three size deciles, Section 3.9 p. 824",
+  "panel_A": {
+    "top5": {
+      "mean": 0.00835,
+      "nw_se": 0.00112,
+      "t_stat": 7.47,
+      "median": 0.008,
+      "std": 0.01904,
+      "kurtosis": 0.02,
+      "skew": 7.01,
+      "min": -0.10894,
+      "max": 0.10144,
+      "share_negative": 0.32,
+      "committed_mean": 0.00493
+    },
+    "top20": {
+      "mean": 0.00914,
+      "nw_se": 0.00096,
+      "t_stat": 9.48,
+      "median": 0.00793,
+      "std": 0.01464,
+      "kurtosis": 0.98,
+      "skew": 8.2,
+      "min": -0.05646,
+      "max": 0.10003,
+      "share_negative": 0.26,
+      "committed_mean": 0.00514
+    },
+    "101-120": {
+      "mean": 0.00728,
+      "nw_se": 0.00075,
+      "t_stat": 9.66,
+      "median": 0.00614,
+      "std": 0.01579,
+      "kurtosis": 0.8,
+      "skew": 6.46,
+      "min": -0.03803,
+      "max": 0.10642,
+      "share_negative": 0.33,
+      "committed_mean": 0.00462
+    },
+    "all": {
+      "mean": 0.0069,
+      "nw_se": 0.00064,
+      "t_stat": 10.85,
+      "median": 0.00508,
+      "std": 0.01294,
+      "kurtosis": 1.77,
+      "skew": 11.67,
+      "min": -0.0268,
+      "max": 0.10478,
+      "share_negative": 0.27,
+      "committed_mean": 0.00401
+    }
+  },
+  "table1_panel_b": {
+    "top5": {
+      "mean": 0.00745,
+      "nw_se": 0.00119,
+      "t_stat": 6.26,
+      "median": 0.00699,
+      "std": 0.02101,
+      "kurtosis": 10.64,
+      "skew": 0.34,
+      "min": -0.12628,
+      "max": 0.1435,
+      "share_negative": 0.35,
+      "committed_mean": 0.00463
+    },
+    "top20": {
+      "mean": 0.00895,
+      "nw_se": 0.00096,
+      "t_stat": 9.29,
+      "median": 0.0069,
+      "std": 0.01527,
+      "kurtosis": 16.13,
+      "skew": 1.45,
+      "min": -0.08218,
+      "max": 0.1349,
+      "share_negative": 0.23,
+      "committed_mean": 0.0052
+    },
+    "101-120": {
+      "mean": 0.00795,
+      "nw_se": 0.00085,
+      "t_stat": 9.4,
+      "median": 0.00694,
+      "std": 0.01438,
+      "kurtosis": 7.78,
+      "skew": 0.98,
+      "min": -0.04266,
+      "max": 0.10464,
+      "share_negative": 0.28,
+      "committed_mean": 0.00503
+    },
+    "all": {
+      "mean": 0.00715,
+      "nw_se": 0.0009,
+      "t_stat": 7.92,
+      "median": 0.00411,
+      "std": 0.01577,
+      "kurtosis": 25.66,
+      "skew": 3.32,
+      "min": -0.02951,
+      "max": 0.16325,
+      "share_negative": 0.32,
+      "committed_mean": 0.00396
+    }
+  }
+}

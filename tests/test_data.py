@@ -241,6 +241,33 @@ def test_default_universe_is_vol_common(tmp_path, monkeypatch) -> None:
     assert list(pdata.formation_universe(DATES[0], DATES[-1])) == EXPECTED["vol_common"]
 
 
+@pytest.mark.parametrize("universe", VARIANTS)
+@pytest.mark.parametrize("max_stale_share", [None, 0.95])
+def test_a_preloaded_panel_gives_the_same_universe(tmp_path, monkeypatch, universe,
+                                                   max_stale_share) -> None:
+    """Both paths ask ``formation_columns`` for their columns, so the driver's
+    narrowed read cannot be missing one the eligibility rule needs."""
+    _variant_panel(tmp_path, monkeypatch)
+    columns = [*pdata.formation_columns(universe, max_stale_share), "date"]
+    panel = pdata.load_daily(DATES[0], DATES[-1], columns)
+    plain = pdata.formation_universe(DATES[0], DATES[-1], universe=universe,
+                                     max_stale_share=max_stale_share)
+    preloaded = pdata.formation_universe(DATES[0], DATES[-1], universe=universe,
+                                         max_stale_share=max_stale_share, panel=panel)
+    pd.testing.assert_index_equal(plain, preloaded)
+
+
+def test_trading_calendar_keeps_the_date_index_name(tmp_path, monkeypatch) -> None:
+    """It replaced a ``pd.Series(..., name="date")``, and a cohort reindexes its
+    date-pivoted frames to this index, which takes the index's name."""
+    _write_index_file(tmp_path / "index.parquet", DATES)
+    monkeypatch.setattr(pdata, "DAILY_INDEX_FILE", tmp_path / "index.parquet")
+    for _ in range(2):  # the second call is served from the in-process cache
+        calendar = pdata.trading_calendar(DATES[0], DATES[-1])
+        assert calendar.name == "date"
+        assert list(calendar) == [pd.Timestamp(day) for day in DATES]
+
+
 def test_missing_row_excludes_stock(tmp_path, monkeypatch) -> None:
     """A stock with a row missing on one calendar date is excluded everywhere."""
     _variant_panel(tmp_path, monkeypatch)

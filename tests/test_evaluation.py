@@ -349,6 +349,7 @@ class TestCompositionStats:
         assert np.isclose(stats["share_mixed_decile_pairs"], 1.0)
         assert np.isclose(stats["avg_decile_diff_mixed_pairs"], 3.5)
         assert np.isclose(stats["avg_decile_diff_all_pairs"], 3.5)
+        assert np.isclose(stats["avg_decile_diff_mixed_only"], 3.5)
         assert np.isclose(stats["weight_utilities"], 0.5)
         assert np.isclose(stats["weight_transportation"], 0.25)
         assert np.isclose(stats["weight_financials"], 0.25)
@@ -370,6 +371,8 @@ class TestCompositionStats:
         # all-pairs average (see REVIEW_NOTES section 16).
         assert np.isclose(stats["avg_decile_diff_mixed_pairs"], 1.0)
         assert np.isclose(stats["avg_decile_diff_all_pairs"], 1.0)
+        # Half the pairs are mixed, so the mixed-only mean is twice the all-pairs one.
+        assert np.isclose(stats["avg_decile_diff_mixed_only"], 2.0)
         assert np.isclose(stats["weight_utilities"], 1 / 6)
         assert np.isclose(stats["weight_transportation"], 1 / 6)
         assert np.isclose(stats["weight_financials"], 1 / 6)
@@ -383,6 +386,7 @@ class TestCompositionStats:
         assert np.isclose(stats["share_mixed_decile_pairs"], 1.0)
         assert np.isclose(stats["avg_decile_diff_mixed_pairs"], 2.0)
         assert np.isclose(stats["avg_decile_diff_all_pairs"], 2.0)
+        assert np.isclose(stats["avg_decile_diff_mixed_only"], 2.0)
         assert np.isclose(stats["weight_utilities"], 0.5)
         assert np.isclose(stats["weight_transportation"], 0.5)
         assert np.isclose(stats["weight_financials"], 0.0)
@@ -401,6 +405,7 @@ class TestCompositionStats:
         assert np.isclose(stats["share_mixed_decile_pairs"], 0.0)
         assert np.isclose(stats["avg_decile_diff_mixed_pairs"], 0.0)
         assert np.isclose(stats["avg_decile_diff_all_pairs"], 0.0)
+        assert np.isnan(stats["avg_decile_diff_mixed_only"])
 
 
 def test_missing_return_keeps_the_next_days_payoff():
@@ -431,14 +436,15 @@ def test_engine_payoffs_match_the_return_rebuild():
         np.testing.assert_allclose(a, b, rtol=1e-12, atol=1e-15, equal_nan=True)
 
 
-def _legs_stub(long_pay, long_val, short_pay, short_val, idx):
+def _legs_stub(long_pay, long_val, short_pay, short_val, idx, short_pos=None):
     from types import SimpleNamespace
 
     frame = lambda a: pd.DataFrame(np.asarray(a, dtype=float), index=idx, columns=[1, 2])
     lp, lv, sp, sv = frame(long_pay), frame(long_val), frame(short_pay), frame(short_val)
     return SimpleNamespace(pair_returns=lp * 0.0, pair_payoffs=lp - sp, opened=pd.Series({1: True, 2: True}),
                            trades=pd.DataFrame(columns=["rank", "open_date", "close_date"]),
-                           long_payoffs=lp, long_values=lv, short_payoffs=sp, short_values=sv)
+                           long_payoffs=lp, long_values=lv, short_payoffs=sp, short_values=sv,
+                           short_position_values=None if short_pos is None else frame(short_pos))
 
 
 def test_value_weighted_books_hand_calc():
@@ -464,6 +470,85 @@ def test_value_weighting_caps_a_runaway_short_leg():
                      [[0.0, 0.0], [0.5, 0.0]], [[1.0, 1.0], [5.0, 1.0]], idx)
     assert np.isclose(portfolio_daily(res, [1, 2], "employed").iloc[1], -0.5 / 6.0)
     assert np.isclose(portfolio_daily(res, [1, 2], "committed_count").iloc[1], -0.5 / 2.0)
+
+
+def test_position_short_weights_hand_calc():
+    # Short 1's stock has run up to 3.0 since the trade opened and its position
+    # value has shrunk to 0.4; short 2 is flat. Day 2: +10% on stock 1, -2% on stock 2.
+    idx = pd.bdate_range("2020-01-06", periods=2)
+    res = _legs_stub([[0.0, 0.0], [0.0, 0.0]], [[1.0, 1.0], [1.0, 1.0]],
+                     [[0.0, 0.0], [0.3, -0.02]], [[1.0, 1.0], [3.0, 1.0]], idx,
+                     short_pos=[[1.0, 1.0], [0.4, 1.0]])
+    value = portfolio_daily(res, [1, 2], "employed", short_weights="value")
+    position = portfolio_daily(res, [1, 2], "employed", short_weights="position")
+    assert np.isclose(value.iloc[1], -(0.3 - 0.02) / 4.0)
+    assert np.isclose(position.iloc[1], -(0.4 * 0.10 + 1.0 * -0.02) / 1.4)
+    committed = portfolio_daily(res, [1, 2], "committed", short_weights="position")
+    assert np.isclose(committed.iloc[1], position.iloc[1])
+    assert np.allclose(portfolio_daily(res, [1, 2], "committed_count", short_weights="position"),
+                       portfolio_daily(res, [1, 2], "committed_count"))
+
+
+def test_a_floored_short_still_counts_as_open():
+    # Pair 1's long leg is worthless and its short position is floored at zero,
+    # but the trade is still open: committed's n_t/N must stay 2/2.
+    idx = pd.bdate_range("2020-01-06", periods=2)
+    res = _legs_stub([[0.0, 0.0], [0.0, 0.01]], [[1.0, 1.0], [0.0, 1.0]],
+                     [[0.0, 0.0], [0.0, 0.0]], [[1.0, 1.0], [2.5, 1.0]], idx,
+                     short_pos=[[1.0, 1.0], [0.0, 1.0]])
+    employed = portfolio_daily(res, [1, 2], "employed", short_weights="position")
+    committed = portfolio_daily(res, [1, 2], "committed", short_weights="position")
+    assert np.isclose(employed.iloc[1], 0.01 / 1.0)
+    assert np.isclose(committed.iloc[1], employed.iloc[1])
+
+
+def test_position_short_weights_need_the_engine_values():
+    idx = pd.bdate_range("2020-01-06", periods=2)
+    res = _legs_stub([[0.0, 0.0]] * 2, [[1.0, 1.0]] * 2, [[0.0, 0.0]] * 2, [[1.0, 1.0]] * 2, idx)
+    with pytest.raises(ValueError, match="short_position_values"):
+        portfolio_daily(res, [1, 2], "employed", short_weights="position")
+    res.short_position_values = pd.DataFrame(index=idx, columns=[], dtype=float)
+    with pytest.raises(ValueError, match="short_position_values"):
+        portfolio_daily(res, [1, 2], "employed", short_weights="position")
+    with pytest.raises(ValueError, match="short_weights"):
+        portfolio_daily(res, [1, 2], "employed", short_weights="stock")
+
+
+def test_engine_short_position_values_compound_the_position_return():
+    from project.models import simulate_cohort
+
+    rng = np.random.default_rng(7)
+    idx = pd.bdate_range("2020-01-01", periods=60)
+    rets = pd.DataFrame(rng.normal(0, 0.02, (60, 4)), index=idx, columns=range(1, 5))
+    pairs = pd.DataFrame({"rank": [1, 2], "permno_1": [1, 3], "permno_2": [2, 4],
+                          "distance": 0.0, "sigma": 0.02})
+    res = simulate_cohort(pairs, rets, pd.DataFrame(False, index=idx, columns=rets.columns))
+    assert len(res.trades) > 2
+    held = res.short_values.gt(0)
+    assert held.equals(res.short_position_values.gt(0))
+    for _, tr in res.trades.iterrows():
+        days = list(range(int(tr["open_day"]) + 1, int(tr["close_day"]) + 1))
+        stock = rets[int(tr["short_permno"])].to_numpy()
+        expected = np.cumprod(np.r_[1.0, 1.0 - stock[days][:-1]])
+        np.testing.assert_allclose(res.short_position_values[tr["rank"]].to_numpy()[days],
+                                   expected, rtol=1e-12)
+
+
+def test_engine_short_position_value_is_floored_at_zero():
+    from project.models import simulate_cohort
+
+    idx = pd.bdate_range("2020-01-01", periods=6)
+    rets = pd.DataFrame({1: [0.0, -0.10, 0.0, 0.0, 0.0, 0.0],
+                         2: [0.0, 0.0, 1.5, 0.2, 0.0, 0.0]}, index=idx)
+    pairs = pd.DataFrame({"rank": [1], "permno_1": [1], "permno_2": [2],
+                          "distance": 0.0, "sigma": 0.01})
+    res = simulate_cohort(pairs, rets, pd.DataFrame(False, index=idx, columns=rets.columns))
+    assert res.trades.iloc[0]["short_permno"] == 2
+    spos = res.short_position_values[1].to_numpy()
+    assert spos[3] == 0.0 and spos[4] == 0.0
+    assert res.short_values[1].to_numpy()[3] > 2.0
+    employed = portfolio_daily(res, [1], "employed", short_weights="position")
+    assert np.isclose(employed.iloc[3], res.long_payoffs[1].iloc[3] / res.long_values[1].iloc[3])
 
 
 def test_engine_legs_sum_to_pair_payoffs():

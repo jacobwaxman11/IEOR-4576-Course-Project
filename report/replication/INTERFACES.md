@@ -32,9 +32,9 @@ one day.
 | Re-opening | After a convergence exit, the pair may open again. |
 | Missing return inside the trading period | Treat as 0.0 (price unchanged) for marking to market; count these in diagnostics. |
 | Pair daily payoff | For an open position, the leg values start at $1 at opening and are bought and held: `L_t = L_{t−1}(1+r_long,t)`, `S_t = S_{t−1}(1+r_short,t)`. Pair payoff on day t is `π_t = (L_t − L_{t−1}) − (S_t − S_{t−1})`. On closing, cash `L − S` is realized; the realized cash earns 0 (paper footnote 6). |
-| Portfolio return (§2.3, PDF p. 14; corrected 2026-10-16, 2026-10-19) | Each trade holds $1 long and $1 short, bought and held. Eq. 2 is read **across the portfolio**: "the daily returns on the long and short positions are calculated as value-weighted returns", each position weighted by its value since the trade opened (eq. 3). **Employed / fully invested** `R_t = Σ dL / Σ L_t−1 − Σ dS / Σ S_t−1` over the positions open on day t (a day with none is skipped): the value-weighted return of the long book minus that of the short book. **Committed** scales it by the share of selected pairs holding a position, `R_t × n_t / N` (0 on a day with none). This reproduces the paper's own fully-invested/committed ratios (ours 1.69/1.71/1.60/1.86 no wait and 1.64/1.70/1.61/1.90 one-day wait; paper 1.67/1.78/1.59/1.80 and 1.61/1.72/1.58/1.81; measured 2026-10-24, the earlier 1.71/1.70/1.54/1.80 figures were the 164.0-era configuration), and a short leg that has run up 3-5× no longer counts as a −300% to −500% loss on a $1 pair. Daily returns compound to monthly. *Kept for comparison:* `employed_count` (summed payoffs `Σ_p π_p,t / n_t`, the convention of 2026-10-18), `committed_count` (`Σ_p π_p,t / N`), `employed_nbar` (period-average count `n̄`, until 2026-10-18; "all" ratio 1.57), `employed_literal`, and the superseded account readings `committed_account` / `employed_account` (dividing by `Σ_p w_p,t−1`; accounts reach zero or go negative after a short leg multiplies). |
+| Portfolio return (§2.3, PDF p. 14; corrected 2026-10-16, 2026-10-19, 2026-10-24) | Each trade holds $1 long and $1 short, bought and held. Eq. 2 is read **across the portfolio**: "the daily returns on the long and short positions are calculated as value-weighted returns", each position weighted by eq. (3) applied to its own return since the trade opened: a long by its value `L`, a short by `Q = Π (1 − r_short)`, floored at 0 (780 of 2,968,816 Table 1 positions, all outside top 5 / top 20 / 101-120), which shrinks as the shorted stock rises (`--short-weights position`, default since 2026-10-24; `value` weights a short by the stock's value `S` instead). **Employed / fully invested** `R_t = Σ dL / Σ L_t−1 − Σ Q_t−1 r_short,t / Σ Q_t−1` over the positions open on day t (a day with none is skipped): the value-weighted return of the long book minus that of the short book. **Committed** scales it by the share of selected pairs holding a position, `R_t × n_t / N` (0 on a day with none). Fully-invested/committed ratios: ours 1.70/1.72/1.61/1.94 no wait and 1.66/1.71/1.62/2.02 one-day wait (stock-value short weights: 1.68/1.71/1.60/1.88 and 1.64/1.69/1.61/1.90); paper 1.67/1.78/1.59/1.80 and 1.61/1.72/1.58/1.81. The short weight is our reading; REVIEW_NOTES section 29 has the evidence and the objections. Either way a short leg that has run up 3-5× no longer counts as a −300% to −500% loss on a $1 pair. Daily returns compound to monthly. *Kept for comparison:* `employed_count` (summed payoffs `Σ_p π_p,t / n_t`, the convention of 2026-10-18), `committed_count` (`Σ_p π_p,t / N`), `employed_nbar` (period-average count `n̄`, until 2026-10-18; "all" ratio 1.57), `employed_literal`, and the superseded account readings `committed_account` / `employed_account` (dividing by `Σ_p w_p,t−1`; accounts reach zero or go negative after a short leg multiplies). |
 | Monthly returns | Compound `R_t` within each calendar month for each cohort. The strategy's month-m return is the **equal-weighted average across the cohorts active in month m**: up to 6, fewer at the start of the sample (Jegadeesh–Titman 1993). |
-| Statistics | Mean; Newey–West standard error with **6 lags** and t-statistic; median; standard deviation (ddof=1); skewness; excess-or-raw kurtosis (report raw Pearson kurtosis, where normal = 3, matching the paper's magnitudes); min; max; share < 0. |
+| Statistics | Mean; Newey–West standard error with **6 lags** and t-statistic; median; standard deviation (ddof=1); skewness; excess-or-raw kurtosis (report raw Pearson kurtosis, where normal = 3, matching the paper's magnitudes); min; max; share < 0. Scored since SCORE_LOG row 15: Table 5 Panel A's first-order serial correlation (lag-1 correlation of calendar-adjacent months) and 1/5/10/25 percentiles (linear interpolation) of the one-day-wait monthly series, Table 8's mean and standard deviation of the same series before and after 1988-12 and its five-factor regressions, Table 4's Sharpe ratios and two factor regressions, and Figure 4's printed correlations. |
 
 ## Data artifacts (produced by worker C, read by D and E)
 
@@ -110,7 +110,7 @@ It writes `results/replication/tables/table1.csv`, `table2_panelA.csv`, `table2_
 
 ## Shared rules for workers
 
-- **Working directory:** `/home/congge2026/orca/workspaces/IEOR4576_Final_Paper/queenfish`. Python: `.venv/bin/python`. `project` is installed in editable mode.
+- **Working directory:** the repository root. Python: `.venv/bin/python`. `project` is installed in editable mode.
 - **No git commit, push or stash.** The coordinator commits, and only to the private remote.
 - **No WRDS access is needed.** Everything is local. Do not call `wrds_connection()`.
 - **Stay in your lane:** write only the files in your contract. If you need something from another module, code against the signature above, use a local stub in your tests, and `ask` if the signature is insufficient.
@@ -251,10 +251,15 @@ One script produces every replication output; `--steps` picks a subset of
 - Figure 1 reads the cached wait-0 trades of the 1963-08 cohort for Kennecott (12706) and
   Uniroyal (14912); the indicator is up from the opening day to the closing day.
 - The check compares Figure 1 (rank, trade days within ±3, formation-end levels within 2% of
-  1.10) and every cell of Tables 1, 2 and 3 with the paper: ✓ within 10%, ~ within 25%, ✗
-  further. It states the conventions that are our reading of the paper (n̄, continued
+  1.10) and every cell of Tables 1, 2, 3 and 7 with the paper: ✓ within 10%, ~ within 25%, ✗
+  further. Table 7's cells are the long and the short book of each portfolio (mean, Newey-West
+  standard error, standard deviation, serial correlation), computed by `portfolio_legs` and
+  cached as the `long_book` / `short_book` capitals. Since SCORE_LOG row 15 it also scores Table 4,
+  Table 5 Panel A, Table 8 and Figure 4's printed correlations (`write_risk_tables`). It states the conventions that are our reading of the paper (n̄, continued
   normalization, the zero-volume no-trade rule).
-- **Cache stamp** `cache_meta.json` = `{"normalization", "format": 2}`. Building stamps the cache
+- **Cache stamp** `cache_meta.json` = `{"normalization", "format": 5}` plus every formation and
+  engine option with its value (`exclude_same_issuer`, `max_stale_share` when set,
+  `telephone_sic`, `trigger_sigma`, `short_weights`). Building stamps the cache
   first and refuses to build into a cache stamped differently unless `--force`; reading
   (`--aggregate-only`, `figure1`) only verifies and never writes the stamp.
 - **Engine and evaluation are array code.** `simulate_cohort` runs its day loop in a numba

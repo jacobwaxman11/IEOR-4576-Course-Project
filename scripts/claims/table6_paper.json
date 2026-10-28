@@ -1,0 +1,155 @@
+{
+  "_comment": [
+    "Table 6 of Gatev, Goetzmann and Rouwenhorst (2006), RFS 19(3), p. 818:",
+    "every cell typed from the published article's text layer. pdftotext",
+    "renders this table's minus sign as the glyph '7' in front of the digits",
+    "('70.00137' is -0.00137). scripts/claims/table6_report.py re-parses the",
+    "table out of the PDF and fails if any value here differs from it."
+  ],
+  "source": {
+    "pdf": "pairs-trading-performance-of-a-relative-value-arbitrage-rule_final.pdf",
+    "table": "Table 6 - Returns to random pairs sorted on prior one-month return",
+    "page": "article p.818 (manuscript p.39)",
+    "text_page": "p.818-819",
+    "caption": "Bootstrap of random pairs traded according to the rule that opens a position in a random pair when the stocks in the true pair diverge by two historical standard deviations and closes the position after the next crossing of prices. The random stocks are selected within the same last-month performance decile on the day the position is opened. The top panel gives summary statistics of the monthly excess returns on value-weighted portfolios of n pairs of stocks where the position is opened immediately. The last column is a portfolio of all 120 top pairs. The bottom panel summarizes the performance with one day waiting before the position is opened. The statistics are computed over 200 replications of the bootstrapped sample."
+  },
+  "portfolios": [
+    "top5",
+    "top20",
+    "101-120",
+    "top120"
+  ],
+  "table6": {
+    "A|employed|mean": {
+      "top5": -0.00137,
+      "top20": -0.00111,
+      "101-120": -0.00105,
+      "top120": -0.00113
+    },
+    "A|employed|std": {
+      "top5": 0.05521,
+      "top20": 0.02295,
+      "101-120": 0.02264,
+      "top120": 0.012
+    },
+    "A|employed|median": {
+      "top5": -0.00192,
+      "top20": -0.00153,
+      "101-120": -0.00156,
+      "top120": -0.00162
+    },
+    "A|committed|mean": {
+      "top5": -0.00083,
+      "top20": -0.00077,
+      "101-120": -0.00089,
+      "top120": -0.00091
+    },
+    "A|committed|std": {
+      "top5": 0.02635,
+      "top20": 0.01358,
+      "101-120": 0.01443,
+      "top120": 0.0076
+    },
+    "A|committed|median": {
+      "top5": -0.00123,
+      "top20": -0.001,
+      "101-120": -0.00123,
+      "top120": -0.00122
+    },
+    "B|employed|mean": {
+      "top5": -0.00177,
+      "top20": -4e-05,
+      "101-120": -0.00154,
+      "top120": -0.00156
+    },
+    "B|employed|std": {
+      "top5": 0.05966,
+      "top20": 0.0531,
+      "101-120": 0.02404,
+      "top120": 0.01213
+    },
+    "B|employed|median": {
+      "top5": -0.00241,
+      "top20": -0.00172,
+      "101-120": -0.00206,
+      "top120": -0.00201
+    },
+    "B|committed|mean": {
+      "top5": -0.00103,
+      "top20": -0.00094,
+      "101-120": -0.00112,
+      "top120": -0.00112
+    },
+    "B|committed|std": {
+      "top5": 0.02811,
+      "top20": 0.01363,
+      "101-120": 0.01449,
+      "top120": 0.00761
+    },
+    "B|committed|median": {
+      "top5": -0.00152,
+      "top20": -0.00118,
+      "101-120": -0.00148,
+      "top120": -0.00139
+    }
+  },
+  "table1_baseline": {
+    "A": {
+      "employed": {
+        "mean": [
+          1.308,
+          1.436,
+          1.081
+        ],
+        "std": [
+          2.28,
+          1.688,
+          1.54
+        ],
+        "median": [
+          1.194,
+          1.235,
+          0.955
+        ]
+      },
+      "committed": {
+        "mean": [
+          0.784,
+          0.805,
+          0.679
+        ],
+        "std": null,
+        "median": null
+      }
+    },
+    "B": {
+      "employed": {
+        "mean": [
+          0.745,
+          0.895,
+          0.795
+        ],
+        "std": [
+          2.101,
+          1.527,
+          1.438
+        ],
+        "median": [
+          0.699,
+          0.69,
+          0.694
+        ]
+      },
+      "committed": {
+        "mean": [
+          0.463,
+          0.52,
+          0.503
+        ],
+        "std": null,
+        "median": null
+      }
+    }
+  },
+  "table1_baseline_units": "percent per month"
+}

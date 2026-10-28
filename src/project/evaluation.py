@@ -15,9 +15,12 @@ Conventions (see ``report/replication/INTERFACES.md``):
   value-weighted return of all long positions minus that of all short
   positions, each weighted by its value since the trade opened (paper §2.3,
   PDF p. 14). "committed" scales it by the share of selected pairs holding a
-  position that day. Both reproduce the paper's own fully-invested/committed
-  ratios (ours 1.53-1.83 vs paper 1.58-1.81, "all" 1.80 and 1.83 vs 1.80 and
-  1.81). The count-based readings survive for comparison: "employed_count"
+  position that day. ``short_weights`` picks the eq. (3) weight of a short
+  position: "value", the shorted stock's value since the trade opened, or
+  "position", the position's own compounded return, prod (1 - r) (the
+  pipeline default since 2026-10-24; REVIEW_NOTES section 29). Their
+  fully-invested/committed ratios are 1.61-2.02 ("value": 1.60-1.90) against
+  the paper's 1.58-1.81, "all" furthest off. The count-based readings survive for comparison: "employed_count"
   and "committed_count" (payoffs over the pairs open that day or over all
   selected pairs), "employed_nbar" (period-average count),
   "employed_literal", "committed_account" and "employed_account".
@@ -91,6 +94,7 @@ COMPOSITION_ROWS = [
     "share_mixed_decile_pairs",
     "avg_decile_diff_mixed_pairs",
     "avg_decile_diff_all_pairs",
+    "avg_decile_diff_mixed_only",
     "weight_utilities",
     "weight_transportation",
     "weight_financials",
@@ -152,6 +156,7 @@ CAPITAL_CHOICES = (
     "employed_account",
 )
 VW_CAPITALS = frozenset({"employed", "committed"})
+SHORT_WEIGHTS = ("value", "position")
 MASK_CAPITALS = frozenset({"employed_count", "employed_nbar", "employed_account"})
 
 
@@ -171,34 +176,94 @@ def _payoffs_and_accounts(result, sel: list, T: int) -> tuple[np.ndarray, np.nda
     return w_prev * r, w_prev
 
 
-def _vw_legs(result, sel: list, index: pd.Index) -> tuple[np.ndarray, np.ndarray]:
-    """Value-weighted long-book minus short-book daily return, and the open count.
+def _leg_arrays(result, sel: list, short_weights: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Per-day value-weighted returns of the long and the short book, and the open count.
 
-    Eq. (2): r_P,t = sum_i w_i,t r_i,t / sum_i w_i,t over the long (short)
-    positions of the portfolio, w_i,t the position's value since it opened.
-    Returns (excess, n_open) per day; excess is NaN on a day with no position.
-    A position counts as open while either leg has value, and a book whose
-    value has fallen to zero contributes no return.
+    The single implementation behind ``portfolio_legs`` (Table 7) and
+    ``_vw_legs`` (the pair's excess return). A book whose own value is zero
+    contributes no return; ``n_open`` counts the positions still open (either
+    leg valued), so the caller can mask days with none.
     """
-    T = len(index)
-    if not sel:
-        return np.full(T, np.nan), np.zeros(T)
+    if short_weights not in SHORT_WEIGHTS:
+        raise ValueError(f"short_weights must be one of {SHORT_WEIGHTS}, got {short_weights!r}")
     if getattr(result, "long_values", None) is None:
         raise ValueError("value-weighted capital needs the engine's per-leg payoffs and values")
     lp = result.long_payoffs[sel].to_numpy(dtype=float).sum(axis=1)
     lv = result.long_values[sel].to_numpy(dtype=float)
-    sp = result.short_payoffs[sel].to_numpy(dtype=float).sum(axis=1)
-    sv = result.short_values[sel].to_numpy(dtype=float)
-    n_open = ((lv > 0) | (sv > 0)).sum(axis=1).astype(float)
-    lv, sv = lv.sum(axis=1), sv.sum(axis=1)
+    sp_raw = result.short_payoffs[sel].to_numpy(dtype=float)
+    sv_raw = result.short_values[sel].to_numpy(dtype=float)
+    if short_weights == "position":
+        spv = getattr(result, "short_position_values", None)
+        if spv is None or not set(sel) <= set(spv.columns):
+            raise ValueError("short_weights='position' needs the engine's short_position_values")
+        spos = spv[sel].to_numpy(dtype=float)
+        stock_ret = sp_raw / np.where(sv_raw > 0, sv_raw, 1.0)
+        sp = (spos * stock_ret).sum(axis=1)
+        sv = spos.sum(axis=1)
+    else:
+        sp = sp_raw.sum(axis=1)
+        sv = sv_raw.sum(axis=1)
+    # counted on the raw short value, so a position floored at zero still counts as open
+    n_open = ((lv > 0) | (sv_raw > 0)).sum(axis=1).astype(float)
+    lv = lv.sum(axis=1)
     with np.errstate(invalid="ignore", divide="ignore"):
         long_ret = np.where(lv > 0, lp / lv, 0.0)
         short_ret = np.where(sv > 0, sp / sv, 0.0)
+    return long_ret, short_ret, n_open
+
+
+def portfolio_legs(result, ranks, short_weights: str = "value") -> tuple[pd.Series, pd.Series]:
+    """The long book's and the short book's daily value-weighted returns (Table 7).
+
+    Eq. (2) applied to each leg separately: ``sum dL / sum L`` over the long
+    positions and ``sum dS / sum S`` over the short ones (or, under
+    ``short_weights="position"``, over the short positions' own values). The
+    pair's excess return is the long book minus the short book, and compounding
+    the two books separately reproduces the paper's own identity between
+    Table 1 Panel B and the difference of Table 7's two columns (REVIEW_NOTES
+    section 33).
+
+    Both series are NaN on a day with no position, so ``cohort_monthly`` skips
+    it. They are what Table 7 summarises; `portfolio_daily` returns their daily
+    difference.
+    """
+    index = result.pair_returns.index
+    sel = _resolve_ranks(result.pair_returns, ranks)
+    if not sel:
+        empty = pd.Series(np.nan, index=index)
+        return empty, empty.copy()
+    long_ret, short_ret, n_open = _leg_arrays(result, sel, short_weights)
+    live = n_open > 0
+    return (pd.Series(np.where(live, long_ret, np.nan), index=index),
+            pd.Series(np.where(live, short_ret, np.nan), index=index))
+
+
+def _vw_legs(
+    result, sel: list, index: pd.Index, short_weights: str = "value",
+) -> tuple[np.ndarray, np.ndarray]:
+    """Value-weighted long-book minus short-book daily return, and the open count.
+
+    Eq. (2): r_P,t = sum_i w_i,t r_i,t / sum_i w_i,t over the long (short)
+    positions of the portfolio, with eq. (3)'s w_i,t = prod (1 + r_i) since the
+    position opened. For a long position that is its value. For a short
+    position ``short_weights`` reads r_i as the shorted stock's return
+    ("value": the stock's value since the trade opened) or as the position's
+    own return, -r ("position": ``result.short_position_values``, which
+    shrinks as the shorted stock rises and is floored at zero).
+    Returns (excess, n_open) per day; excess is NaN on a day with no position.
+    A position counts as open while either leg has value, and a book whose
+    value has fallen to zero contributes no return. Under "position" a short
+    floored at zero therefore still counts in ``n_open`` (and so in
+    "committed"'s ``n_t / N``) while it carries no weight in the short book.
+    """
+    if not sel:
+        return np.full(len(index), np.nan), np.zeros(len(index))
+    long_ret, short_ret, n_open = _leg_arrays(result, sel, short_weights)
     excess = np.where(n_open > 0, long_ret - short_ret, np.nan)
     return excess, n_open
 
 
-def portfolio_daily(result, ranks, capital: str) -> pd.Series:
+def portfolio_daily(result, ranks, capital: str, short_weights: str = "value") -> pd.Series:
     """Daily portfolio excess return, GGR (2006) §2.3 (PDF p. 14).
 
     Each trade holds $1 long and $1 short, bought and held (eqs. 2-3 weight the
@@ -228,9 +293,8 @@ def portfolio_daily(result, ranks, capital: str) -> pd.Series:
           NaN on a day with none, which ``cohort_monthly`` skips).
         - "committed": "employed" scaled by ``n_t / N``, ``n_t`` the pairs
           holding a position on day t and N the pairs selected (0 on a day
-          with none). The two reproduce the paper's fully-invested/committed
-          ratios (ours 1.53-1.83 vs paper 1.58-1.81) and are the conventions
-          since 2026-10-19.
+          with none). The two are the conventions since 2026-10-19; see the
+          module docstring for their fully-invested/committed ratios.
         - "committed_count": ``sum_p pi_p,t / N`` over the N selected pairs.
         - "employed_count": ``sum_p pi_p,t / n_t`` (NaN on a day with no
           position), the convention of 2026-10-18.
@@ -246,18 +310,28 @@ def portfolio_daily(result, ranks, capital: str) -> pd.Series:
           capital account. Accounts can reach zero or go negative after a
           short leg multiplies, so these can explode; kept for comparison.
 
+    short_weights : one of ``SHORT_WEIGHTS``
+        The eq. (3) weight of a short position in "employed" and "committed"
+        (see ``_vw_legs``); the other capitals ignore it. The default "value"
+        works on any CohortResult, including one built without
+        ``short_position_values``. It does not track the driver's
+        ``--short-weights`` default: ``03_replicate.py`` always passes the
+        setting, and a caller that means the pipeline's reading must too.
+
     Returns
     -------
     pd.Series indexed like ``result.pair_returns``.
     """
     if capital not in CAPITAL_CHOICES:
         raise ValueError(f"capital must be one of {CAPITAL_CHOICES}, got {capital!r}")
+    if short_weights not in SHORT_WEIGHTS:
+        raise ValueError(f"short_weights must be one of {SHORT_WEIGHTS}, got {short_weights!r}")
     pr = result.pair_returns
     index = pr.index
     sel = _resolve_ranks(pr, ranks)
     nan = pd.Series(np.nan, index=index)
     if capital in VW_CAPITALS:
-        excess, n_open = _vw_legs(result, sel, index)
+        excess, n_open = _vw_legs(result, sel, index, short_weights)
         if capital == "committed":
             excess = np.nan_to_num(excess) * n_open / len(sel) if sel else excess
         return pd.Series(excess, index=index)
@@ -352,6 +426,52 @@ def size_deciles(caps: pd.Series, breakpoint_caps: pd.Series) -> pd.Series:
     return pd.Series(dec, index=caps.index, dtype=float)
 
 
+def restrict_to_size_deciles(
+    eligible: pd.Index, caps: pd.Series, exch: pd.Series, common: pd.Series, top: int,
+) -> pd.Index:
+    """Keep the part of ``eligible`` in the ``top`` largest CRSP size deciles.
+
+    This is the size screen of the paper's Table 9 Panel A (Section 3.9,
+    "pairs that are formed using only stocks in the top three size deciles"):
+    deciles come from :func:`size_deciles`, so 1 is the largest, and the
+    breakpoints are that day's NYSE and AMEX common securities -- the CRSP
+    breakpoint set the paper's "using CRSP breakpoints" names, and the same set
+    :func:`composition_stats` uses for Table 2 Panel B (``breakpoint_caps``).
+
+    ``caps``, ``exch`` and ``common`` are the formation-end day's panel rows
+    indexed by PERMNO, for the whole panel rather than for ``eligible``: the
+    breakpoints are an exchange-wide property of the day, not of the candidate
+    set. A name with a missing cap on that day has no decile and is dropped --
+    it cannot be shown to be large, and the paper's screen is defined by size.
+
+    Parameters
+    ----------
+    eligible : pd.Index
+        PERMNOs that already pass the eligibility rule of ``formation_universe``.
+    caps : pd.Series
+        Formation-end market cap, indexed by PERMNO (NaN allowed).
+    exch : pd.Series
+        CRSP exchange code, indexed by PERMNO; ``N``/``A`` form the breakpoint set.
+    common : pd.Series
+        CRSP common-stock flag, indexed by PERMNO; ``True`` forms the breakpoint set.
+    top : int
+        Largest decile to keep, 1..10 (3 for Table 9 Panel A).
+
+    Returns
+    -------
+    pd.Index
+        The kept PERMNOs, in ``eligible``'s order, named ``permno``.
+    """
+    universe = pd.Index(eligible, name="permno")
+    caps = pd.Series(caps, dtype=float)
+    exch = pd.Series(exch)
+    common = pd.Series(common)
+    brk_caps = caps[exch.isin(("N", "A")) & common.eq(True)]
+    dec = size_deciles(caps.reindex(universe), brk_caps)
+    keep = dec.le(float(top)).fillna(False).to_numpy(dtype=bool)
+    return pd.Index(universe[keep], name="permno")
+
+
 def composition_stats(pairs_info: dict, ranks) -> pd.Series:
     """Table 2 Panel B composition statistics for one cohort and portfolio.
 
@@ -377,8 +497,11 @@ def composition_stats(pairs_info: dict, ranks) -> pd.Series:
     once per pair).  Stocks with a NaN cap are excluded from the size-decile
     rows; sector rows use ``sector_of`` on every stock (unknown SIC = 0 =
     Industrials).  The paper's "average decile difference for mixed pairs"
-    of 0.97 is below one and therefore ambiguous, so the average over *all*
-    pairs is reported as well (``avg_decile_diff_all_pairs``).
+    of 0.97 is below one, the least a mean of integer gaps between mixed pairs
+    can be, so the scored row ``avg_decile_diff_mixed_pairs`` carries the
+    average over *all* pairs (same-decile pairs count 0; SCORE_LOG row 6), as
+    does ``avg_decile_diff_all_pairs``.  The mean over mixed pairs only is
+    ``avg_decile_diff_mixed_only`` (NaN when no pair is mixed).
 
     Returns a Series indexed by ``COMPOSITION_ROWS``; empty portfolios give NaN.
     """
@@ -414,6 +537,8 @@ def composition_stats(pairs_info: dict, ranks) -> pd.Series:
                 out["share_mixed_decile_pairs"] = float(mixed.mean())
                 out["avg_decile_diff_mixed_pairs"] = float(diff[ok].mean())
                 out["avg_decile_diff_all_pairs"] = float(diff[ok].mean())
+                if mixed.any():
+                    out["avg_decile_diff_mixed_only"] = float(diff[ok][mixed].mean())
 
     if pairs_info.get("sectors") is not None:
         labels = pd.Series(pairs_info["sectors"])

@@ -1,0 +1,2216 @@
+{
+ "Figure 1 (Kennecott vs Uniroyal, trading Aug 1963 - Jan 1964, no wait)": {},
+ "Figure 4 (top 20 against 101-120, correlations printed in the text)": {
+  "correlation, after 1988": {
+   "1": {
+    "paper": 0.18,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.2,
+    "pct": false
+   }
+  },
+  "correlation, before 1989": {
+   "1": {
+    "paper": 0.51,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.42,
+    "pct": false
+   }
+  },
+  "correlation, full sample": {
+   "1": {
+    "paper": 0.48,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.41,
+    "pct": false
+   }
+  }
+ },
+ "Summary": {},
+ "Table 1 Panel A (no wait)": {
+  "kurtosis": {
+   "1": {
+    "paper": 7.81,
+    "pct": false
+   },
+   "2": {
+    "paper": 10.5,
+    "pct": false
+   },
+   "3": {
+    "paper": 10.3,
+    "pct": false
+   },
+   "4": {
+    "paper": 25.2,
+    "pct": false
+   }
+  },
+  "max": {
+   "1": {
+    "paper": 14.72,
+    "pct": true
+   },
+   "2": {
+    "paper": 13.3,
+    "pct": true
+   },
+   "3": {
+    "paper": 12.68,
+    "pct": true
+   },
+   "4": {
+    "paper": 17.18,
+    "pct": true
+   }
+  },
+  "mean (committed)": {
+   "1": {
+    "paper": 0.78,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.8,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.68,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.61,
+    "pct": true
+   }
+  },
+  "mean (fully invested)": {
+   "1": {
+    "paper": 1.31,
+    "pct": true
+   },
+   "2": {
+    "paper": 1.44,
+    "pct": true
+   },
+   "3": {
+    "paper": 1.08,
+    "pct": true
+   },
+   "4": {
+    "paper": 1.1,
+    "pct": true
+   }
+  },
+  "median": {
+   "1": {
+    "paper": 1.19,
+    "pct": true
+   },
+   "2": {
+    "paper": 1.23,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.95,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.73,
+    "pct": true
+   }
+  },
+  "min": {
+   "1": {
+    "paper": -10.57,
+    "pct": true
+   },
+   "2": {
+    "paper": -6.63,
+    "pct": true
+   },
+   "3": {
+    "paper": -3.86,
+    "pct": true
+   },
+   "4": {
+    "paper": -2.72,
+    "pct": true
+   }
+  },
+  "nw_se": {
+   "1": {
+    "paper": 0.15,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.12,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.09,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.1,
+    "pct": true
+   }
+  },
+  "share_negative": {
+   "1": {
+    "paper": 0.26,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.15,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.21,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.17,
+    "pct": false
+   }
+  },
+  "skew": {
+   "1": {
+    "paper": 0.62,
+    "pct": false
+   },
+   "2": {
+    "paper": 1.39,
+    "pct": false
+   },
+   "3": {
+    "paper": 1.34,
+    "pct": false
+   },
+   "4": {
+    "paper": 3.42,
+    "pct": false
+   }
+  },
+  "std": {
+   "1": {
+    "paper": 2.28,
+    "pct": true
+   },
+   "2": {
+    "paper": 1.69,
+    "pct": true
+   },
+   "3": {
+    "paper": 1.54,
+    "pct": true
+   },
+   "4": {
+    "paper": 1.67,
+    "pct": true
+   }
+  },
+  "t_stat": {
+   "1": {
+    "paper": 8.84,
+    "pct": false
+   },
+   "2": {
+    "paper": 11.6,
+    "pct": false
+   },
+   "3": {
+    "paper": 11.5,
+    "pct": false
+   },
+   "4": {
+    "paper": 11.2,
+    "pct": false
+   }
+  }
+ },
+ "Table 1 Panel B (one-day wait)": {
+  "kurtosis": {
+   "1": {
+    "paper": 10.6,
+    "pct": false
+   },
+   "2": {
+    "paper": 16.1,
+    "pct": false
+   },
+   "3": {
+    "paper": 7.78,
+    "pct": false
+   },
+   "4": {
+    "paper": 25.7,
+    "pct": false
+   }
+  },
+  "max": {
+   "1": {
+    "paper": 14.35,
+    "pct": true
+   },
+   "2": {
+    "paper": 13.49,
+    "pct": true
+   },
+   "3": {
+    "paper": 10.46,
+    "pct": true
+   },
+   "4": {
+    "paper": 16.32,
+    "pct": true
+   }
+  },
+  "mean (committed)": {
+   "1": {
+    "paper": 0.46,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.52,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.5,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.4,
+    "pct": true
+   }
+  },
+  "mean (fully invested)": {
+   "1": {
+    "paper": 0.74,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.9,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.8,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.71,
+    "pct": true
+   }
+  },
+  "median": {
+   "1": {
+    "paper": 0.7,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.69,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.69,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.41,
+    "pct": true
+   }
+  },
+  "min": {
+   "1": {
+    "paper": -12.63,
+    "pct": true
+   },
+   "2": {
+    "paper": -8.22,
+    "pct": true
+   },
+   "3": {
+    "paper": -4.27,
+    "pct": true
+   },
+   "4": {
+    "paper": -2.95,
+    "pct": true
+   }
+  },
+  "nw_se": {
+   "1": {
+    "paper": 0.12,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.1,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.08,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.09,
+    "pct": true
+   }
+  },
+  "share_negative": {
+   "1": {
+    "paper": 0.35,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.23,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.28,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.32,
+    "pct": false
+   }
+  },
+  "skew": {
+   "1": {
+    "paper": 0.34,
+    "pct": false
+   },
+   "2": {
+    "paper": 1.45,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.98,
+    "pct": false
+   },
+   "4": {
+    "paper": 3.32,
+    "pct": false
+   }
+  },
+  "std": {
+   "1": {
+    "paper": 2.1,
+    "pct": true
+   },
+   "2": {
+    "paper": 1.53,
+    "pct": true
+   },
+   "3": {
+    "paper": 1.44,
+    "pct": true
+   },
+   "4": {
+    "paper": 1.58,
+    "pct": true
+   }
+  },
+  "t_stat": {
+   "1": {
+    "paper": 6.26,
+    "pct": false
+   },
+   "2": {
+    "paper": 9.29,
+    "pct": false
+   },
+   "3": {
+    "paper": 9.4,
+    "pct": false
+   },
+   "4": {
+    "paper": 7.92,
+    "pct": false
+   }
+  }
+ },
+ "Table 2 Panel A (one-day wait)": {
+  "avg_pairs_traded_per_period": {
+   "1": {
+    "paper": 4.81,
+    "pct": false
+   },
+   "2": {
+    "paper": 19.3,
+    "pct": false
+   },
+   "3": {
+    "paper": 19.4,
+    "pct": false
+   },
+   "4": {
+    "paper": 1940.0,
+    "pct": false
+   }
+  },
+  "avg_price_deviation_trigger": {
+   "1": {
+    "paper": 0.0476,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.0528,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.0756,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.169,
+    "pct": false
+   }
+  },
+  "avg_round_trips_per_pair": {
+   "1": {
+    "paper": 2.02,
+    "pct": false
+   },
+   "2": {
+    "paper": 1.96,
+    "pct": false
+   },
+   "3": {
+    "paper": 1.78,
+    "pct": false
+   },
+   "4": {
+    "paper": 1.62,
+    "pct": false
+   }
+  },
+  "avg_time_open_months": {
+   "1": {
+    "paper": 3.75,
+    "pct": false
+   },
+   "2": {
+    "paper": 3.76,
+    "pct": false
+   },
+   "3": {
+    "paper": 3.98,
+    "pct": false
+   },
+   "4": {
+    "paper": 3.97,
+    "pct": false
+   }
+  },
+  "std_round_trips_per_pair": {
+   "1": {
+    "paper": 0.62,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.4,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.27,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.16,
+    "pct": false
+   }
+  },
+  "std_time_open_months": {
+   "1": {
+    "paper": 0.8,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.45,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.38,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.17,
+    "pct": false
+   }
+  }
+ },
+ "Table 2 Panel B (composition)": {
+  "avg_decile_diff_mixed_pairs": {
+   "1": {
+    "paper": 0.97,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.97,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.97,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.98,
+    "pct": false
+   }
+  },
+  "avg_size_decile": {
+   "1": {
+    "paper": 2.54,
+    "pct": false
+   },
+   "2": {
+    "paper": 2.71,
+    "pct": false
+   },
+   "3": {
+    "paper": 3.41,
+    "pct": false
+   },
+   "4": {
+    "paper": 4.57,
+    "pct": false
+   }
+  },
+  "share_mixed_decile_pairs": {
+   "1": {
+    "paper": 0.66,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.69,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.75,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.82,
+    "pct": false
+   }
+  },
+  "share_mixed_sector_pairs": {
+   "1": {
+    "paper": 0.2,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.22,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.44,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.33,
+    "pct": false
+   }
+  },
+  "weight_financials": {
+   "1": {
+    "paper": 0.11,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.13,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.26,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.16,
+    "pct": false
+   }
+  },
+  "weight_industrials": {
+   "1": {
+    "paper": 0.15,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.14,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.4,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.73,
+    "pct": false
+   }
+  },
+  "weight_top3_deciles": {
+   "1": {
+    "paper": 0.78,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.74,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.58,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.4,
+    "pct": false
+   }
+  },
+  "weight_top5_deciles": {
+   "1": {
+    "paper": 0.91,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.91,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.79,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.62,
+    "pct": false
+   }
+  },
+  "weight_transportation": {
+   "1": {
+    "paper": 0.02,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.02,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.02,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.03,
+    "pct": false
+   }
+  },
+  "weight_utilities": {
+   "1": {
+    "paper": 0.72,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.71,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.32,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.08,
+    "pct": false
+   }
+  }
+ },
+ "Table 3 stocks per cohort": {
+  "Financials": {
+   "1": {
+    "paper": 371.0,
+    "pct": false
+   }
+  },
+  "Industrials": {
+   "1": {
+    "paper": 1730.0,
+    "pct": false
+   }
+  },
+  "Transportation": {
+   "1": {
+    "paper": 61.0,
+    "pct": false
+   }
+  },
+  "Utilities": {
+   "1": {
+    "paper": 156.0,
+    "pct": false
+   }
+  }
+ },
+ "Table 3: Financials (fully invested, one-day wait)": {
+  "kurtosis": {
+   "1": {
+    "paper": 6.37,
+    "pct": false
+   },
+   "2": {
+    "paper": 6.48,
+    "pct": false
+   },
+   "3": {
+    "paper": 18.3,
+    "pct": false
+   },
+   "4": {
+    "paper": 21.2,
+    "pct": false
+   }
+  },
+  "max": {
+   "1": {
+    "paper": 14.93,
+    "pct": true
+   },
+   "2": {
+    "paper": 10.64,
+    "pct": true
+   },
+   "3": {
+    "paper": 19.58,
+    "pct": true
+   },
+   "4": {
+    "paper": 17.21,
+    "pct": true
+   }
+  },
+  "mean": {
+   "1": {
+    "paper": 0.68,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.78,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.85,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.73,
+    "pct": true
+   }
+  },
+  "median": {
+   "1": {
+    "paper": 0.56,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.61,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.66,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.51,
+    "pct": true
+   }
+  },
+  "min": {
+   "1": {
+    "paper": -8.2,
+    "pct": true
+   },
+   "2": {
+    "paper": -7.81,
+    "pct": true
+   },
+   "3": {
+    "paper": -10.05,
+    "pct": true
+   },
+   "4": {
+    "paper": -4.45,
+    "pct": true
+   }
+  },
+  "share_negative": {
+   "1": {
+    "paper": 0.4,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.33,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.32,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.34,
+    "pct": false
+   }
+  },
+  "skew": {
+   "1": {
+    "paper": 0.81,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.61,
+    "pct": false
+   },
+   "3": {
+    "paper": 1.98,
+    "pct": false
+   },
+   "4": {
+    "paper": 2.64,
+    "pct": false
+   }
+  },
+  "std": {
+   "1": {
+    "paper": 2.6,
+    "pct": true
+   },
+   "2": {
+    "paper": 1.79,
+    "pct": true
+   },
+   "3": {
+    "paper": 2.36,
+    "pct": true
+   },
+   "4": {
+    "paper": 1.81,
+    "pct": true
+   }
+  },
+  "t_stat": {
+   "1": {
+    "paper": 4.79,
+    "pct": false
+   },
+   "2": {
+    "paper": 7.6,
+    "pct": false
+   },
+   "3": {
+    "paper": 7.12,
+    "pct": false
+   },
+   "4": {
+    "paper": 7.62,
+    "pct": false
+   }
+  }
+ },
+ "Table 3: Industrials (fully invested, one-day wait)": {
+  "kurtosis": {
+   "1": {
+    "paper": 4.94,
+    "pct": false
+   },
+   "2": {
+    "paper": 4.75,
+    "pct": false
+   },
+   "3": {
+    "paper": 7.65,
+    "pct": false
+   },
+   "4": {
+    "paper": 20.9,
+    "pct": false
+   }
+  },
+  "max": {
+   "1": {
+    "paper": 10.55,
+    "pct": true
+   },
+   "2": {
+    "paper": 8.02,
+    "pct": true
+   },
+   "3": {
+    "paper": 11.62,
+    "pct": true
+   },
+   "4": {
+    "paper": 16.07,
+    "pct": true
+   }
+  },
+  "mean": {
+   "1": {
+    "paper": 0.49,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.61,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.66,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.71,
+    "pct": true
+   }
+  },
+  "median": {
+   "1": {
+    "paper": 0.29,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.55,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.55,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.4,
+    "pct": true
+   }
+  },
+  "min": {
+   "1": {
+    "paper": -10.02,
+    "pct": true
+   },
+   "2": {
+    "paper": -4.79,
+    "pct": true
+   },
+   "3": {
+    "paper": -5.41,
+    "pct": true
+   },
+   "4": {
+    "paper": -3.43,
+    "pct": true
+   }
+  },
+  "share_negative": {
+   "1": {
+    "paper": 0.42,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.36,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.35,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.34,
+    "pct": false
+   }
+  },
+  "skew": {
+   "1": {
+    "paper": 0.4,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.43,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.94,
+    "pct": false
+   },
+   "4": {
+    "paper": 2.97,
+    "pct": false
+   }
+  },
+  "std": {
+   "1": {
+    "paper": 2.36,
+    "pct": true
+   },
+   "2": {
+    "paper": 1.6,
+    "pct": true
+   },
+   "3": {
+    "paper": 1.82,
+    "pct": true
+   },
+   "4": {
+    "paper": 1.67,
+    "pct": true
+   }
+  },
+  "t_stat": {
+   "1": {
+    "paper": 4.11,
+    "pct": false
+   },
+   "2": {
+    "paper": 6.93,
+    "pct": false
+   },
+   "3": {
+    "paper": 6.8,
+    "pct": false
+   },
+   "4": {
+    "paper": 7.52,
+    "pct": false
+   }
+  }
+ },
+ "Table 3: Transportation (fully invested, one-day wait)": {
+  "kurtosis": {
+   "1": {
+    "paper": 4.98,
+    "pct": false
+   },
+   "2": {
+    "paper": 5.0,
+    "pct": false
+   },
+   "3": {
+    "paper": 5.89,
+    "pct": false
+   }
+  },
+  "max": {
+   "1": {
+    "paper": 10.96,
+    "pct": true
+   },
+   "2": {
+    "paper": 11.1,
+    "pct": true
+   },
+   "3": {
+    "paper": 13.56,
+    "pct": true
+   }
+  },
+  "mean": {
+   "1": {
+    "paper": 0.5,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.58,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.44,
+    "pct": true
+   }
+  },
+  "median": {
+   "1": {
+    "paper": 0.59,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.55,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.34,
+    "pct": true
+   }
+  },
+  "min": {
+   "1": {
+    "paper": -19.57,
+    "pct": true
+   },
+   "2": {
+    "paper": -12.47,
+    "pct": true
+   },
+   "3": {
+    "paper": -12.53,
+    "pct": true
+   }
+  },
+  "share_negative": {
+   "1": {
+    "paper": 0.44,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.42,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.44,
+    "pct": false
+   }
+  },
+  "skew": {
+   "1": {
+    "paper": -0.5,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.11,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.53,
+    "pct": false
+   }
+  },
+  "std": {
+   "1": {
+    "paper": 3.89,
+    "pct": true
+   },
+   "2": {
+    "paper": 2.94,
+    "pct": true
+   },
+   "3": {
+    "paper": 2.87,
+    "pct": true
+   }
+  },
+  "t_stat": {
+   "1": {
+    "paper": 2.98,
+    "pct": false
+   },
+   "2": {
+    "paper": 4.26,
+    "pct": false
+   },
+   "3": {
+    "paper": 3.07,
+    "pct": false
+   }
+  }
+ },
+ "Table 3: Utilities (fully invested, one-day wait)": {
+  "kurtosis": {
+   "1": {
+    "paper": 13.7,
+    "pct": false
+   },
+   "2": {
+    "paper": 12.4,
+    "pct": false
+   },
+   "3": {
+    "paper": 5.52,
+    "pct": false
+   },
+   "4": {
+    "paper": 12.7,
+    "pct": false
+   }
+  },
+  "max": {
+   "1": {
+    "paper": 16.56,
+    "pct": true
+   },
+   "2": {
+    "paper": 12.73,
+    "pct": true
+   },
+   "3": {
+    "paper": 12.13,
+    "pct": true
+   },
+   "4": {
+    "paper": 12.88,
+    "pct": true
+   }
+  },
+  "mean": {
+   "1": {
+    "paper": 0.91,
+    "pct": true
+   },
+   "2": {
+    "paper": 1.08,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.93,
+    "pct": true
+   },
+   "4": {
+    "paper": 1.04,
+    "pct": true
+   }
+  },
+  "median": {
+   "1": {
+    "paper": 0.83,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.94,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.66,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.97,
+    "pct": true
+   }
+  },
+  "min": {
+   "1": {
+    "paper": -12.35,
+    "pct": true
+   },
+   "2": {
+    "paper": -8.75,
+    "pct": true
+   },
+   "3": {
+    "paper": -7.87,
+    "pct": true
+   },
+   "4": {
+    "paper": -3.52,
+    "pct": true
+   }
+  },
+  "share_negative": {
+   "1": {
+    "paper": 0.28,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.19,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.35,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.18,
+    "pct": false
+   }
+  },
+  "skew": {
+   "1": {
+    "paper": 0.44,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.76,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.66,
+    "pct": false
+   },
+   "4": {
+    "paper": 1.39,
+    "pct": false
+   }
+  },
+  "std": {
+   "1": {
+    "paper": 2.15,
+    "pct": true
+   },
+   "2": {
+    "paper": 1.65,
+    "pct": true
+   },
+   "3": {
+    "paper": 2.64,
+    "pct": true
+   },
+   "4": {
+    "paper": 1.47,
+    "pct": true
+   }
+  },
+  "t_stat": {
+   "1": {
+    "paper": 7.37,
+    "pct": false
+   },
+   "2": {
+    "paper": 10.3,
+    "pct": false
+   },
+   "3": {
+    "paper": 6.11,
+    "pct": false
+   },
+   "4": {
+    "paper": 10.5,
+    "pct": false
+   }
+  }
+ },
+ "Table 4 (systematic risk, one-day wait)": {
+  "equity premium: mean": {
+   "1": {
+    "paper": 0.41,
+    "pct": true
+   }
+  },
+  "equity premium: serial_correlation": {
+   "1": {
+    "paper": 0.05,
+    "pct": false
+   }
+  },
+  "equity premium: sharpe": {
+   "1": {
+    "paper": 0.09,
+    "pct": false
+   }
+  },
+  "equity premium: std": {
+   "1": {
+    "paper": 4.509,
+    "pct": true
+   }
+  },
+  "hml": {
+   "1": {
+    "paper": 0.0574,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.0451,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.0172,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.054,
+    "pct": false
+   }
+  },
+  "ibbotson_default_premium": {
+   "1": {
+    "paper": 0.146,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.16,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.168,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.306,
+    "pct": false
+   }
+  },
+  "ibbotson_horizon_premium": {
+   "1": {
+    "paper": 0.08,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.0682,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.0403,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.0342,
+    "pct": false
+   }
+  },
+  "ibbotson_intercept": {
+   "1": {
+    "paper": 0.716,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.857,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.766,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.651,
+    "pct": true
+   }
+  },
+  "ibbotson_market": {
+   "1": {
+    "paper": -0.00182,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.0138,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.0164,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.0647,
+    "pct": false
+   }
+  },
+  "ibbotson_r2": {
+   "1": {
+    "paper": 0.02,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.05,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.04,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.15,
+    "pct": false
+   }
+  },
+  "ibbotson_small_premium": {
+   "1": {
+    "paper": 0.0412,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.0523,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.0365,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.0761,
+    "pct": false
+   }
+  },
+  "intercept": {
+   "1": {
+    "paper": 0.545,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.764,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.714,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.512,
+    "pct": true
+   }
+  },
+  "market": {
+   "1": {
+    "paper": -0.0666,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.0316,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.077,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.145,
+    "pct": false
+   }
+  },
+  "momentum": {
+   "1": {
+    "paper": -0.028,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.0482,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.103,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.181,
+    "pct": false
+   }
+  },
+  "r2": {
+   "1": {
+    "paper": 0.05,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.09,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.18,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.54,
+    "pct": false
+   }
+  },
+  "reversal": {
+   "1": {
+    "paper": 0.102,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.0724,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.0946,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.201,
+    "pct": false
+   }
+  },
+  "sharpe": {
+   "1": {
+    "paper": 0.35,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.59,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.55,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.45,
+    "pct": false
+   }
+  },
+  "smb": {
+   "1": {
+    "paper": -0.0423,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.00111,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.0233,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.0708,
+    "pct": false
+   }
+  }
+ },
+ "Table 5 Panel A (monthly value at risk)": {
+  "serial_correlation": {
+   "1": {
+    "paper": 0.14,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.24,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.19,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.12,
+    "pct": false
+   }
+  },
+  "var_1": {
+   "1": {
+    "paper": -4.32,
+    "pct": true
+   },
+   "2": {
+    "paper": -1.943,
+    "pct": true
+   },
+   "3": {
+    "paper": -2.236,
+    "pct": true
+   },
+   "4": {
+    "paper": -1.994,
+    "pct": true
+   }
+  },
+  "var_10": {
+   "1": {
+    "paper": -1.516,
+    "pct": true
+   },
+   "2": {
+    "paper": -0.577,
+    "pct": true
+   },
+   "3": {
+    "paper": -0.756,
+    "pct": true
+   },
+   "4": {
+    "paper": -0.614,
+    "pct": true
+   }
+  },
+  "var_25": {
+   "1": {
+    "paper": -0.46,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.054,
+    "pct": true
+   },
+   "3": {
+    "paper": -0.145,
+    "pct": true
+   },
+   "4": {
+    "paper": -0.146,
+    "pct": true
+   }
+  },
+  "var_5": {
+   "1": {
+    "paper": -2.142,
+    "pct": true
+   },
+   "2": {
+    "paper": -1.002,
+    "pct": true
+   },
+   "3": {
+    "paper": -1.293,
+    "pct": true
+   },
+   "4": {
+    "paper": -0.877,
+    "pct": true
+   }
+  }
+ },
+ "Table 7 (long and short books, one-day wait)": {
+  "long: mean monthly return": {
+   "1": {
+    "paper": 1.24,
+    "pct": true
+   },
+   "2": {
+    "paper": 1.33,
+    "pct": true
+   },
+   "3": {
+    "paper": 1.46,
+    "pct": true
+   },
+   "4": {
+    "paper": 1.62,
+    "pct": true
+   }
+  },
+  "long: monthly serial correlation": {
+   "1": {
+    "paper": 0.06,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.09,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.13,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.17,
+    "pct": false
+   }
+  },
+  "long: standard deviation": {
+   "1": {
+    "paper": 3.88,
+    "pct": true
+   },
+   "2": {
+    "paper": 3.65,
+    "pct": true
+   },
+   "3": {
+    "paper": 3.44,
+    "pct": true
+   },
+   "4": {
+    "paper": 5.16,
+    "pct": true
+   }
+  },
+  "long: standard error (Newey-West)": {
+   "1": {
+    "paper": 0.18,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.18,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.17,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.25,
+    "pct": true
+   }
+  },
+  "short: mean monthly return": {
+   "1": {
+    "paper": 0.5,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.43,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.66,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.91,
+    "pct": true
+   }
+  },
+  "short: monthly serial correlation": {
+   "1": {
+    "paper": 0.11,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.12,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.12,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.16,
+    "pct": false
+   }
+  },
+  "short: standard deviation": {
+   "1": {
+    "paper": 3.26,
+    "pct": true
+   },
+   "2": {
+    "paper": 3.16,
+    "pct": true
+   },
+   "3": {
+    "paper": 3.15,
+    "pct": true
+   },
+   "4": {
+    "paper": 4.6,
+    "pct": true
+   }
+  },
+  "short: standard error (Newey-West)": {
+   "1": {
+    "paper": 0.18,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.17,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.17,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.23,
+    "pct": true
+   }
+  }
+ },
+ "Table 8 (subperiod analysis)": {
+  "post_hml": {
+   "1": {
+    "paper": 0.0344,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.0141,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.0183,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.082,
+    "pct": false
+   }
+  },
+  "post_intercept": {
+   "1": {
+    "paper": 0.337,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.417,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.363,
+    "pct": true
+   },
+   "4": {
+    "paper": -0.065,
+    "pct": true
+   }
+  },
+  "post_market": {
+   "1": {
+    "paper": 0.0734,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.048,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.00241,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.0696,
+    "pct": false
+   }
+  },
+  "post_mean": {
+   "1": {
+    "paper": 0.217,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.375,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.327,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.212,
+    "pct": true
+   }
+  },
+  "post_momentum": {
+   "1": {
+    "paper": -0.00424,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.0227,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.0884,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.127,
+    "pct": false
+   }
+  },
+  "post_r2": {
+   "1": {
+    "paper": 0.02,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.04,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.19,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.64,
+    "pct": false
+   }
+  },
+  "post_reversal": {
+   "1": {
+    "paper": -0.0626,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.0173,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.024,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.188,
+    "pct": false
+   }
+  },
+  "post_smb": {
+   "1": {
+    "paper": -0.004,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.0289,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.0233,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.0606,
+    "pct": false
+   }
+  },
+  "post_std": {
+   "1": {
+    "paper": 1.66,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.987,
+    "pct": true
+   },
+   "3": {
+    "paper": 1.121,
+    "pct": true
+   },
+   "4": {
+    "paper": 1.295,
+    "pct": true
+   }
+  },
+  "pre_hml": {
+   "1": {
+    "paper": 0.0357,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.0316,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.0684,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.0698,
+    "pct": false
+   }
+  },
+  "pre_intercept": {
+   "1": {
+    "paper": 0.353,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.67,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.71,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.446,
+    "pct": true
+   }
+  },
+  "pre_market": {
+   "1": {
+    "paper": -0.434,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.312,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.289,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.434,
+    "pct": false
+   }
+  },
+  "pre_mean": {
+   "1": {
+    "paper": 1.034,
+    "pct": true
+   },
+   "2": {
+    "paper": 1.181,
+    "pct": true
+   },
+   "3": {
+    "paper": 1.052,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.992,
+    "pct": true
+   }
+  },
+  "pre_momentum": {
+   "1": {
+    "paper": 0.0129,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.0163,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.0769,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.158,
+    "pct": false
+   }
+  },
+  "pre_r2": {
+   "1": {
+    "paper": 0.19,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.23,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.26,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.7,
+    "pct": false
+   }
+  },
+  "pre_reversal": {
+   "1": {
+    "paper": 0.436,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.333,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.288,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.452,
+    "pct": false
+   }
+  },
+  "pre_smb": {
+   "1": {
+    "paper": -0.442,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.332,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.275,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.402,
+    "pct": false
+   }
+  },
+  "pre_std": {
+   "1": {
+    "paper": 2.259,
+    "pct": true
+   },
+   "2": {
+    "paper": 1.689,
+    "pct": true
+   },
+   "3": {
+    "paper": 1.527,
+    "pct": true
+   },
+   "4": {
+    "paper": 1.651,
+    "pct": true
+   }
+  }
+ }
+}

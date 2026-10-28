@@ -13,8 +13,10 @@ import datetime
 import os
 import re
 import stat
+from collections.abc import Iterable
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from project.paths import ROOT, WRDS_API_DIR
@@ -100,7 +102,40 @@ def query_to_parquet(db, sql: str, name: str, **kwargs) -> pd.DataFrame:
     return df
 
 
-PROCESSED_DIR = ROOT / "data" / "processed" / "crsp" / "daily"
+def pin_arrow_threads() -> None:
+    """Give pyarrow one CPU thread and one I/O thread per process.
+
+    ``to_table`` on a dataset otherwise runs with ``os.cpu_count()`` threads in
+    every process, so a four-worker rebuild runs eighty arrow threads competing
+    for the same rows: a filtered scan that takes 15 ms alone took 10 s under
+    four-way concurrency. The scans here are small (a few dozen row groups), and
+    the parallelism that matters is across cohorts, one process each.
+
+    Call this in a cohort worker (the pool initialiser and the fork child), not
+    at import: it is a process-wide setting, and the parent driver, the tests and
+    a `load_summaries`/`--aggregate-only` read all want the default thread count
+    for their one large sequential read.
+    """
+    try:
+        import pyarrow as pa
+
+        pa.set_cpu_count(1)
+        pa.set_io_thread_count(1)
+    except (ImportError, AttributeError):  # pragma: no cover - arrow always present here
+        pass
+
+
+# The processed panel is large and can be shared across checkouts: when the
+# local copy is absent, fall back to the tree named by GGR_SHARED_PROCESSED.
+_SHARED_PROCESSED = Path(os.environ.get(
+    "GGR_SHARED_PROCESSED",
+    str(ROOT / "data" / "processed" / "crsp"),
+))
+_PROCESSED_CANDIDATES = [ROOT / "data" / "processed" / "crsp", _SHARED_PROCESSED]
+PROCESSED_DIR = next(
+    (base / "daily" for base in _PROCESSED_CANDIDATES if (base / "daily").exists()),
+    _PROCESSED_CANDIDATES[0] / "daily",
+)
 DAILY_INDEX_FILE = WRDS_API_DIR / "daily_indexes.parquet"
 RAW_DAILY_DIR = WRDS_API_DIR / "daily_stocks"
 
@@ -152,6 +187,19 @@ def _universe_panel_columns(universe: str) -> list[str]:
         "vol_pos": ["prc_ok", "vol_pos"],
     }[day_rule]
     return ["permno", *day_cols, share_filter]
+
+
+def formation_columns(universe: str = "vol_common",
+                      max_stale_share: float | None = None) -> list[str]:
+    """The processed columns ``formation_universe`` reads, in request order.
+
+    One rule for both callers -- the plain read and the driver's preloaded
+    panel -- so a new column in the eligibility rule cannot reach one and be
+    missing from the other. ``max_stale_share`` adds the volume flags the
+    near-frozen-quote filter needs.
+    """
+    extra = ["vol_zero", "vol_pos"] if max_stale_share is not None else []
+    return list(dict.fromkeys([*_universe_panel_columns(universe), "ret", *extra]))
 
 
 def _clean_year(raw: pd.DataFrame) -> pd.DataFrame:
@@ -261,12 +309,19 @@ def _year_files(start: datetime.date, end: datetime.date) -> list[Path]:
     ]
 
 
-def load_daily(start, end, columns: list[str] | None = None) -> pd.DataFrame:
+def load_daily(start, end, columns: list[str] | None = None,
+               permnos: Iterable[int] | None = None) -> pd.DataFrame:
     """Long panel for [start, end] from the processed files (only needed years).
 
     Reads only the per-year parquet files that intersect the window and applies
     the date filter inside pyarrow. Returns columns in the requested order;
     `date` is a datetime64[ns] column. Sorted by (date, permno).
+
+    ``permnos`` restricts the read to those securities (a pushdown filter, so
+    the matching rows are the only ones materialised). The trading window of a
+    cohort needs about 1,500 pair legs of the whole panel, and reading them
+    instead of the full window is the difference between a few megabytes and
+    half a gigabyte per cohort.
     """
     import pyarrow.dataset as ds
 
@@ -278,8 +333,17 @@ def load_daily(start, end, columns: list[str] | None = None) -> pd.DataFrame:
     wanted = list(columns) if columns else list(PROCESSED_COLUMNS)
     dataset = ds.dataset(files, format="parquet")
     flt = (ds.field("date") >= start_d) & (ds.field("date") <= end_d)
+    if permnos is not None:
+        wanted_permnos = sorted({int(x) for x in permnos})
+        if not wanted_permnos:
+            return pd.DataFrame(columns=wanted)
+        flt = flt & ds.field("permno").isin(wanted_permnos)
     read_cols = wanted if "date" in wanted else ["date", *wanted]
-    df = dataset.to_table(filter=flt, columns=read_cols).to_pandas()
+    # self_destruct frees each arrow buffer as it is converted, so the peak of
+    # a read is one column's worth rather than the whole table plus its pandas
+    # copy: concurrent cohorts then fit in far less memory.
+    df = dataset.to_table(filter=flt, columns=read_cols, use_threads=False).to_pandas(
+        self_destruct=True)
     df["date"] = pd.to_datetime(df["date"])
     df = df[wanted]
     sort_keys = [c for c in ("date", "permno") if c in df.columns]
@@ -288,19 +352,53 @@ def load_daily(start, end, columns: list[str] | None = None) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
-def trading_calendar(start, end) -> pd.DatetimeIndex:
-    """Trading dates in [start, end], taken from the daily index file."""
-    import pyarrow.parquet as pq
+_CALENDAR_CACHE: dict[tuple, pd.DatetimeIndex] = {}
 
-    start_d, end_d = _as_date(start), _as_date(end)
-    table = pq.read_table(DAILY_INDEX_FILE, columns=["dlycaldt"])
-    dates = pd.to_datetime(pd.Series(table.column("dlycaldt").to_pylist(), name="date"))
-    start_ts, end_ts = pd.Timestamp(start_d), pd.Timestamp(end_d)
-    return pd.DatetimeIndex(dates[(dates >= start_ts) & (dates <= end_ts)])
+
+def trading_calendar(start, end) -> pd.DatetimeIndex:
+    """Trading dates in [start, end], taken from the daily index file.
+
+    The index file is read once per process and sliced from an in-memory array:
+    a cohort asks for its formation and its trading window, so the same file
+    would otherwise be parsed thousands of times in a full rebuild. The result
+    is named ``date``, as the ``pd.Series(..., name="date")`` it replaced was:
+    a frame reindexed to an unnamed index takes that name, so the name a caller
+    sees (and any artifact it writes) must not depend on this rewrite.
+    """
+    global _CALENDAR_CACHE
+    # The cached array is keyed by the index file's identity as well as the
+    # window: a test (or a re-download) that swaps DAILY_INDEX_FILE must not read
+    # a calendar built from the previous file.
+    try:
+        stat = DAILY_INDEX_FILE.stat()
+        source = (str(DAILY_INDEX_FILE), stat.st_size, stat.st_mtime_ns)
+    except OSError:
+        source = (str(DAILY_INDEX_FILE), None, None)
+    if _CALENDAR_CACHE.get("source") != source:
+        import pyarrow.parquet as pq
+
+        column = pq.read_table(DAILY_INDEX_FILE, columns=["dlycaldt"]).column("dlycaldt")
+        values = np.asarray(column.to_numpy(zero_copy_only=False), dtype="datetime64[ns]")
+        _CALENDAR_CACHE = {"source": source, "dates": np.sort(values)}
+    key = (source, _as_date(start), _as_date(end))
+    hit = _CALENDAR_CACHE.get(key)
+    if hit is not None:
+        return hit
+    dates = _CALENDAR_CACHE["dates"]
+    start_ts, end_ts = np.datetime64(key[1]), np.datetime64(key[2])
+    lo = int(np.searchsorted(dates, start_ts, side="left"))
+    hi = int(np.searchsorted(dates, end_ts, side="right"))
+    window = pd.DatetimeIndex(dates[lo:hi], name="date")
+    if len(_CALENDAR_CACHE) > 4096:
+        for stale in [k for k in list(_CALENDAR_CACHE) if k not in ("source", "dates")][:3072]:
+            _CALENDAR_CACHE.pop(stale, None)
+    _CALENDAR_CACHE[key] = window
+    return window
 
 
 def formation_universe(
     start, end, universe: str = "vol_common", max_stale_share: float | None = None,
+    panel: pd.DataFrame | None = None,
 ) -> pd.Index:
     """PERMNOs eligible per INTERFACES.md §2.1 over [start, end].
 
@@ -324,12 +422,21 @@ def formation_universe(
     n_days = len(trading_calendar(start, end))
     if n_days == 0:
         return pd.Index([], name="permno")
-    extra = ["vol_zero", "vol_pos"] if max_stale_share is not None else []
-    columns = list(dict.fromkeys([*_universe_panel_columns(universe), "ret", *extra]))
-    panel = load_daily(start, end, columns)
+    columns = formation_columns(universe, max_stale_share)
+    if panel is None:
+        panel = load_daily(start, end, columns)
+    else:
+        missing = [c for c in columns if c not in panel.columns]
+        if missing:
+            raise KeyError(f"preloaded panel lacks {missing} needed by universe {universe!r}")
     flags = universe_flags(panel, universe)
-    counts = panel.loc[flags].groupby("permno").size()
-    rows = panel.loc[flags]
+    # The preloaded frame is the driver's formation window, the biggest object a
+    # cohort holds; narrowing it with ``panel[columns]`` first would copy it
+    # whole, which is what this path exists to avoid. ``universe_flags`` only
+    # reads named columns, so the frame passes through and the one copy taken is
+    # the masked, narrow selection below.
+    rows = panel.loc[flags, columns]
+    counts = rows.groupby("permno").size()
     moved = rows["ret"].fillna(0.0).ne(0.0).groupby(rows["permno"]).any()
     full = counts[counts == n_days].index
     keep = full[moved.reindex(full, fill_value=False).to_numpy()]
