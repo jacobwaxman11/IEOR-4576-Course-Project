@@ -10,12 +10,14 @@
 #                     stay in ~/.pgpass via scripts/wrds_setup.py)
 #   make benchmark  - fast: regenerate Tables 1-3 from the full cohort cache
 #                     and score them (writes eval/score.json)
+#   make edition-1999 - score the cohort cache against the 1999 NBER draft's
+#                     Tables I-II (second opinion; see report/replication/EDITION_1999.md)
 #
 # The venv is pinned on PATH so recipes call its interpreter directly.
 
 export PATH := $(CURDIR)/.venv/bin:$(PATH)
 
-.PHONY: test conformance-full build build-data benchmark
+.PHONY: test conformance-full build build-data benchmark edition-1999 verify-targets
 
 test:
 	python -m pytest tests/ -q
@@ -33,3 +35,9 @@ build-data:
 benchmark:
 	python scripts/03_replicate.py --universe vol_common --aggregate-only --steps tables,table3,check
 	python scripts/replication_score.py
+
+edition-1999:
+	python scripts/edition_1999.py
+
+verify-targets:
+	python scripts/verify_paper_targets.py

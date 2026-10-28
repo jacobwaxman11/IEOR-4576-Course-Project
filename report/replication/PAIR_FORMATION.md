@@ -32,6 +32,9 @@ first day* of the window, so the first day's return is not in the index (1 of
 252 formation days, 1 of ~126 trading days). The alternative is to start at
 the previous close, so `P_0 = 1 + r_0`. The paper does not say which. Changing
 it shifts every SSD slightly and requires re-running all cohorts.
+*Measured 2026-10-26 (REVIEW_NOTES section 47):* starting at the previous close
+scores 183.5 of 291 against 187.0 and moves the Figure 1 pair from rank 4 to
+rank 3 with one trade six days off the chart, so the shipped day is kept.
 
 ## 2. Distance and pairing
 
@@ -105,13 +108,13 @@ weights (PDF p. 36).
 | Sector | SIC codes |
 |---|---|
 | Transportation | 4000–4799 |
-| Utilities | 4900–4999 and telephone 4811 |
+| Utilities | 4900–4999 and telephone 4811, but **not** waste management (4950–4959), which has been Industrials since 2026-10-24 (`src/project/sectors.py`, SCORE_LOG row 12) |
 | Financials | 6000–6999 |
 | Industrials | everything else |
 
 The telephone code was 4810–4819 until REVIEW_NOTES section 20 narrowed it to
 4811, the 1972 manual's telephone code (`--telephone-sic 481x` restores the
-old map). The tables below were run with 4810–4819.
+old map). The alternatives tested in the tables below were run with 4810–4819.
 
 **Unknown SIC (new in this PR)** (`resolve_sic`, `sectors_for`). CRSP codes
 an unknown SIC as 0. On the formation-end day, about 106 stocks per cohort
@@ -206,17 +209,26 @@ none of the code here:
 
 1. **One-day wait.** Panel B and Table 3 delay both the opening and the
    closing trade by one day (2006 §3.3, PDF p. 18; 1999 NBER version, Table V
-   caption). The spec delayed only the opening. Fixed in the engine, to come
-   in a separate PR.
+   caption). The spec delayed only the opening. **Fixed and shipped** in
+   `src/project/models.py` (`exit_pending`); `test_wait1_delays_the_exit_and_earns_the_extra_day`
+   and `test_wait1_forced_exit_is_not_delayed` pin it, and forced exits stay on the
+   last day of the window, as PDF p. 16 has it (REVIEW_NOTES section 3).
 2. **Portfolio returns.** The spec divided daily payoffs by the sum of each
    pair's cumulative capital account, which can reach zero or go negative.
-   The paper divides payoffs by the **number** of pairs selected (committed)
-   or open (fully invested) (§2.3, PDF p. 14). Being corrected in a separate
-   PR.
+   That denominator is **gone**: no reported cell uses it, and the readings survive
+   only as `employed_account` / `committed_account` (REVIEW_NOTES section 8). What
+   ships today is the value-weighted long and short books of eq. (2)-(3), not the
+   pair counts — section 15 replaced the counts and
+   `INTERFACES.md`'s portfolio-return row is the current description; the counts
+   remain in the cache for comparison and against the 1999 draft.
 3. **Delisting returns.** CIZ dates each delisting row after the last trade
    with exchange code `X`; the panel build kept only N/A/Q rows, so no
    delisting return was ever applied. This biased returns upward, most in
-   weak pairs and small stocks. Fixed in the build; separate PR.
+   weak pairs and small stocks. **Fixed and shipped** in
+   `src/project/data.py::_clean_year`, which keeps `dlydelflg == 'Y'` rows whatever
+   their exchange and carries `dlyret`; `test_delisting_row_off_exchange_is_kept_but_never_eligible`
+   and `test_offexchange_delisting_row_survives_build_and_load` pin it, and
+   61,540 trades (2.1% of 2.97M) now close on a delisting (REVIEW_NOTES section 7).
 
 Table 3 results are therefore not reported here. With either return reading,
 the less-similar pairs (every sector's "all" portfolio, and Transportation,

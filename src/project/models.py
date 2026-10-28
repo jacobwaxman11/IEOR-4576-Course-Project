@@ -5,6 +5,11 @@ divergence of normalized prices, the wait 0/1 timing, exit at the next
 crossing, end-of-period and delisting/last-row forced closes, re-opening after
 convergence, and buy-and-hold leg accounting with per-pair capital accounts.
 
+The optional ``recall`` input adds paper §3.9's short-recall robustness check
+(Table 9 Panel B): a position whose *short* leg has a high-volume day is closed
+early, with the same timing the rule uses for any other close. It is off by
+default, so every shipped number is produced by the same code path as before.
+
 The day loop runs in a numba kernel over plain arrays; ``simulate_cohort``
 prepares the arrays and wraps the results in pandas objects.
 """
@@ -30,8 +35,8 @@ TRADE_COLUMNS = [
     "open_day",
     "close_day",
 ]
-REASONS = np.array(["converged", "end", "delisted"], dtype=object)
-_CONVERGED, _END, _DELISTED = 0, 1, 2
+REASONS = np.array(["converged", "end", "delisted", "recalled"], dtype=object)
+_CONVERGED, _END, _DELISTED, _RECALLED = 0, 1, 2, 3
 
 
 @dataclass
@@ -41,8 +46,11 @@ class CohortResult:
     ``pair_returns``: dates x rank, r_p,t = pi_p,t / w_p,t-1 (0 when closed).
     ``pair_payoffs``: dates x rank, the dollar payoff pi_p,t of the $1 long /
     $1 short position (0 when closed); the pair's capital account is
-    w_p,t = 1 + sum_{s<=t} pi_p,s. ``opened``: rank -> bool, opened at least
-    once. ``trades``: trade log with ``TRADE_COLUMNS``; ``open_day`` /
+    w_p,t = 1 + sum_{s<=t} pi_p,s. ``short_position_values``: dates x rank,
+    the short position's own compounded return since it opened,
+    prod (1 - r_short), floored at 0 (eq. 3 applied to the position's return
+    rather than to the shorted stock's price). ``opened``: rank -> bool, opened
+    at least once. ``trades``: trade log with ``TRADE_COLUMNS``; ``open_day`` /
     ``close_day`` are 0-based positions in the trading calendar.
     """
 
@@ -54,6 +62,7 @@ class CohortResult:
     long_values: pd.DataFrame | None = None
     short_payoffs: pd.DataFrame | None = None
     short_values: pd.DataFrame | None = None
+    short_position_values: pd.DataFrame | None = None
 
 
 def _empty_result(dates: pd.Index) -> CohortResult:
@@ -66,12 +75,18 @@ def _empty_result(dates: pd.Index) -> CohortResult:
         long_values=pd.DataFrame(index=dates, columns=[], dtype=float),
         short_payoffs=pd.DataFrame(index=dates, columns=[], dtype=float),
         short_values=pd.DataFrame(index=dates, columns=[], dtype=float),
+        short_position_values=pd.DataFrame(index=dates, columns=[], dtype=float),
     )
 
 
 @numba.njit(cache=True, error_model="numpy")
-def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait):
+def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait, RC, use_recall, recall_lock,
+                      recall_rearm):
     """Day loop of the trading rule; see ``simulate_cohort`` for the conventions.
+
+    ``RC`` (days x stock columns, bool) marks the high-volume days of a short
+    recall and is read only when ``use_recall`` is 1, for the day's *short*
+    column; ``converged``, ``end`` and ``delisted`` closes are unaffected.
 
     Returns ``pair_ret`` and ``pair_pay`` (T x n), ``opened`` (n) and the trade
     log as parallel arrays: pair index, open day, close day, reason code, long
@@ -86,14 +101,18 @@ def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait):
     long_val = np.zeros((T, n))
     short_pay = np.zeros((T, n))
     short_val = np.zeros((T, n))
+    short_pos_val = np.zeros((T, n))
     opened = np.zeros(n, dtype=np.bool_)
     is_open = np.zeros(n, dtype=np.bool_)
     pending = np.zeros(n, dtype=np.bool_)
     pending_sign = np.zeros(n, dtype=np.int64)
     exit_pending = np.zeros(n, dtype=np.bool_)
+    recall_pending = np.zeros(n, dtype=np.bool_)
+    disarmed = np.zeros(n, dtype=np.bool_)
     locked = np.zeros(n, dtype=np.bool_)
     L = np.ones(n)
     S = np.ones(n)
+    Q = np.ones(n)
     w = np.ones(n)
     s0 = np.zeros(n, dtype=np.int64)
     long_col = np.zeros(n, dtype=np.int64)
@@ -123,6 +142,8 @@ def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait):
                 long_val[t, k] = L[k]
                 short_pay[t, k] = new_s - S[k]
                 short_val[t, k] = S[k]
+                short_pos_val[t, k] = Q[k]
+                Q[k] = max(Q[k] * (1.0 - R[t, short_col[k]]), 0.0)
                 w[k] += pi
                 L[k] = new_l
                 S[k] = new_s
@@ -134,13 +155,23 @@ def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait):
             term_t = term[t, a] or term[t, b]
             lastrow_t = last_valid[a] == t or last_valid[b] == t
             alive = last_valid[a] >= t and last_valid[b] >= t
+            if disarmed[k] and abs(spread) <= 2.0 * sigma[k]:
+                disarmed[k] = False
 
             if is_open[k]:
                 crossing = sign != s0[k]
-                converge = exit_pending[k] if wait == 1 else crossing
+                recalled = use_recall == 1 and RC[t, short_col[k]]
+                if wait == 0:
+                    converge = crossing or recalled
+                    forced = recalled
+                else:
+                    converge = exit_pending[k] or recall_pending[k]
+                    forced = recall_pending[k]
                 if converge or term_t or lastrow_t or last_day:
                     if term_t:
                         reason = _DELISTED
+                    elif forced:
+                        reason = _RECALLED
                     elif converge:
                         reason = _CONVERGED
                     else:
@@ -155,10 +186,16 @@ def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait):
                     m += 1
                     is_open[k] = False
                     exit_pending[k] = False
-                    if term_t or lastrow_t or last_day:
+                    recall_pending[k] = False
+                    if term_t or lastrow_t or last_day or forced and recall_lock == 1:
                         locked[k] = True
-                elif wait == 1 and crossing:
-                    exit_pending[k] = True
+                    elif forced and recall_rearm == 1:
+                        disarmed[k] = True
+                elif wait == 1:
+                    if crossing:
+                        exit_pending[k] = True
+                    if recalled:
+                        recall_pending[k] = True
 
             if wait == 1 and pending[k] and not locked[k]:
                 pending[k] = False
@@ -167,6 +204,7 @@ def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait):
                     opened[k] = True
                     L[k] = 1.0
                     S[k] = 1.0
+                    Q[k] = 1.0
                     s0[k] = pending_sign[k]
                     open_day[k] = t
                     if sign < 0:
@@ -178,6 +216,7 @@ def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait):
                 not is_open[k]
                 and not locked[k]
                 and not pending[k]
+                and not disarmed[k]
                 and alive
                 and not term_t
                 and not lastrow_t
@@ -189,6 +228,7 @@ def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait):
                         opened[k] = True
                         L[k] = 1.0
                         S[k] = 1.0
+                        Q[k] = 1.0
                         s0[k] = sign
                         open_day[k] = t
                         if sign < 0:
@@ -199,7 +239,7 @@ def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait):
                     pending[k] = True
                     pending_sign[k] = sign
 
-    return (pair_ret, pair_pay, long_pay, long_val, short_pay, short_val, opened, tr_pair[:m], tr_open[:m], tr_close[:m], tr_reason[:m],
+    return (pair_ret, pair_pay, long_pay, long_val, short_pay, short_val, short_pos_val, opened, tr_pair[:m], tr_open[:m], tr_close[:m], tr_reason[:m],
             tr_long[:m], tr_short[:m], tr_payoff[:m])
 
 
@@ -217,6 +257,9 @@ def simulate_cohort(
     terminal: pd.DataFrame,
     wait: int = 0,
     start_levels: pd.Series | None = None,
+    recall: pd.DataFrame | None = None,
+    recall_lock: bool = False,
+    recall_rearm: bool = False,
 ) -> CohortResult:
     """Simulate one cohort's 6-month trading period.
 
@@ -249,13 +292,41 @@ def simulate_cohort(
         normalized prices cross. GGR's Figure 1 shows this convention (both
         stocks start the trading period near 1.10). When None (default),
         prices are rebased to 1 at the close of the first trading day.
+    recall:
+        Optional wide (trading dates x permno) bool table of *short recalls*,
+        True on a day on which that stock's daily volume is a high-volume day
+        (paper §3.9: "daily volume exceeds average daily volume over the 18
+        months ... by more than one standard deviation"). While a position is
+        open and its **short** leg has a recall day, the pair is closed early:
+        under ``wait=0`` at the close of that day, under ``wait=1`` at the close
+        of the following day, i.e. exactly the timing the rule gives a
+        convergence close. The close is logged with reason ``recalled``, unless a
+        delisting falls on the same day, which wins the label; a last-row or
+        end-of-period close on the same day is also logged ``recalled`` but still
+        locks the pair for the rest of the cohort. ``None`` (default) never recalls,
+        so the simulation is the plain rule. Missing/NaN entries are False, so
+        a stock with no volume data (every Nasdaq stock before November 1982)
+        is never recalled.
+    recall_lock:
+        Only meaningful with ``recall``: when True, a recall also ends the pair
+        for the rest of the cohort, so the position cannot re-open (a recalled
+        short has to find new borrow). Default False lets a recalled pair
+        re-open on a later 2-sigma divergence, the rule's normal behaviour after
+        any other close.
+    recall_rearm:
+        Only meaningful with ``recall``: after a recall the pair may only be
+        re-entered once the spread has come back inside the 2-sigma band and a
+        new divergence episode fires. A recall leaves the spread divergent, so
+        without this the pair re-opens the next day on the signal that was
+        already open, which a recall does not permit. Default False.
 
     A pair can only signal, or execute a pending wait-1 open, while both
     stocks still have data: after a stock's last available row its price is
     frozen and no new position is taken. Trade reasons: ``delisted`` (a
     terminal row), ``converged`` (the prices crossed, including a delayed
-    wait-1 convergence executed on the last day) and ``end`` (a stock's last
-    row or the end of the period).
+    wait-1 convergence executed on the last day), ``recalled`` (a short recall
+    closed it, see ``recall``) and ``end`` (a stock's last row or the end of
+    the period).
     """
     if wait not in (0, 1):
         raise ValueError(f"wait must be 0 or 1, got {wait}")
@@ -286,7 +357,20 @@ def simulate_cohort(
     sigma = pairs["sigma"].to_numpy(float)
     ranks = pairs["rank"].to_numpy()
 
-    (pair_ret, pair_pay, long_pay, long_val, short_pay, short_val, opened, k, o, c, reason, lc,
+    if recall is None:
+        RC = np.zeros((len(dates), 1), dtype=np.bool_)
+        use_recall = 0
+    else:
+        RC = np.ascontiguousarray(
+            pd.DataFrame(recall)
+            .reindex(index=dates, columns=permnos)
+            .fillna(False)
+            .to_numpy(dtype=bool)
+        )
+        use_recall = 1
+
+    (pair_ret, pair_pay, long_pay, long_val, short_pay, short_val, short_pos_val, opened, k, o, c,
+     reason, lc,
      sc, payoff) = _simulate_kernel(
         np.ascontiguousarray(P, dtype=np.float64),
         np.ascontiguousarray(R, dtype=np.float64),
@@ -296,6 +380,10 @@ def simulate_cohort(
         col2,
         sigma,
         int(wait),
+        RC,
+        use_recall,
+        int(recall_lock),
+        int(recall_rearm),
     )
 
     rank_index = pd.Index(ranks, name="rank")
@@ -322,4 +410,5 @@ def simulate_cohort(
         long_values=pd.DataFrame(long_val, index=dates, columns=rank_index),
         short_payoffs=pd.DataFrame(short_pay, index=dates, columns=rank_index),
         short_values=pd.DataFrame(short_val, index=dates, columns=rank_index),
+        short_position_values=pd.DataFrame(short_pos_val, index=dates, columns=rank_index),
     )

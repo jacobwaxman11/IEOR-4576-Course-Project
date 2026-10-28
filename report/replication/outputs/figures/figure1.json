@@ -1,0 +1,31 @@
+{
+  "rank": 4,
+  "sigma": 0.02181414814322591,
+  "start_levels": [
+    1.1006,
+    1.106
+  ],
+  "trades": [
+    [
+      8,
+      35
+    ],
+    [
+      46,
+      56
+    ],
+    [
+      76,
+      83
+    ],
+    [
+      85,
+      99
+    ],
+    [
+      108,
+      125
+    ]
+  ],
+  "png": "report/replication/outputs/figures/figure1.png"
+}

@@ -1,0 +1,62 @@
+{
+  "_source": "Gatev, Goetzmann and Rouwenhorst (2006), 'Pairs Trading: Performance of a Relative-Value Arbitrage Rule', Review of Financial Studies 19(3) 797-827. Values read from `pdftotext -layout pairs-trading-performance-of-a-relative-value-arbitrage-rule_final.pdf` (repo root).",
+  "_provenance": {
+    "table9_panel_b": "p. 825, rows 'B. Short recalls on high volume' (four portfolio columns: Top 5, Top 20, 20 after top 100, All).",
+    "table1_panel_b": "pp. 806-807, rows 'B. Excess return distribution (one day waiting)' - the same wait-one-day rule without recalls, so the claim's arithmetic is Table 1B minus Table 9B.",
+    "table9_note": "p. 825: 'Panel B reports the summary statistics for the rule that waits one day before opening and closing the position.' 474 monthly observations, July 1963 - December 2002, Newey-West six-lag standard errors, absolute kurtosis.",
+    "claim_prose": "p. 824: 'The profits decline slightly by 4-13 bp per month, yet they remain large and positive. For example, the top 20 pairs portfolio earns an average of 85 bp per month with short recalls, with a Newey-West t-statistic of 9.07.'",
+    "verified": "Every value below was read off the same pdftotext layout dump; the printed t-statistics equal mean / Newey-West standard error to the printed precision in all four columns of both panels (e.g. 0.00619/0.00115 = 5.38 ~ 5.39)."
+  },
+  "table9_panel_b": {
+    "top5": {
+      "mean": 0.00619, "nw_se": 0.00115, "t_stat": 5.39, "median": 0.00592,
+      "std": 0.02210, "skew": 0.15, "kurtosis": 5.39, "min": -0.09611,
+      "max": 0.10504, "share_negative": 0.39, "committed_mean": 0.00304
+    },
+    "top20": {
+      "mean": 0.00854, "nw_se": 0.00094, "t_stat": 9.07, "median": 0.00703,
+      "std": 0.01488, "skew": 0.48, "kurtosis": 6.00, "min": -0.06594,
+      "max": 0.07255, "share_negative": 0.26, "committed_mean": 0.00347
+    },
+    "101-120": {
+      "mean": 0.00665, "nw_se": 0.00085, "t_stat": 7.81, "median": 0.00531,
+      "std": 0.01505, "skew": 1.03, "kurtosis": 7.39, "min": -0.04408,
+      "max": 0.10084, "share_negative": 0.34, "committed_mean": 0.00296
+    },
+    "all": {
+      "mean": 0.00585, "nw_se": 0.00098, "t_stat": 5.95, "median": 0.00312,
+      "std": 0.01555, "skew": 2.82, "kurtosis": 18.98, "min": -0.03465,
+      "max": 0.14173, "share_negative": 0.37, "committed_mean": 0.00202
+    }
+  },
+  "table1_panel_b": {
+    "top5": {
+      "mean": 0.00745, "nw_se": 0.00119, "t_stat": 6.26, "median": 0.00699,
+      "std": 0.02101, "skew": 0.34, "kurtosis": 10.64, "min": -0.12628,
+      "max": 0.14350, "share_negative": 0.35, "committed_mean": 0.00463
+    },
+    "top20": {
+      "mean": 0.00895, "nw_se": 0.00096, "t_stat": 9.29, "median": 0.00690,
+      "std": 0.01527, "skew": 1.45, "kurtosis": 16.13, "min": -0.08218,
+      "max": 0.13490, "share_negative": 0.23, "committed_mean": 0.00520
+    },
+    "101-120": {
+      "mean": 0.00795, "nw_se": 0.00085, "t_stat": 9.40, "median": 0.00694,
+      "std": 0.01438, "skew": 0.98, "kurtosis": 7.78, "min": -0.04266,
+      "max": 0.10464, "share_negative": 0.28, "committed_mean": 0.00503
+    },
+    "all": {
+      "mean": 0.00715, "nw_se": 0.00090, "t_stat": 7.92, "median": 0.00411,
+      "std": 0.01577, "skew": 3.32, "kurtosis": 25.66, "min": -0.02951,
+      "max": 0.16325, "share_negative": 0.32, "committed_mean": 0.00396
+    }
+  },
+  "claim": {
+    "decline_bp_per_month": {"top5": 12.6, "top20": 4.1, "101-120": 13.0, "all": 13.0},
+    "decline_stated_range_bp": [4, 13],
+    "headline_cells": {
+      "top20_mean_with_recalls": 0.00854,
+      "top20_t_stat_with_recalls": 9.07
+    }
+  }
+}

@@ -18,6 +18,11 @@ pip install -e ".[dev]"
 make all
 ```
 
+Re-run `pip install -e ".[dev]"` after pulling a change to `pyproject.toml`: Table 4's Ibbotson
+block reads the Goyal-Welch `.xls` through `xlrd`, and without it the check prints a warning and
+leaves those 24 cells unscored. `git lfs pull` fetches the factor files under `data/raw/french`
+and `data/raw/goyal_welch`; without them the factor-regression rows are not computed either.
+
 This repository currently contains the project scaffold. All `.py` files are
 empty placeholders. `make all` exits with an explicit message until the pipeline
 is implemented; no results are generated yet. The initial sample periods,
@@ -93,6 +98,37 @@ IEOR-4576-Course-Project/
 
 Empty directories contain `.gitkeep` so they appear in Git checkouts. The project
 folder is the repository root; there is no extra nested `project-name/` folder.
+
+## Replication status
+
+**Thesis.** Gatev, Goetzmann and Rouwenhorst (2006) find that a simple pairs-trading rule earns
+large, significant excess returns that transaction costs, conventional risk factors and
+short-term reversal do not explain. They link the profits to a latent common factor that weakened
+after 1988. Rebuilt from CRSP with the paper's stated rules, **the paper's conclusions replicate
+but its tables only partly do**. 23 of its 25 claims hold (6 with the paper's numbers, 17 in
+substance, plus half of one), and 2 do not hold as stated. 267.5 of the 481 printed cells match
+(✓ within 10%, ~ within 25%). The gaps trace to data and to underspecified methods, above all a
+reversal factor the paper's description does not pin down.
+
+- **Start here:** [`report/replication/REPLICATION_SUMMARY.md`](report/replication/REPLICATION_SUMMARY.md),
+  which has the thesis, every table and figure against the paper, and the claims checklist.
+- **Generated tables and Figures 1-4:** [`report/replication/outputs/`](report/replication/outputs/);
+  cell by cell: [`REPLICATION_CHECK.md`](report/replication/REPLICATION_CHECK.md).
+- **Score history and counting rule:** [`report/replication/SCORE_LOG.md`](report/replication/SCORE_LOG.md).
+
+- **Systematic risk (Tables 4 and 8).** With French's short-term reversal factor (ST_Rev), the
+  paper's conclusion replicates: pairs returns load little on the Fama-French, momentum and
+  reversal factors, and keep a significant Newey-West alpha before 1989 and after 1988, smaller
+  in the second period. Cell-level agreement is poor (Table 8: 19.5 of 72), because the paper's
+  own reversal factor is unidentified before 1989 and most post-1988 coefficients are
+  statistically zero, with our post-1988 all-pairs portfolio off by an era split in the stock
+  universe. Details: [`REVIEW_NOTES.md`](report/replication/REVIEW_NOTES.md) sections 50-52.
+- **Every claim, with evidence.** [`CLAIMS.md`](report/replication/CLAIMS.md) lists each
+  substantive claim of the abstract, sections 3.1-3.9 and the conclusion, the cells behind
+  it and a verdict, including the Table 7 long/short result.
+- **The paper's own consistency.** What the printed statistics imply about the unnamed reversal
+  factor is set out in [`PAPER_CONSISTENCY.md`](report/replication/PAPER_CONSISTENCY.md).
+- **Open gaps** are tracked in [`OPEN_QUESTIONS.md`](report/replication/OPEN_QUESTIONS.md).
 
 ## Data and results map
 

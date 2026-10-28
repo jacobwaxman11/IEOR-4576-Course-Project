@@ -16,6 +16,7 @@ dependencies = [
     "matplotlib",
     "pyyaml",
     "wrds",
+    "xlrd>=2.0.1",
 ]
 
 [project.optional-dependencies]
