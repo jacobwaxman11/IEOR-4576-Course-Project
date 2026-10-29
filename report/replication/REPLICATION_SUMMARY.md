@@ -134,6 +134,19 @@ a WRDS account. With the data in place:
     python scripts/replication_figures.py                    # Figures 2-4 against the paper's
     python scripts/replication_score.py                      # the 481-cell score
 
+The scripts read the checkout's own `data/`. When a piece is missing there, they fall back to a
+shared data tree named by four environment variables:
+
+| Variable | Points at | Read by |
+|---|---|---|
+| `GGR_SHARED_DATA_RAW` | a raw tree holding `crsp/` and `wrds_api/`; used when the checkout has no `data/raw/crsp/crsp` | everything that reads CRSP |
+| `GGR_SHARED_PROCESSED` | the processed-panel base, i.e. `data/processed/crsp` (the code appends `daily/`) | the driver and the claim scripts |
+| `GGR_SHARED_REPLICATION` | a built cohort cache, i.e. `data/processed/replication`, read only | `scripts/claims/table6_random_pairs.py`, `scripts/claims/table7.py` |
+| `GGR_SHARED_DATA_ROOT` | a data tree whose `raw/public/french` holds the real Fama-French archives | `scripts/claims/table7.py` |
+
+The driver reads the Fama-French and Goyal-Welch factor files only from the checkout's own
+`data/raw/french` and `data/raw/goyal_welch` (`git lfs pull`); the variables do not move them.
+
 Each unscored exhibit has its own driver under `scripts/claims/`, and its report gives the
 command. Parsing the paper's numbers requires the published article as
 `pairs-trading-performance-of-a-relative-value-arbitrage-rule_final.pdf` at the repository root.
