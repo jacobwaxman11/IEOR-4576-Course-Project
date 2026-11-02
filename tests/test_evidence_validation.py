@@ -18,6 +18,9 @@ def test_bootstrap_report_rejects_wrong_draw_count_and_missing_month():
     zero = pd.Series(0., index=dates)
     series = {str(k): {"true": zero, "reps": [zero, zero]} for k in range(16)}
     assert validate_bootstrap_sample(frames, series, 2)["months"] == 474
+    assert validate_bootstrap_sample(frames[5:], series, 2, start="1963-07")["cohorts"] == 474
+    with pytest.raises(ValueError, match="every cohort"):
+        validate_bootstrap_sample(frames[5:], series, 2)
     with pytest.raises(ValueError, match="dimensions"):
         validate_bootstrap_sample(frames, series, 3)
     series["0"]["reps"] = [zero, zero.iloc[:-1]]
