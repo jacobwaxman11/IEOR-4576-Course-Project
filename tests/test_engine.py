@@ -160,6 +160,52 @@ def test_terminal_row_closes_and_locks_pair():
     assert res.pair_returns[1].loc[D7:].abs().sum() == pytest.approx(0.0)
 
 
+def test_long_delisting_loss_wipes_out_the_delisting_long_leg():
+    """Footnote 4: the long stock delists (actual return -50%); the flag books -100%."""
+    P1 = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 0.5, 0.5, 0.5])
+    P2 = np.array([1.0, 1.0, 1.0, 1.03, 1.03, 1.03, 1.03, 1.03])
+    rets = rets_from_prices(np.column_stack([P1, P2]))
+    term = terminal_frame({1: [5]})
+    plain = simulate_cohort(one_pair(), rets, term, wait=0)
+    loss = simulate_cohort(one_pair(), rets, term, wait=0, long_delisting_loss=True)
+
+    assert plain.trades.iloc[0]["payoff"] == pytest.approx(0.5 - 1.0)
+    tr = loss.trades.iloc[0]
+    assert (tr["open_date"], tr["close_date"], tr["reason"]) == (D4, D6, "delisted")
+    assert tr["long_permno"] == 1
+    # long leg worth 0, short leg unchanged at 1.03 / 1.03 = 1
+    assert tr["payoff"] == pytest.approx(0.0 - 1.0)
+    assert loss.pair_returns[1].loc[D6] == pytest.approx(-1.0)
+    assert loss.long_payoffs[1].loc[D6] == pytest.approx(-1.0)
+    assert loss.short_payoffs[1].loc[D6] == pytest.approx(0.0)
+    # only the delisting day differs
+    pd.testing.assert_frame_equal(loss.pair_returns.loc[:D5], plain.pair_returns.loc[:D5])
+
+
+def test_long_delisting_loss_applies_when_the_delisting_row_has_no_return():
+    rets = rets_from_prices(np.column_stack([np.ones(8), [1.0, 1.0, 1.0, 1.03] + [1.03] * 4]))
+    rets.loc[D6, 1] = np.nan
+    term = terminal_frame({1: [5]})
+    assert simulate_cohort(one_pair(), rets, term, wait=0).trades.iloc[0]["payoff"] == pytest.approx(0.0)
+    loss = simulate_cohort(one_pair(), rets, term, wait=0, long_delisting_loss=True)
+    assert loss.trades.iloc[0]["payoff"] == pytest.approx(-1.0)
+
+
+@pytest.mark.parametrize("wait", [0, 1])
+def test_long_delisting_loss_leaves_a_delisting_short_leg_alone(wait):
+    P2 = np.array([1.0, 1.0, 1.03, 1.03, 1.03, 1.00, 1.00, 1.00])
+    rets = rets_from_prices(np.column_stack([np.ones(8), P2]))
+    term = terminal_frame({2: [5]})
+    plain = simulate_cohort(one_pair(), rets, term, wait=wait)
+    loss = simulate_cohort(one_pair(), rets, term, wait=wait, long_delisting_loss=True)
+
+    tr = loss.trades.iloc[0]
+    assert (tr["short_permno"], tr["close_date"], tr["reason"]) == (2, D6, "delisted")
+    assert tr["payoff"] == pytest.approx(1.0 - 1.00 / 1.03)
+    pd.testing.assert_frame_equal(loss.trades, plain.trades)
+    pd.testing.assert_frame_equal(loss.pair_returns, plain.pair_returns)
+
+
 def test_reopen_after_convergence_flips_legs():
     P2 = np.array([1.0, 1.0, 1.0, 1.03, 1.00, 0.97, 1.00, 1.00])
     rets = rets_from_prices(np.column_stack([np.ones(8), P2]))

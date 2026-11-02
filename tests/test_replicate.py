@@ -79,6 +79,65 @@ def test_formation_options_stamp_every_value():
     }
 
 
+_BASE_OPTIONS = dict(same_issuer="exclude", max_stale_share=None, telephone_sic="4811",
+                     trigger_sigma="rms", short_weights="position", size_deciles_top=None,
+                     long_delisting_loss=False, waste_sic="industrials")
+
+
+def test_long_delisting_loss_is_stamped_only_when_on(tmp_path, monkeypatch):
+    off = rep.formation_options(argparse.Namespace(**_BASE_OPTIONS))
+    assert "long_delisting_loss" not in off
+    on = rep.formation_options(argparse.Namespace(**{**_BASE_OPTIONS, "long_delisting_loss": True}))
+    assert on == {**off, "long_delisting_loss": True}
+    # a default cache does not verify for a wipeout run
+    monkeypatch.setattr(rep, "cohort_dir", lambda universe: tmp_path / universe / "cohorts")
+    monkeypatch.setattr(rep, "FORMATION_OPTIONS", off)
+    rep.stamp_cache("u", continued=True, force=False)
+    rep.verify_cache("u", continued=True)
+    monkeypatch.setattr(rep, "FORMATION_OPTIONS", on)
+    with pytest.raises(SystemExit, match="no long_delisting_loss stamp"):
+        rep.verify_cache("u", continued=True)
+    job = rep.Job(2020, 7, (2020, 12), (0, 1), "u", True, long_delisting_loss=True)
+    assert rep.job_from_shard(rep.job_to_shard(job)) == job
+    assert not rep.Job(2020, 7, (2020, 12), (0, 1), "u", True).long_delisting_loss
+
+
+def test_waste_sic_flag_is_stamped_only_when_not_industrials(tmp_path, monkeypatch):
+    default = rep.formation_options(argparse.Namespace(**_BASE_OPTIONS))
+    assert "waste_sic" not in default
+    moved = rep.formation_options(argparse.Namespace(**{**_BASE_OPTIONS, "waste_sic": "utilities"}))
+    assert moved == {**default, "waste_sic": "utilities"}
+    monkeypatch.setattr(rep, "cohort_dir", lambda universe: tmp_path / universe / "cohorts")
+    monkeypatch.setattr(rep, "FORMATION_OPTIONS", default)
+    rep.stamp_cache("u", continued=True, force=False)
+    monkeypatch.setattr(rep, "FORMATION_OPTIONS", moved)
+    with pytest.raises(SystemExit, match="no waste_sic stamp"):
+        rep.verify_cache("u", continued=True)
+    job = rep.Job(2020, 7, (2020, 12), (0, 1), "u", True, waste_sic="utilities")
+    assert rep.job_from_shard(rep.job_to_shard(job)) == job
+    assert rep.Job(2020, 7, (2020, 12), (0, 1), "u", True).waste_sic == "industrials"
+
+
+def test_sensitivity_flags_on_the_command_line(monkeypatch):
+    seen = {}
+
+    def stop(args):
+        seen.update(vars(args))
+        raise SystemExit(0)
+
+    monkeypatch.setattr(rep, "formation_options", stop)
+    for argv, want in ((["x"], ("industrials", False)),
+                       (["x", "--waste-sic", "utilities", "--long-delisting-loss"], ("utilities", True))):
+        monkeypatch.setattr(sys, "argv", argv)
+        with pytest.raises(SystemExit):
+            rep.main()
+        assert (seen["waste_sic"], seen["long_delisting_loss"]) == want
+    monkeypatch.setattr(sys, "argv", ["x", "--waste-sic", "water"])
+    with pytest.raises(SystemExit) as err:
+        rep.main()
+    assert err.value.code == 2
+
+
 def test_verify_names_an_unstamped_option(tmp_path, monkeypatch):
     monkeypatch.setattr(rep, "cohort_dir", lambda universe: tmp_path / universe / "cohorts")
     rep.stamp_cache("u", continued=True, force=False)

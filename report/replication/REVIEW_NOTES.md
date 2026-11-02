@@ -550,7 +550,8 @@ RFS side most, because the RFS sample adds 1989-2002, where we are too high.
   the mean effect and 1.6x the std effect. Our long legs carry more delisting exposure than the
   paper's, or milder actual delisting returns; 140 of 20,774 top-20 trades close on a delisting.
   The extreme assumption itself scores 129.5 (Table 1: 18 of 88 within 10%), so the paper's own
-  figure is not our data's.
+  figure is not our data's. *Superseded by section 55*, which re-measures it on the current
+  accounting with the `--long-delisting-loss` flag: 1.387% to 1.274%, the paper's size.
 
 - *Missing delisting returns do not explain post-1988.* The CIZ delisting table (local,
   `delisting.parquet`, 29,727 rows) has no return for 62% of for-cause (GDR) delistings before 1989
@@ -1028,6 +1029,9 @@ entry-only delay collapses Table 1 Panel B from 30.5 to 21.5 points, which is
 independent confirmation of the 2026-10-16 fix in section 3; and the
 innovation-scaled trigger produces 22% triggers, closing Q7's remaining
 alternative.
+
+`--waste-sic utilities` restores the old map as a flag; section 55 re-measures it on the
+current code (261.0 -> 259.0, the same Utilities 101-120 cells in reverse).
 
 ## 25. Payoff-count returns measured and rejected (2026-10-24)
 
@@ -2770,3 +2774,53 @@ speaks of the "Law of One Price"). `CLAIMS.md` lists it under "Not tested" and c
 codes 10/11/12 and 263.5 with REITs (code 18) added. The two releases agree on 56.6 million matched
 rows except the share code of corporate REITs, which CIZ classes as ordinary common stock; the data
 are not closer to the paper in either format.
+
+## 55. Footnote 4's delisting check and the 495x map as flags; one Newey-West estimator (2026-11-02): 261.0 -> 261.0
+
+Two opt-in flags of `scripts/03_replicate.py` and one estimator fix. Neither flag is on by default,
+and each is stamped in `cache_meta.json` only when on, so a default cache's stamp is unchanged and
+the shipped check is untouched by them. All numbers are a full 474-cohort build of this
+repository's defaults (`vol_common`), which reproduces the committed check at 261.0 before the
+change; each flag was built into its own cache (`--cache-root`).
+
+**1. `--long-delisting-loss`: footnote 4 (RFS p. 804).** The paper's robustness check assumes
+every delisted long position loses 100% and reports the top-20 no-wait fully invested mean falling
+from 1.436% to 1.32% and its standard deviation rising from 1.69% to 1.9%. With the flag, an open
+position whose long leg has a terminal (`dlydelflg == 'Y'`) row books -1.0 on that leg that day,
+including when the row has no return; a delisting short leg keeps its actual return, and prices
+that drive the rule are unchanged (`models.simulate_cohort`, `long_delisting_loss`).
+
+| top 20, no wait | plain | footnote 4 | change |
+|---|---|---|---|
+| fully invested mean, ours | 1.387% | 1.274% | -11.2 bp |
+| fully invested mean, paper | 1.436% | 1.32% | -11.6 bp |
+| standard deviation, ours | 1.67% | 1.87% | +0.20 |
+| standard deviation, paper | 1.69% | 1.9% | +0.21 |
+| committed mean, ours | 0.807% | 0.730% | -7.8 bp |
+
+On the current accounting the effect has the paper's size in both the mean and the dispersion.
+Section 17's earlier calibration (1.333% to 1.169%, about 1.4x the paper's effect) was measured
+before the book-compounding change of section 54 and is superseded. The other portfolios: top 5
+-16.6 bp, 101-120 -6.3 bp, all pairs -24.2 bp (no wait); the one-day wait moves by the same
+amounts to within 1 bp. The top-5 worst month falls from -13.1% to -23.9%. Scored, the assumption
+gives 217.0 of 481 (Table 1: 20 of 88 within 10%), so it stays a sensitivity, as in the paper.
+
+**2. `--waste-sic utilities`: section 24's map as a flag.** SIC 4950-4959 back in Utilities moves
+261.0 to 259.0, all in Table 3: the Utilities stock count improves (137 to 144 against 156, ~ to
+✓) and Utilities 101-120 loses the cells section 24 gained (mean 0.89% to 0.72% against 0.93%;
+t, skew, kurtosis, minimum and maximum each lose a mark; standard deviation gains one), with small
+moves in Utilities "all". The top-pair sector weights do not move (weight_utilities 0.774), as
+section 24 found. The default stays Industrials.
+
+**3. Table 1's Newey-West standard error has no small-sample factor.** `evaluation.summary_stats`
+used statsmodels' HAC with `use_correction=True` (an n/(n-1) factor) while `factors.factor_tstats`
+(Tables 4 and 8) uses none; the paper states none. Both now use none, and a test pins the two to
+one estimator. Five printed t-statistics move by 0.01 (Table 1 Panel B and the four Table 3
+sectors), no mark changes, and the score stays 261.0; `REPLICATION_CHECK.md` is regenerated.
+
+**Not added: a second fully invested row.** A row dividing the period's summed fixed-dollar
+payoffs by the pairs that opened was considered and dropped: `mean_employed_literal` in
+`table1.csv` already reports payoffs over the pairs that open (compounded daily). It gives
+0.856% for the top 20 against 0.807% committed and 1.387% fully invested, a ratio of 1.06
+against the paper's 1.8, so the literal denominator cannot produce the paper's fully invested
+numbers and the employed-capital reading the shipped headline uses is consistent with them.
