@@ -16,11 +16,12 @@ Price.
 **Our finding.** Built from CRSP with the paper's stated rules, the paper's **conclusions
 replicate but its tables only partly do**:
 
-- **Claims.** 23 of the paper's 25 substantive claims hold: 6 with the paper's numbers, 17 in
-  substance (sign, significance, order of magnitude), plus the first half of claim 20. Two do
-  not hold as stated.
-- **Tables and figures.** 267.5 of the 481 cells the paper prints match: 214 within 10%, 107
-  within 25%, 160 outside.
+- **Claims.** Of the paper's 25 substantive claims, 19 replicate: 5 with the paper's numbers and
+  14 in substance (sign, significance, order of magnitude). 4 replicate in part (claims 9, 10, 20
+  and 24), 1 does not hold as stated (claim 16, the top-20 long-book alpha), and 1 is the paper's
+  interpretation, which replication cannot test (claim 4, temporary mispricing).
+- **Tables and figures.** The check scores 261.0 weighted points over the 481 cells the paper
+  prints (✓ = 1, ~ = ½): 207 within 10%, 108 more within 25%, 166 outside.
 - **Why the details differ.** The gaps trace to data and to methods the paper leaves
   underspecified, not to a failed conclusion. The reversal factor of Tables 4 and 8 cannot be
   rebuilt from the paper's own description. The return tails differ because of data before 1989
@@ -35,20 +36,20 @@ paper's is in parentheses.
 | exhibit | what it shows | our result | cells ✓ / ~ / ✗ (points) | verdict |
 |---|---|---|---|---|
 | Figure 1 | one pair's trading period | Kennecott-Uniroyal, rank 4 (top 5); five trades within 3 days of the paper's | reproduced | replicated |
-| Table 1 | excess returns of the pairs portfolios | top 20: 1.38% a month, t 11.0 (1.44%, 11.6); 0.88% (0.90%) waiting one day | 43 / 22 / 23 of 88 (54.0) | means and t: replicated; skewness, kurtosis, extremes: missed |
+| Table 1 | excess returns of the pairs portfolios | top 20: 1.39% a month, t 11.2 (1.44%, 11.6); 0.89% (0.90%) waiting one day | 47 / 17 / 24 of 88 (55.5) | means and t: replicated; skewness, kurtosis, extremes: missed |
 | Table 2 A | trading statistics | pairs traded, round trips and months open within 10%; trigger 14% / 12% low for top 5 / 20 | 17 / 7 / 0 of 24 (20.5) | replicated |
-| Table 2 B | size and sector composition | 73.8% / 92.3% of top-20 stocks in the top 3 / 5 size deciles (74% / 91%); our top pairs mix sectors less | 28 / 2 / 10 of 40 (29.0) | replicated in substance |
-| Table 3 | sector portfolios | profitable and significant in all four sectors | 64 / 39 / 36 of 139 (83.5) | replicated in substance |
-| Figure 2 | monthly top-20 returns | annual sums correlate 0.75 with the digitised bars | unscored | similar path |
-| Figure 3 | cumulative top-20 return | committed capital ends at 11.6 (11.5); fully invested 72.1 against the figure's 39.7, though the paper's own Table 1 mean compounds to 72.5 | unscored | replicated; the paper's figure and table disagree |
-| Table 4 | systematic risk | alphas significant: t 5.9 / 8.6 / 10.8 / 9.8 (3.8 / 7.1 / 8.7 / 5.3); low R² for top 5 / 20 | 20 / 8 / 32 of 60 (24.0) | conclusion replicated; loadings missed |
-| Table 5 A | value at risk | quantiles close for top 5 / 20 | 7 / 5 / 8 of 20 (9.5) | partly |
-| Table 6 | true pairs against random pairs | random pairs lose 0.15-0.26% a month (0.00-0.18%); our true-minus-random gap is 0.99-1.24 times the paper's, positive in every replication | unscored: 0 / 12 / 36 of 48 | replicated in substance |
+| Table 2 B | size and sector composition | 73.8% / 92.3% of top-20 stocks in the top 3 / 5 size deciles (74% / 91%); mixed pairs differ by 1.74 deciles (0.97); our top pairs mix sectors less | 28 / 1 / 11 of 40 (28.5) | size mix replicated; decile gap not |
+| Table 3 | sector portfolios | profitable and significant in all four sectors | 58 / 44 / 37 of 139 (80.0) | replicated in substance |
+| Figure 2 | monthly top-20 returns | annual sums correlate 0.76 with the digitised bars | unscored | similar path |
+| Figure 3 | cumulative top-20 return | committed capital ends at 12.0 (11.5); fully invested 76.4 against the figure's 39.7, though the paper's own Table 1 mean compounds to 72.5 | unscored | replicated; the paper's figure and table disagree |
+| Table 4 | systematic risk | alphas significant: t 6.2 / 8.7 / 11.0 / 10.0 (3.8 / 7.1 / 8.7 / 5.3); low R² for top 5 / 20 | 16 / 11 / 33 of 60 (21.5) | conclusion replicated; loadings missed |
+| Table 5 A | value at risk | quantiles close for top 5 / 20 | 7 / 6 / 7 of 20 (10.0) | partly |
+| Table 6 | true pairs against random pairs | random pairs lose 0.12-0.25% a month (0.00-0.18%); our true-minus-random gap is 0.94-1.24 times the paper's, positive in every replication | unscored: 1 / 18 / 29 of 48 | replicated in substance |
 | Table 7 | long and short books | top block 23 / 7 / 2; the short book carries more alpha, but the top-20 long alpha is significant (t 2.17) | 23 / 7 / 2 of 32 (26.5) | not replicated as stated (claim 16) |
-| Table 8 | subperiods split at 1988 | top 20: 1.159% before (1.181%), 0.369% after (0.375%); alpha significant in both | 12 / 15 / 45 of 72 (19.5) | means replicated; loadings missed |
-| Figure 4 | common factor: top 20 against the 20 after the top 100 | residual correlation 0.28 (0.41); 0.33 before 1989 (0.42), 0.09 after (0.20) | 0 / 2 / 4 of 6 (1.0) | replicated in substance |
-| Table 9 A | top three size deciles only | 0.90 / 0.93 / 0.66 / 0.66% (0.84 / 0.91 / 0.73 / 0.69%), t 7.0-10.9 | unscored: 22 / 11 / 11 of 44 | replicated with numbers |
-| Table 9 B | short recalls on high-volume days | 0.80 / 1.09 / 0.93 / 1.13% (0.62 / 0.85 / 0.66 / 0.58%), lowest t 6.0 (5.4) | unscored | profits survive; the 4-13 bp cost does not replicate |
+| Table 8 | subperiods split at 1988 | top 20: 1.172% before (1.181%), 0.381% after (0.375%); alpha significant in both | 11 / 13 / 48 of 72 (17.5) | means replicated; loadings missed |
+| Figure 4 | common factor: top 20 against the 20 after the top 100 | residual correlation 0.28 (0.41); 0.33 before 1989 (0.42), 0.10 after (0.20) | 0 / 2 / 4 of 6 (1.0) | replicated in substance |
+| Table 9 A | top three size deciles only | 0.94 / 0.95 / 0.68 / 0.68% (0.84 / 0.91 / 0.73 / 0.69%), t 7.2-10.9 | unscored: 21 / 17 / 6 of 44 | replicated with numbers |
+| Table 9 B | short recalls on high-volume days | 0.82 / 1.10 / 0.94 / 1.15% (0.62 / 0.85 / 0.66 / 0.58%), lowest t 6.1 (5.4) | unscored | profits survive; the 4-13 bp cost does not replicate |
 
 Generated tables and figures: [`outputs/`](outputs/). The cell-by-cell comparison of every scored
 exhibit: [`REPLICATION_CHECK.md`](REPLICATION_CHECK.md). Reports for the unscored exhibits:

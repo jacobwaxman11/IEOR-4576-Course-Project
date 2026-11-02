@@ -39,8 +39,8 @@ ROW_ORDER = (
 )
 DECIMALS = {"mean": 5, "nw_se": 5, "std": 5, "serial_correlation": 2}
 #: The figures REPLICATION_CHECK.md prints for Table 4 (intercept, t-intercept).
-CHECK_INTERCEPT = {"top5": 0.708, "top20": 0.879, "101-120": 0.813, "all": 0.641}
-CHECK_T = {"top5": 5.93, "top20": 8.61, "101-120": 10.78, "all": 9.77}
+CHECK_INTERCEPT = {"top5": 0.739, "top20": 0.886, "101-120": 0.824, "all": 0.660}
+CHECK_T = {"top5": 6.19, "top20": 8.71, "101-120": 11.04, "all": 10.04}
 #: The paper's Table 7 intercept t-statistics, long and short, from the parsed
 #: targets (so they cannot drift from the PDF-checked values).
 _targets = paper.load()
@@ -242,9 +242,9 @@ def report(result: dict, command: str) -> str:
         "bill, so the regression's dependent variable is the book less French's RF; "
         "the four performance rows are raw.")
     add("3. **Which compounding.** The paper compounds each leg to a monthly return and "
-        "subtracts; our shipped portfolio series compounds the daily difference "
-        "instead. The books do not depend on the choice - only the pair mean does, by "
-        f"1-3 bp (largest gap here {gaps.max() * 1e4:.1f} bp).")
+        "subtracts, and so does our portfolio series since SCORE_LOG row 17, so the pair "
+        "mean equals long minus short "
+        f"(largest gap here {gaps.max() * 1e4:.1f} bp; REVIEW_NOTES section 54).")
     add("4. **Overlap weighting.** Equal weight over the cohorts covering the month, "
         "the driver's convention, so Table 7 and our Table 1/Table 8 are like for like.")
     add("5. **Significance.** \u201cInsignificantly different from zero\u201d read as "

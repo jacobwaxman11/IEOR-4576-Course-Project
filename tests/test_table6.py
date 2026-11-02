@@ -7,6 +7,7 @@ rank scatter, the portfolio and monthly aggregation, and the decile draw.
 """
 
 import importlib.util
+import json
 import sys
 from datetime import date
 from pathlib import Path
@@ -289,6 +290,9 @@ def test_control_rebuilds_a_shipped_cohort_exactly():
     cache = Path(t6.SHARED_CACHE)
     if not (cache / "cohorts" / "1963-07" / "monthly.parquet").exists():
         pytest.skip("shared cohort cache unavailable")
+    meta = cache / "cohorts" / "cache_meta.json"
+    if not meta.exists() or json.loads(meta.read_text()).get("monthly_aggregation") != "books":
+        pytest.skip("cohort cache predates book compounding (cache format 6); rebuild it to run this")
     for wait in (0, 1):
         row = t6.control_cohort(cache, 1963, 7, wait)
         assert row["max_diff_shipped"] == 0.0

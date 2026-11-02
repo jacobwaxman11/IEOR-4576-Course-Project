@@ -4,12 +4,12 @@ This is the one place that records the replication score: the current total, how
 counted, and every shipped change to it. Other documents point here instead of quoting the
 number, so there is one thing to update.
 
-Current shipped score: 267.5 of 481 cells
+Current shipped score: 261.0 of 481 cells
 
-Cells outside 25% of the paper (✗): 160 = Table 1 23, Table 2 Panel A 0, Table 2 Panel B 10,
-Table 3 36, Table 7 2, Table 4 32, Table 5 Panel A 8, Table 8 45, Figure 4 4. By mark: ✓ 214,
-~ 107, ✗ 160. On the earlier cell sets: Tables 1-3 187.0 of 291 (rows 1-13), Tables 1-3 and 7
-213.5 of 323 (row 14); the check prints both.
+Cells outside 25% of the paper (✗): 166 = Table 1 24, Table 2 Panel A 0, Table 2 Panel B 11,
+Table 3 37, Table 7 2, Table 4 33, Table 5 Panel A 7, Table 8 48, Figure 4 4. By mark: ✓ 207,
+~ 108, ✗ 166. On the earlier cell sets: Tables 1-3 184.5 of 291 (rows 1-13), Tables 1-3 and 7
+211.0 of 323 (row 14); the check prints both.
 
 ## How the score is counted
 
@@ -60,6 +60,7 @@ for Table 7, and from row 15 four more for Table 4 / Table 5 A / Table 8 / Figur
 | 14 | 2026-10-25 | #43 | 213.5 | 175 / 77 / 71 | 23 / 0 / 10 / 36 / 2 | Table 7 (long and short books) joins the scored set: 32 new cells, ✓ 23 / ~ 7 / ✗ 2, so the total rises 187.0 -> 213.5 and the rate 64.3% -> 66.1%. The cohort cache also stores each portfolio's two books (CACHE_FORMAT 5); the accumulation refactor leaves Tables 1-3 byte-identical (REVIEW_NOTES 35) |
 | 15 | 2026-10-27 | #47 | 266.5 | 213 / 107 / 161 | 23 / 0 / 10 / 36 / 2 / 33 / 8 / 45 / 4 | every table and figure the paper prints a number for, and that the cached series can reproduce, joins the scored set: Table 4 (Sharpe ratios, the five-factor regression, the Ibbotson-factor regression, the equity-premium column; 60 cells, 23.0), Table 5 Panel A (20, 9.5), Table 8 (subperiod moments and regressions; 72, 19.5) and Figure 4's six printed correlations (6, 1.0). The total rises 213.5 -> 266.5 and the rate falls 66.1% -> 55.4%: the 158 new cells score 33.5%, mostly because the paper's reversal factor cannot be rebuilt and the five-factor regressions inherit it; the Ibbotson regression, which has no reversal factor, scores 12.0 of 24 (REVIEW_NOTES 49). Tables 1-3 and 7 are byte-identical |
 | 16 | 2026-10-27 | #48 | 267.5 | 214 / 107 / 160 | 23 / 0 / 10 / 36 / 2 / 32 / 8 / 45 / 4 | Table 4's equity-premium column is French's Mkt-RF, the regressions' market factor, which Table 8 names the "U.S. equity risk-premium" and whose SDs it prints, instead of the S&P 500 less the 30-day bill: the serial-correlation cell moves 0.0002 -> 0.0465 against 0.05 (✗ -> ✓), the other three stay ✓ (REVIEW_NOTES 50). The intercepts' Newey-West t-statistics are printed beside the paper's, unscored. Every other cell is byte-identical |
+| 17 | 2026-11-02 | #61 | 261.0 | 207 / 108 / 166 | 24 / 0 / 11 / 37 / 2 / 33 / 7 / 48 / 4 | two readings the paper's own text requires: Tables 1 and 3 compound the long and the short book to monthly returns before subtracting (§2.3, p. 805; Table 1 Panel B equals Table 7 long minus short, pp. 807 and 821), and Table 2 Panel B's "average decile difference for mixed pairs" averages the mixed pairs only (§3.2 and Table 2, p. 809). Table 1 +1.5, Table 5 Panel A +0.5, Table 2 Panel B -0.5, Table 3 -3.5, Table 4 -2.5, Table 8 -2.0. CACHE_FORMAT 6. An independent implementation (public PR #8 at 5d137c3, `--specification legacy --monthly-aggregation books`) gives identical marks on every cell (REVIEW_NOTES 54) |
 
 Other merged PRs (#5, #6, #14, #18 to #21: notes, harness, ledger, tracker, the 1999 scorer; #41,
 Table 5 Panel A and Table 8 as unscored diagnostics) did not change the score. #9 and #17 are the merges that landed rows 3 and 7 on `main`; #22 landed the notes. #49 (the reversal-factor audit) adds an unscored section to the check and does not change the score.

@@ -75,8 +75,8 @@ from project.evaluation import (
     cohort_monthly,
     composition_stats,
     overlap_average,
-    portfolio_daily,
     portfolio_legs,
+    portfolio_monthly,
     restrict_to_size_deciles,
     summary_stats,
     trading_components,
@@ -491,7 +491,7 @@ def figures_dir(universe: str) -> Path:
     return base if universe == PRIMARY_UNIVERSE else base / universe
 
 
-CACHE_FORMAT = 5
+CACHE_FORMAT = 6
 T1_CAPITALS = ("committed", "employed", "committed_count", "employed_count", "employed_literal")
 
 
@@ -504,6 +504,8 @@ def _expected_meta(continued: bool) -> dict:
     return {
         "normalization": "continued" if continued else "rebased",
         "format": CACHE_FORMAT,
+        # Format 6: Tables 1 and 3 compound each book before subtracting (REVIEW_NOTES 54).
+        "monthly_aggregation": "books",
         **FORMATION_OPTIONS,
     }
 
@@ -760,7 +762,7 @@ def build_cohort(job: Job) -> tuple[int, int]:
         result.opened.rename("opened").to_frame().to_parquet(coh_dir / f"w{wait}_opened.parquet")
         for pname, ranks in PORTFOLIOS.items():
             for capital in T1_CAPITALS:
-                monthly = cohort_monthly(portfolio_daily(result, ranks, capital, job.short_weights))
+                monthly = portfolio_monthly(result, ranks, capital, job.short_weights)
                 rows += _monthly_rows("t1", "", wait, pname, capital, monthly)
             long_daily, short_daily = portfolio_legs(result, ranks, job.short_weights)
             for name, daily in zip(LEG_CAPITALS, (long_daily, short_daily)):
@@ -792,7 +794,7 @@ def build_cohort(job: Job) -> tuple[int, int]:
             if ranks is not None and len(sp) < max(ranks):
                 continue
             for capital in TABLE3_CAPITALS:
-                monthly = cohort_monthly(portfolio_daily(result, ranks, capital, job.short_weights))
+                monthly = portfolio_monthly(result, ranks, capital, job.short_weights)
                 rows += _monthly_rows("t3", sector, 1, pname, capital, monthly)
 
     pd.DataFrame(rows, columns=["table", "sector", "wait", "portfolio", "capital",
@@ -1258,12 +1260,12 @@ def write_comparison(
             "the paper's 'using CRSP breakpoints')",
             "on the last trading day of the formation window, 1 = largest. The",
             "`_allpanel` rows (table2_panelB.csv only) use breakpoints from every",
-            "panel row on that date. The paper's 'average decile difference for",
-            "mixed pairs' (0.97) is below 1, the least a mean of integer gaps",
-            "between mixed pairs can be, so its row here is the average over all",
-            "pairs, same-decile pairs counting 0 (SCORE_LOG.md row 6); the mean",
-            "over mixed pairs only is `avg_decile_diff_mixed_only`",
-            "(table2_panelB.csv only), 1.67 for the top 5 (REVIEW_NOTES section 34).",
+            "panel row on that date. 'Average decile difference for mixed pairs'",
+            "is the mean gap over pairs whose stocks sit in different deciles, as",
+            "the paper defines it (p. 809). Such a mean cannot be below 1, so the",
+            "printed 0.97 is a reported gap; the all-pairs average is",
+            "`avg_decile_diff_all_pairs` (table2_panelB.csv only; REVIEW_NOTES",
+            "sections 34 and 54).",
             "",
         ]
         stats = list(next(iter(PAPER_TABLE2B.values())).keys())
@@ -1709,9 +1711,9 @@ def write_replication_check(out_dir: Path, fig_dir: Path, universe: str,
         "and REVIEW_NOTES section 21 gives the evidence. The one-day wait skips a",
         "signal whose prices cross back on the intervening day; the paper states no",
         "such condition, and dropping it changes no mark (REVIEW_NOTES section 47).",
-        "Table 1 compounds the daily difference of the long and the short book,",
-        "while the paper's Table 1 = Table 7 identity implies compounding each book",
-        "first; that reading scores 184.0 of 291 (REVIEW_NOTES section 33).",
+        "Tables 1 and 3 compound the long and the short book to monthly returns",
+        "and then subtract, as the paper's own Table 1 = Table 7 identity requires",
+        "(pp. 807 and 821; REVIEW_NOTES sections 33 and 54).",
         *disclosure,
         "",
         "The paper's five-factor block rests on a reversal factor it does not name: its",

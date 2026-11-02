@@ -86,18 +86,18 @@ replication score). "Ours" averages each statistic over replications.
 
 | Panel | Block | Statistic | Top 5 | Top 20 | Top 100-120 | All 120 |
 |---|---|---|---|---|---|---|
-| A. No waiting | Fully invested | mean | -0.00233 / -0.00137 ✗ | -0.00246 / -0.00111 ✗ | -0.00252 / -0.00105 ✗ | -0.00248 / -0.00113 ✗ |
-| A. No waiting | Fully invested | std | 0.03477 / 0.05521 ✗ | 0.01828 / 0.02295 ~ | 0.01892 / 0.02264 ~ | 0.00833 / 0.01200 ✗ |
-| A. No waiting | Fully invested | median | -0.00291 / -0.00192 ✗ | -0.00247 / -0.00153 ✗ | -0.00264 / -0.00156 ✗ | -0.00234 / -0.00162 ✗ |
-| A. No waiting | Committed capital | mean | -0.00160 / -0.00083 ✗ | -0.00179 / -0.00077 ✗ | -0.00189 / -0.00089 ✗ | -0.00185 / -0.00091 ✗ |
-| A. No waiting | Committed capital | std | 0.02206 / 0.02635 ~ | 0.01141 / 0.01358 ~ | 0.01193 / 0.01443 ~ | 0.00548 / 0.00760 ✗ |
-| A. No waiting | Committed capital | median | -0.00182 / -0.00123 ✗ | -0.00176 / -0.00100 ✗ | -0.00192 / -0.00123 ✗ | -0.00175 / -0.00122 ✗ |
-| B. Wait one day | Fully invested | mean | -0.00223 / -0.00177 ✗ | -0.00238 / -0.00004 ✗ | -0.00256 / -0.00154 ✗ | -0.00253 / -0.00156 ✗ |
-| B. Wait one day | Fully invested | std | 0.03525 / 0.05966 ✗ | 0.01831 / 0.05310 ✗ | 0.01872 / 0.02404 ~ | 0.00830 / 0.01213 ✗ |
-| B. Wait one day | Fully invested | median | -0.00272 / -0.00241 ~ | -0.00245 / -0.00172 ✗ | -0.00273 / -0.00206 ✗ | -0.00237 / -0.00201 ~ |
-| B. Wait one day | Committed capital | mean | -0.00152 / -0.00103 ✗ | -0.00174 / -0.00094 ✗ | -0.00190 / -0.00112 ✗ | -0.00187 / -0.00112 ✗ |
-| B. Wait one day | Committed capital | std | 0.02236 / 0.02811 ~ | 0.01147 / 0.01363 ~ | 0.01181 / 0.01449 ~ | 0.00546 / 0.00761 ✗ |
-| B. Wait one day | Committed capital | median | -0.00184 / -0.00152 ~ | -0.00174 / -0.00118 ✗ | -0.00199 / -0.00148 ✗ | -0.00174 / -0.00139 ✗ |
+| A. No waiting | Fully invested | mean | -0.00159 / -0.00137 ~ | -0.00227 / -0.00111 ✗ | -0.00228 / -0.00105 ✗ | -0.00244 / -0.00113 ✗ |
+| A. No waiting | Fully invested | std | 0.03500 / 0.05521 ✗ | 0.01843 / 0.02295 ~ | 0.01915 / 0.02264 ~ | 0.00845 / 0.01200 ✗ |
+| A. No waiting | Fully invested | median | -0.00172 / -0.00192 ~ | -0.00215 / -0.00153 ✗ | -0.00229 / -0.00156 ✗ | -0.00230 / -0.00162 ✗ |
+| A. No waiting | Committed capital | mean | -0.00126 / -0.00083 ✗ | -0.00171 / -0.00077 ✗ | -0.00179 / -0.00089 ✗ | -0.00184 / -0.00091 ✗ |
+| A. No waiting | Committed capital | std | 0.02222 / 0.02635 ~ | 0.01147 / 0.01358 ~ | 0.01204 / 0.01443 ~ | 0.00554 / 0.00760 ✗ |
+| A. No waiting | Committed capital | median | -0.00131 / -0.00123 ✓ | -0.00163 / -0.00100 ✗ | -0.00179 / -0.00123 ✗ | -0.00174 / -0.00122 ✗ |
+| B. Wait one day | Fully invested | mean | -0.00145 / -0.00177 ~ | -0.00219 / -0.00004 ✗ | -0.00232 / -0.00154 ✗ | -0.00249 / -0.00156 ✗ |
+| B. Wait one day | Fully invested | std | 0.03503 / 0.05966 ✗ | 0.01851 / 0.05310 ✗ | 0.01895 / 0.02404 ~ | 0.00842 / 0.01213 ✗ |
+| B. Wait one day | Fully invested | median | -0.00151 / -0.00241 ✗ | -0.00213 / -0.00172 ~ | -0.00237 / -0.00206 ~ | -0.00234 / -0.00201 ~ |
+| B. Wait one day | Committed capital | mean | -0.00118 / -0.00103 ~ | -0.00166 / -0.00094 ✗ | -0.00179 / -0.00112 ✗ | -0.00186 / -0.00112 ✗ |
+| B. Wait one day | Committed capital | std | 0.02244 / 0.02811 ~ | 0.01158 / 0.01363 ~ | 0.01191 / 0.01449 ~ | 0.00552 / 0.00761 ✗ |
+| B. Wait one day | Committed capital | median | -0.00131 / -0.00152 ~ | -0.00160 / -0.00118 ✗ | -0.00185 / -0.00148 ✗ | -0.00173 / -0.00139 ~ |
 
 ## 5. Effect against our own baseline
 
@@ -110,65 +110,65 @@ paper's; Table 1 prints no column for the top 120 pairs, so that ratio is n/a.
 
 | Panel | Capital | Portfolio | ours true | ours random | ours diff | paper true | paper random | paper diff | ours / paper |
 |---|---|---|---|---|---|---|---|---|---|
-| A | employed | top5 | 1.257% | -0.233% | 1.490% | 1.308% | -0.137% | 1.445% | 1.03 |
-| A | employed | top20 | 1.383% | -0.246% | 1.629% | 1.436% | -0.111% | 1.547% | 1.05 |
-| A | employed | 101-120 | 0.957% | -0.252% | 1.209% | 1.081% | -0.105% | 1.186% | 1.02 |
-| A | employed | top120 | 1.237% | -0.248% | 1.484% | n/a | -0.113% | n/a | n/a |
-| A | committed | top5 | 0.741% | -0.160% | 0.901% | 0.784% | -0.083% | 0.867% | 1.04 |
-| A | committed | top20 | 0.803% | -0.179% | 0.983% | 0.805% | -0.077% | 0.882% | 1.11 |
-| A | committed | 101-120 | 0.593% | -0.189% | 0.782% | 0.679% | -0.089% | 0.768% | 1.02 |
-| A | committed | top120 | 0.739% | -0.185% | 0.924% | n/a | -0.091% | n/a | n/a |
-| B | employed | top5 | 0.691% | -0.223% | 0.914% | 0.745% | -0.177% | 0.922% | 0.99 |
-| B | employed | top20 | 0.879% | -0.238% | 1.117% | 0.895% | -0.004% | 0.899% | 1.24 |
-| B | employed | 101-120 | 0.749% | -0.256% | 1.004% | 0.795% | -0.154% | 0.949% | 1.06 |
-| B | employed | top120 | 0.896% | -0.253% | 1.149% | n/a | -0.156% | n/a | n/a |
-| B | committed | top5 | 0.416% | -0.152% | 0.568% | 0.463% | -0.103% | 0.566% | 1.00 |
-| B | committed | top20 | 0.514% | -0.174% | 0.688% | 0.520% | -0.094% | 0.614% | 1.12 |
-| B | committed | 101-120 | 0.461% | -0.190% | 0.650% | 0.503% | -0.112% | 0.615% | 1.06 |
-| B | committed | top120 | 0.537% | -0.187% | 0.724% | n/a | -0.112% | n/a | n/a |
+| A | employed | top5 | 1.273% | -0.159% | 1.432% | 1.308% | -0.137% | 1.445% | 0.99 |
+| A | employed | top20 | 1.387% | -0.227% | 1.614% | 1.436% | -0.111% | 1.547% | 1.04 |
+| A | employed | 101-120 | 0.968% | -0.228% | 1.197% | 1.081% | -0.105% | 1.186% | 1.01 |
+| A | employed | top120 | 1.238% | -0.244% | 1.483% | n/a | -0.113% | n/a | n/a |
+| A | committed | top5 | 0.751% | -0.126% | 0.877% | 0.784% | -0.083% | 0.867% | 1.01 |
+| A | committed | top20 | 0.807% | -0.171% | 0.979% | 0.805% | -0.077% | 0.882% | 1.11 |
+| A | committed | 101-120 | 0.597% | -0.179% | 0.776% | 0.679% | -0.089% | 0.768% | 1.01 |
+| A | committed | top120 | 0.740% | -0.184% | 0.924% | n/a | -0.091% | n/a | n/a |
+| B | employed | top5 | 0.723% | -0.145% | 0.869% | 0.745% | -0.177% | 0.922% | 0.94 |
+| B | employed | top20 | 0.891% | -0.219% | 1.111% | 0.895% | -0.004% | 0.899% | 1.24 |
+| B | employed | 101-120 | 0.764% | -0.232% | 0.996% | 0.795% | -0.154% | 0.949% | 1.05 |
+| B | employed | top120 | 0.902% | -0.249% | 1.151% | n/a | -0.156% | n/a | n/a |
+| B | committed | top5 | 0.430% | -0.118% | 0.548% | 0.463% | -0.103% | 0.566% | 0.97 |
+| B | committed | top20 | 0.521% | -0.166% | 0.687% | 0.520% | -0.094% | 0.614% | 1.12 |
+| B | committed | 101-120 | 0.467% | -0.179% | 0.646% | 0.503% | -0.112% | 0.615% | 1.05 |
+| B | committed | top120 | 0.540% | -0.186% | 0.726% | n/a | -0.112% | n/a | n/a |
 
 Standard deviations, random against true: the paper's claim is that the random
 pairs are much noisier ("poorly matched").
 
 | Panel | Capital | Portfolio | true SD | random SD | random / true |
 |---|---|---|---|---|---|
-| A | employed | top5 | 2.369% | 3.477% | 1.47 |
-| A | employed | top20 | 1.697% | 1.828% | 1.08 |
-| A | employed | 101-120 | 1.528% | 1.892% | 1.24 |
-| A | employed | top120 | 1.214% | 0.833% | 0.69 |
-| A | committed | top5 | 1.491% | 2.206% | 1.48 |
-| A | committed | top20 | 1.063% | 1.141% | 1.07 |
-| A | committed | 101-120 | 1.031% | 1.193% | 1.16 |
-| A | committed | top120 | 0.802% | 0.548% | 0.68 |
-| B | employed | top5 | 2.039% | 3.525% | 1.73 |
-| B | employed | top20 | 1.481% | 1.831% | 1.24 |
-| B | employed | 101-120 | 1.440% | 1.872% | 1.30 |
-| B | employed | top120 | 1.077% | 0.830% | 0.77 |
-| B | committed | top5 | 1.316% | 2.236% | 1.70 |
-| B | committed | top20 | 0.938% | 1.147% | 1.22 |
-| B | committed | 101-120 | 0.970% | 1.181% | 1.22 |
-| B | committed | top120 | 0.710% | 0.546% | 0.77 |
+| A | employed | top5 | 2.312% | 3.500% | 1.51 |
+| A | employed | top20 | 1.670% | 1.843% | 1.10 |
+| A | employed | 101-120 | 1.522% | 1.915% | 1.26 |
+| A | employed | top120 | 1.206% | 0.845% | 0.70 |
+| A | committed | top5 | 1.476% | 2.222% | 1.51 |
+| A | committed | top20 | 1.053% | 1.147% | 1.09 |
+| A | committed | 101-120 | 1.028% | 1.204% | 1.17 |
+| A | committed | top120 | 0.796% | 0.554% | 0.70 |
+| B | employed | top5 | 2.019% | 3.503% | 1.74 |
+| B | employed | top20 | 1.474% | 1.851% | 1.26 |
+| B | employed | 101-120 | 1.455% | 1.895% | 1.30 |
+| B | employed | top120 | 1.088% | 0.842% | 0.77 |
+| B | committed | top5 | 1.309% | 2.244% | 1.71 |
+| B | committed | top20 | 0.936% | 1.158% | 1.24 |
+| B | committed | 101-120 | 0.979% | 1.191% | 1.22 |
+| B | committed | top120 | 0.715% | 0.552% | 0.77 |
 
 True minus random, replication by replication:
 
 | Panel | Capital | Portfolio | mean(true - random) | t (mean) | t (worst rep) | reps with a positive mean | reps with t > 2 |
 |---|---|---|---|---|---|---|---|
-| A | employed | top5 | 1.490% | 6.94 | 4.30 | 100% | 100.0% |
-| A | employed | top20 | 1.629% | 11.03 | 8.76 | 100% | 100.0% |
-| A | employed | 101-120 | 1.209% | 10.21 | 7.71 | 100% | 100.0% |
-| A | employed | top120 | 1.484% | 16.64 | 15.23 | 100% | 100.0% |
-| A | committed | top5 | 0.901% | 6.70 | 4.16 | 100% | 100.0% |
-| A | committed | top20 | 0.983% | 11.25 | 9.31 | 100% | 100.0% |
-| A | committed | 101-120 | 0.782% | 10.33 | 7.38 | 100% | 100.0% |
-| A | committed | top120 | 0.924% | 16.19 | 14.69 | 100% | 100.0% |
-| B | employed | top5 | 0.914% | 4.79 | 2.32 | 100% | 100.0% |
-| B | employed | top20 | 1.117% | 9.01 | 5.62 | 100% | 100.0% |
-| B | employed | 101-120 | 1.004% | 9.09 | 6.34 | 100% | 100.0% |
-| B | employed | top120 | 1.149% | 14.83 | 12.75 | 100% | 100.0% |
-| B | committed | top5 | 0.568% | 4.65 | 1.88 | 100% | 99.5% |
-| B | committed | top20 | 0.688% | 9.08 | 6.06 | 100% | 100.0% |
-| B | committed | 101-120 | 0.650% | 9.17 | 6.43 | 100% | 100.0% |
-| B | committed | top120 | 0.724% | 14.53 | 12.57 | 100% | 100.0% |
+| A | employed | top5 | 1.432% | 6.66 | 3.79 | 100% | 100.0% |
+| A | employed | top20 | 1.614% | 11.04 | 8.62 | 100% | 100.0% |
+| A | employed | 101-120 | 1.197% | 10.11 | 7.54 | 100% | 100.0% |
+| A | employed | top120 | 1.483% | 16.83 | 15.33 | 100% | 100.0% |
+| A | committed | top5 | 0.877% | 6.49 | 3.90 | 100% | 100.0% |
+| A | committed | top20 | 0.979% | 11.24 | 9.28 | 100% | 100.0% |
+| A | committed | 101-120 | 0.776% | 10.27 | 7.31 | 100% | 100.0% |
+| A | committed | top120 | 0.924% | 16.34 | 14.91 | 100% | 100.0% |
+| B | employed | top5 | 0.869% | 4.55 | 2.14 | 100% | 100.0% |
+| B | employed | top20 | 1.111% | 8.94 | 5.69 | 100% | 100.0% |
+| B | employed | 101-120 | 0.996% | 8.91 | 6.13 | 100% | 100.0% |
+| B | employed | top120 | 1.151% | 14.84 | 12.65 | 100% | 100.0% |
+| B | committed | top5 | 0.548% | 4.47 | 1.87 | 100% | 99.5% |
+| B | committed | top20 | 0.687% | 9.03 | 6.14 | 100% | 100.0% |
+| B | committed | 101-120 | 0.646% | 9.03 | 6.32 | 100% | 100.0% |
+| B | committed | top120 | 0.726% | 14.55 | 12.51 | 100% | 100.0% |
 
 ## 6. Verdict
 
@@ -183,7 +183,7 @@ True minus random, replication by replication:
 
 **Verdict: replicated in substance.**
 
-Cells within 10% of the paper: 0 of 48 (0%). Within 25%: 25%.
+Cells within 10% of the paper: 1 of 48 (2%). Within 25%: 40%.
 
 The standard-deviation criterion is the one that does not hold in every column: in the top-120 column the random pairs are quieter than the true pairs, while in the top-5, top-20 and top-100-120 columns they are noisier, as the paper describes. The mean, the negative random-pair level and the true-minus-random difference behave as the paper says in all sixteen series.
 

@@ -1,9 +1,11 @@
 # Table 9 Panel A: pairs formed only from the top three size deciles
 
-**Verdict: replicated with numbers.** All four mean returns are within 10% of the paper, 33 of the
-44 cells are within 25%, and every portfolio stays highly significant (t 7.0 to 10.9 against the
-paper's 7.5 to 10.9). The screen moves our means by +21 / +5 / -9 / +6 bp against the paper's
-+9 / +2 / -7 / -3 bp: the same small size, and the same sign in three of the four portfolios.
+**Verdict: replicated with numbers.** Three of the four mean returns are within 10% of the paper
+(the top 5 is 12% high), 38 of the 44 cells are within 25%, and every portfolio stays highly
+significant (t 7.2 to 10.9 against the paper's 7.5 to 10.9). The screen moves our means by
++21 / +5 / -9 / +5 bp against the paper's +9 / +2 / -7 / -3 bp: the same small size, and the same
+sign in three of the four portfolios. Numbers are from the SCORE_LOG row 17 build (each book
+compounded before subtracting; REVIEW_NOTES section 54).
 The cells are unscored; `REPLICATION_CHECK.md` and the score are untouched.
 
 ## The paper
@@ -60,8 +62,9 @@ stocks and 590 pairs per cohort, against 2,300 stocks and 2,000 pairs in the shi
 
 ## Control run
 
-With the option off, a forced rebuild of all 474 cohorts into a private cache is the shipped cache
-byte for byte:
+The baseline is the full format-6 rebuild that produced `REPLICATION_CHECK.md` (SCORE_LOG row 17).
+When the option was added (format 5), a forced rebuild with the option off reproduced the shipped
+cache byte for byte:
 
 ```
 $ diff -rq .private/t9a/ctl/cohorts <shared>/data/processed/replication/vol_common/cohorts | wc -l
@@ -86,21 +89,19 @@ Ours first, the paper's in brackets; ✓ within 10%, ~ within 25%, ✗ beyond.
 
 | Row | Top 5 | Top 20 | 20 after top 100 | All |
 |---|---|---|---|---|
-| Mean monthly return (fully invested) | 0.898% (0.835%) ✓ | 0.929% (0.914%) ✓ | 0.659% (0.728%) ✓ | 0.662% (0.690%) ✓ |
-| Standard error (Newey-West) | 0.129% (0.112%) ~ | 0.111% (0.096%) ~ | 0.075% (0.075%) ✓ | 0.061% (0.064%) ✓ |
-| t-Statistic | 6.98 (7.47) ✓ | 8.40 (9.48) ~ | 8.77 (9.66) ✓ | 10.88 (10.85) ✓ |
-| Median | 0.636% (0.800%) ~ | 0.831% (0.793%) ✓ | 0.564% (0.614%) ✓ | 0.553% (0.508%) ✓ |
-| Standard deviation | 2.125% (1.904%) ~ | 1.616% (1.464%) ~ | 1.540% (1.579%) ✓ | 1.240% (1.294%) ✓ |
-| Kurtosis (printed as "Skewness") | 9.31 (7.01) ✗ | 9.21 (8.20) ~ | 4.67 (6.46) ✗ | 6.70 (11.67) ✗ |
-| Skewness (printed as "Kurtosis") | -0.22 (0.02) ✗ | 0.14 (0.98) ✗ | 0.38 (0.80) ✗ | 1.12 (1.77) ✗ |
-| Minimum | -14.412% (-10.894%) ✗ | -9.634% (-5.646%) ✗ | -4.651% (-3.803%) ~ | -2.978% (-2.680%) ~ |
-| Maximum | 9.241% (10.144%) ✓ | 9.781% (10.003%) ✓ | 7.330% (10.642%) ✗ | 7.229% (10.478%) ✗ |
-| Observations with excess return < 0 | 33% (32%) ✓ | 25% (26%) ✓ | 35% (33%) ✓ | 30% (27%) ~ |
-| Mean excess return on committed capital | 0.539% (0.493%) ✓ | 0.523% (0.514%) ✓ | 0.386% (0.462%) ~ | 0.377% (0.401%) ✓ |
+| Mean monthly return (fully invested) | 0.935% (0.835%) ~ | 0.945% (0.914%) ✓ | 0.675% (0.728%) ✓ | 0.677% (0.690%) ✓ |
+| Standard error (Newey-West) | 0.130% (0.112%) ~ | 0.111% (0.096%) ~ | 0.076% (0.075%) ✓ | 0.062% (0.064%) ✓ |
+| t-Statistic | 7.21 (7.47) ✓ | 8.51 (9.48) ~ | 8.88 (9.66) ✓ | 10.94 (10.85) ✓ |
+| Median | 0.695% (0.800%) ~ | 0.836% (0.793%) ✓ | 0.563% (0.614%) ✓ | 0.567% (0.508%) ~ |
+| Standard deviation | 2.107% (1.904%) ~ | 1.613% (1.464%) ~ | 1.560% (1.579%) ✓ | 1.262% (1.294%) ✓ |
+| Kurtosis (printed as "Skewness") | 7.60 (7.01) ✓ | 8.31 (8.20) ✓ | 4.91 (6.46) ~ | 7.55 (11.67) ✗ |
+| Skewness (printed as "Kurtosis") | 0.01 (0.02) ✗ | 0.34 (0.98) ✗ | 0.45 (0.80) ✗ | 1.27 (1.77) ✗ |
+| Minimum | -12.727% (-10.894%) ~ | -8.704% (-5.646%) ✗ | -4.573% (-3.803%) ~ | -2.955% (-2.680%) ~ |
+| Maximum | 9.469% (10.144%) ✓ | 9.802% (10.003%) ✓ | 8.126% (10.642%) ~ | 8.087% (10.478%) ~ |
+| Observations with excess return < 0 | 31% (32%) ✓ | 24% (26%) ✓ | 34% (33%) ✓ | 30% (27%) ~ |
+| Mean excess return on committed capital | 0.556% (0.493%) ~ | 0.531% (0.514%) ✓ | 0.394% (0.462%) ~ | 0.384% (0.401%) ✓ |
 
-22 ✓, 11 ~, 11 ✗ of 44. The misses are the higher moments and the extremes, as in Tables 1 and 3.
-The top-5 and top-20 minima are both April 1974 (-14.4% and -9.6%); the 20 after the top 100 bottom
-out in June 1970 and all pairs in September 2000.
+21 ✓, 17 ~, 6 ✗ of 44. The misses are the higher moments and the extremes, as in Tables 1 and 3.
 
 ## The effect against our own baseline
 
@@ -109,26 +110,26 @@ Table 1 Panel B. t-statistics: screened (baseline).
 
 | Portfolio | Our mean change | Paper mean change | Our t | Paper t |
 |---|---|---|---|---|
-| Top 5 | +20.7 bp | +9.0 bp | 6.98 (6.22) | 7.47 (6.26) |
-| Top 20 | +5.1 bp | +1.9 bp | 8.40 (9.15) | 9.48 (9.29) |
-| 20 after top 100 | -8.9 bp | -6.7 bp | 8.77 (9.77) | 9.66 (9.40) |
-| All | +5.9 bp | -2.5 bp | 10.88 (6.95) | 10.85 (7.92) |
+| Top 5 | +21.2 bp | +9.0 bp | 7.21 (6.45) | 7.47 (6.26) |
+| Top 20 | +5.3 bp | +1.9 bp | 8.51 (9.28) | 9.48 (9.29) |
+| 20 after top 100 | -9.0 bp | -6.7 bp | 8.88 (9.85) | 9.66 (9.40) |
+| All | +4.8 bp | -2.5 bp | 10.94 (7.00) | 10.85 (7.92) |
 
 The claim test: the change is small (a few basis points against means of 60-90 bp) in both, it is
 largest and positive for the top 5 in both, negative for the 20 after the top 100 in both, and the
-"All" portfolio's t-statistic rises sharply in both (6.95 to 10.88 here, 7.92 to 10.85 in the
-paper). The one sign that differs is "All", where both changes are within 6 bp of zero.
+"All" portfolio's t-statistic rises sharply in both (7.00 to 10.94 here, 7.92 to 10.85 in the
+paper). The one sign that differs is "All", where both changes are within 5 bp of zero.
 
 ## Verdict
 
-- **Replicated with numbers** under the run's standard: the claim's key cells, the four mean
-  returns, are within 10% (ours 0.898 / 0.929 / 0.659 / 0.662% against 0.835 / 0.914 / 0.728 /
-  0.690%), and 33 of 44 cells are within 25%.
+- **Replicated with numbers** under the run's standard: three of the four mean returns are within
+  10% and the top 5 within 25% (ours 0.935 / 0.945 / 0.675 / 0.677% against 0.835 / 0.914 / 0.728 /
+  0.690%), and 38 of 44 cells are within 25%.
 - **Replicated in substance** as well: every t-statistic is above 2 where the paper's is (lowest
-  6.98), and our change against our own Table 1 Panel B has the paper's size and, in three of four
+  7.21), and our change against our own Table 1 Panel B has the paper's size and, in three of four
   portfolios, its sign.
 - The paper's sentence that the top 20 "drop by about 2 bp" disagrees with its own tables (+1.9 bp);
-  ours rise by 5.1 bp.
+  ours rise by 5.3 bp.
 
 ## Limitations
 
@@ -146,6 +147,6 @@ repository's virtual environment active:
 python scripts/03_replicate.py --steps tables --force --cache-root .private/t9a/ctl --out-root .private/t9a/ctlout --workers 8 && python scripts/03_replicate.py --steps tables --force --size-deciles-top 3 --cache-root .private/t9a/top3 --out-root .private/t9a/top3out --workers 8 && python scripts/claims/table9a.py --screened .private/t9a/top3out --baseline .private/t9a/ctlout
 ```
 
-Runtime with 8 workers: about 430 s for the control build, 133 s for the screened build, seconds
+Runtime with 10 workers: about 50 s for the control build, 40 s for the screened build, seconds
 for the report. Paper targets: `python scripts/claims/table9a.py --from-pdf <paper PDF>` parses
 `scripts/claims/table9a_paper.json` (Table 9 Panel A and Table 1 Panel B) from `pdftotext -layout`.

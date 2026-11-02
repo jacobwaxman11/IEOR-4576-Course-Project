@@ -1,7 +1,7 @@
 # Replication outputs
 
 Generated files, committed so they can be read without the licensed CRSP data. `results/` is
-git-ignored, so these are copies of one run over the full 474-cohort cache (score 267.5).
+git-ignored, so these are copies of one run over the full 474-cohort cache (score 261.0).
 
 | file | what it is | written by |
 |---|---|---|
