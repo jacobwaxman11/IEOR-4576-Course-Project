@@ -17,7 +17,7 @@
 
 export PATH := $(CURDIR)/.venv/bin:$(PATH)
 
-.PHONY: all replicate test conformance-full build build-data benchmark edition-1999 verify-targets
+.PHONY: all replicate test conformance-full validate-fidelity build build-data benchmark edition-1999 verify-targets
 
 all: build-data replicate
 
@@ -30,6 +30,9 @@ test:
 conformance-full:
 	REPLICATION_FULL=1 REPLICATION_WORKERS=$${REPLICATION_WORKERS:-4} python -m pytest -q -m conformance_full tests/test_replication_conformance.py
 
+validate-fidelity:
+	python scripts/validate_fidelity.py --workers $${REPLICATION_WORKERS:-1}
+
 build:
 	python scripts/02_build_dataset.py
 
@@ -38,7 +41,7 @@ build-data:
 	python scripts/02_build_dataset.py
 
 benchmark:
-	python scripts/03_replicate.py --universe vol_common --aggregate-only --steps tables,table3,check
+	python scripts/03_replicate.py --specification paper --aggregate-only --steps tables,table3,check
 	python scripts/replication_score.py
 
 edition-1999:

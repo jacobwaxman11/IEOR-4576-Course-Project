@@ -77,9 +77,9 @@ from project.features import normalized_prices
 from project.models import simulate_cohort
 from project.paths import ROOT
 from project.specification import validate_paper_cache, stamp_experiment
-from project.recalls import high_volume_days, volume_thresholds
+from project.recalls import adjusted_volume, high_volume_days, volume_thresholds
 
-PRIMARY_UNIVERSE = "vol_common"
+PRIMARY_UNIVERSE = "traded_common"
 WAIT = 1
 #: The cache stamp the shared cohort cache was built with (cache_meta.json).
 SHORT_WEIGHTS = "value"
@@ -211,13 +211,14 @@ class VolumeSource:
         files = [
             self.raw_dir / f"{year}.parquet"
             for year in range(start.year, end.year + 1)
-            if (self.raw_dir / f"{year}.parquet").exists()
         ]
+        missing = [str(path) for path in files if not path.exists()]
+        if missing:
+            raise FileNotFoundError("Table 9B requires split-adjusted volume inputs; missing "
+                                    + ", ".join(missing))
         empty = pd.DataFrame({"permno": pd.Series(dtype="int64"),
                               "date": pd.Series(dtype="datetime64[ns]"),
                               "adjvol": pd.Series(dtype="float64")})
-        if not files:
-            return empty
         wanted = sorted({int(p) for p in permnos})
         dataset = ds.dataset(files, format="parquet")
         flt = (
@@ -229,8 +230,7 @@ class VolumeSource:
         frame = table.to_pandas()
         if frame.empty:
             return empty
-        factor = frame["dlycumfacshr"].astype("float64").fillna(1.0)
-        frame["adjvol"] = frame["dlyvol"].astype("float64") * factor
+        frame["adjvol"] = adjusted_volume(frame["dlyvol"], frame["dlycumfacshr"])
         frame["date"] = pd.to_datetime(frame["dlycaldt"])
         return frame.loc[:, ["permno", "date", "adjvol"]]
 
@@ -475,7 +475,7 @@ def strategy_series(frame: pd.DataFrame, end_ts: pd.Timestamp) -> pd.Series:
         for cohort, group in frame.groupby("cohort", sort=True)
     }
     series = overlap_average(months)
-    return series[series.index <= end_ts]
+    return series[(series.index >= pd.Timestamp("1963-07-01")) & (series.index <= end_ts)]
 
 
 def panel_stats(
@@ -1100,9 +1100,10 @@ def config_from_args(args) -> Config:
 
 
 def add_common(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--report-dir", default=None, help="directory for generated report and tables")
     parser.add_argument("--cache-root", default=None,
-                        help="directory holding the shipped cohort cache (.../vol_common; "
-                             "default data/processed/replication/vol_common)")
+                        help="directory holding the shipped cohort cache (.../traded_common; "
+                             "default data/processed/replication/traded_common)")
     parser.add_argument("--out-root", default=None,
                         help="where this run writes its per-cohort cache "
                              "(default .private/table9b-recalls)")
@@ -1125,11 +1126,11 @@ def main(argv: list[str] | None = None) -> int:
     run_parser = sub.add_parser("run", help="build every cohort and write the report")
     add_common(run_parser)
     run_parser.add_argument("--workers", type=int, default=8, help="cohort subprocesses")
-    run_parser.add_argument("--start", default="1963-07", help="first cohort month YYYY-MM")
+    run_parser.add_argument("--start", default="1963-02", help="first cohort month YYYY-MM")
 
     table_parser = sub.add_parser("table", help="rebuild the tables from a finished cohort cache")
     add_common(table_parser)
-    table_parser.add_argument("--start", default="1963-07")
+    table_parser.add_argument("--start", default="1963-02")
     table_parser.add_argument("--workers", type=int, default=8)
 
     check_parser = sub.add_parser("handcheck", help="print one recall close with its volume")
@@ -1141,6 +1142,10 @@ def main(argv: list[str] | None = None) -> int:
     shard_parser.add_argument("path")
 
     args = parser.parse_args(argv)
+    global REPORT_DIR
+    if getattr(args, "report_dir", None):
+        REPORT_DIR = Path(args.report_dir).resolve()
+        REPORT_DIR.mkdir(parents=True, exist_ok=True)
     if args.command == "shard":
         return build_shard(Path(args.path))
 

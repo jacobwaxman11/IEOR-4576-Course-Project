@@ -6,10 +6,12 @@ short weights and daily-spread compounding are not buy-and-hold accounting.
 
 PROFILES = {
     "paper": {
+        "universe": "traded_common", "delayed_entry": "execute", "idle_policy": "zero",
         "same_issuer": "allow", "max_stale_share": None, "exclude_constant": False,
         "trigger_sigma": "std", "short_weights": "value", "monthly_aggregation": "books", "sic_fallback": "formation_end",
     },
     "legacy": {
+        "universe": "vol_common", "delayed_entry": "cancel", "idle_policy": "exclude",
         "same_issuer": "exclude", "max_stale_share": 0.95, "exclude_constant": True,
         "trigger_sigma": "rms", "short_weights": "position",
         "monthly_aggregation": "daily_difference", "sic_fallback": "legacy",
@@ -25,11 +27,12 @@ def resolve_profile(args):
     return args
 
 
-def validate_paper_cache(meta: dict) -> None:
+def validate_paper_cache(meta: dict, *, size_deciles_top=None) -> None:
     """Claim experiments must not silently mix old selections or return conventions."""
     expected = {
-        "format": 6, "normalization": "continued", "telephone_sic": "4811",
-        "size_deciles_top": None, "exclude_same_issuer": False, "max_stale_share": None,
+        "format": 7, "normalization": "continued", "telephone_sic": "4811",
+        "universe": "traded_common", "delayed_entry": "execute", "idle_policy": "zero",
+        "size_deciles_top": size_deciles_top, "exclude_same_issuer": False, "max_stale_share": None,
         "exclude_constant": False, "trigger_sigma": "std", "short_weights": "value",
         "monthly_aggregation": "books", "sic_fallback": "formation_end",
     }

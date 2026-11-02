@@ -221,6 +221,7 @@ def _variant_panel(tmp_path, monkeypatch) -> None:
 
 
 EXPECTED = {
+    "traded_common": [100, 800],
     "vol_common": [100, 200, 800],
     "volpos_common": [100, 800],
     "price_common": [100, 600, 800],

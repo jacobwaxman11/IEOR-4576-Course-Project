@@ -1,5 +1,10 @@
 # Replication corrections audit
 
+> **Historical stage:** numerical results below precede the liquidity, execution, idle-cash,
+> and warmup validation. See [FIDELITY_VALIDATION.md](FIDELITY_VALIDATION.md) for current
+> results and remaining gaps. Earlier cache formats and commands are historical; the
+> stage-one accounting experiment is retained at commit `846a777`.
+
 This audit replaces the methodological and reporting claims attached to the run
 shipped at `6644cbf4461f22b21a1a69d3e4e0a7052eefbb17`. It distinguishes correct
 implementation from agreement with published estimates. A higher target-match

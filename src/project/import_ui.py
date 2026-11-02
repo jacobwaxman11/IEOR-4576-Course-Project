@@ -132,3 +132,44 @@ def import_calendar(source: Path, output: Path) -> None:
         "source_file": source.name, "source_sha256": file_sha256(source),
         "rows": len(frame), "date_source": "CRSP daily indexes",
     }, indent=2) + "\n")
+
+
+def import_monthly_csv(source: Path, output: Path, first_year=1962, last_year=2002) -> dict:
+    """Import the monthly-return bootstrap input without choosing among conflicting rows."""
+    source, output = Path(source), Path(output)
+    if output.exists():
+        raise FileExistsError(output)
+    if first_year > last_year:
+        raise ValueError("first_year must not exceed last_year")
+    columns = ["permno", "mthcaldt", "mthret"]
+    parts = []
+    source_rows = 0
+    for block in pd.read_csv(source, usecols=lambda c: c.lower() in columns,
+                             chunksize=500_000):
+        source_rows += len(block)
+        block.columns = block.columns.str.lower()
+        block["mthcaldt"] = pd.to_datetime(block["mthcaldt"], errors="raise")
+        if block[["permno", "mthcaldt"]].isna().any().any():
+            raise ValueError("Monthly security keys cannot be missing")
+        parts.append(block[block.mthcaldt.dt.year.between(first_year, last_year)])
+    frame = pd.concat(parts, ignore_index=True)
+    selected_rows = len(frame)
+    frame = frame.drop_duplicates(columns)
+    if frame.duplicated(["permno", "mthcaldt"]).any():
+        raise ValueError("Conflicting monthly observations; refusing to choose a row")
+    if set(frame.mthcaldt.dt.year) != set(range(first_year, last_year + 1)):
+        raise ValueError("Missing requested monthly years")
+    frame = frame.sort_values(["permno", "mthcaldt"]).reset_index(drop=True)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="monthly-import-", dir=output.parent) as tmp:
+        staged = Path(tmp) / "monthly.parquet"
+        frame.to_parquet(staged, index=False, compression="zstd")
+        audit = {"source_file": source.name, "source_sha256": file_sha256(source),
+                 "requested_years": [first_year, last_year], "source_rows": source_rows,
+                 "selected_rows": selected_rows, "rows": len(frame),
+                 "identical_duplicates_removed": selected_rows - len(frame),
+                 "return_convention": "CIZ mthret; delisting already included",
+                 "output_sha256": file_sha256(staged)}
+        staged.replace(output)
+    output.with_suffix(".source.json").write_text(json.dumps(audit, indent=2) + "\n")
+    return audit

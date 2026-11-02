@@ -151,6 +151,7 @@ _RAW_COLUMNS = [
 ]
 
 UNIVERSES: dict[str, tuple[str, str]] = {
+    "traded_common": ("observed_trade", "common"),
     "vol_common": ("vol_nonzero", "common"),
     "volpos_common": ("vol_pos", "common"),
     "vol_ns": ("vol_nonzero", "ns"),
@@ -158,6 +159,9 @@ UNIVERSES: dict[str, tuple[str, str]] = {
 }
 
 _DAY_RULES = {
+    # Positive CIZ prices can be bid/ask averages. Require the actual trade
+    # flag, reject recorded zero volume, and never impute a formation return.
+    "observed_trade": lambda p: p["tr"] & ~p["vol_zero"] & np.isfinite(p["ret"]),
     "tr": lambda p: p["tr"],
     "vol_nonzero": lambda p: p["prc_ok"] & ~p["vol_zero"],
     "vol_pos": lambda p: p["prc_ok"] & p["vol_pos"],
@@ -182,6 +186,7 @@ def _universe_panel_columns(universe: str) -> list[str]:
     """The processed columns needed to evaluate ``universe`` row flags."""
     day_rule, share_filter = UNIVERSES[universe]
     day_cols = {
+        "observed_trade": ["tr", "vol_zero", "ret"],
         "tr": ["tr"],
         "vol_nonzero": ["prc_ok", "vol_zero"],
         "vol_pos": ["prc_ok", "vol_pos"],

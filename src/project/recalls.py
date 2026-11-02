@@ -15,6 +15,7 @@ nothing here is on the default path of the replication.
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 #: The paper's rule is "more than one standard deviation" above the mean.
@@ -24,13 +25,15 @@ SD_MULTIPLE = 1.0
 def adjusted_volume(volume: pd.Series, factor: pd.Series) -> pd.Series:
     """Split-adjusted daily volume, ``dlyvol * dlycumfacshr`` (paper: "both split-adjusted").
 
-    ``volume`` and ``factor`` must share an index. A missing factor is treated as
-    "no split" (1.0); a missing volume stays NaN, which is not a recorded volume
-    and so never becomes a high-volume day. Volumes are compared with an average
+    ``volume`` and ``factor`` must share an index. An observed volume needs a
+    finite positive adjustment factor; unknown adjustments cannot be silently
+    treated as no split. Missing volume stays NaN. Volumes are compared with an average
     computed from the same adjusted series, so the basis they share cancels.
     """
     vol = pd.Series(volume, dtype="float64")
-    fac = pd.Series(factor, dtype="float64").reindex(vol.index).fillna(1.0)
+    fac = pd.Series(factor, dtype="float64").reindex(vol.index)
+    if (vol.notna() & (~np.isfinite(fac) | fac.le(0))).any():
+        raise ValueError("Observed volume requires a finite positive share-adjustment factor")
     return vol * fac
 
 

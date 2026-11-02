@@ -29,6 +29,12 @@ from project.recalls import adjusted_volume, high_volume_days, volume_thresholds
 DATES = pd.date_range("2020-01-01", periods=12, freq="B")
 
 
+def test_missing_volume_inputs_cannot_report_zero_recalls(tmp_path):
+    from table9b_recalls import VolumeSource
+    with pytest.raises(FileNotFoundError, match="split-adjusted volume"):
+        VolumeSource(tmp_path).window([1], DATES[0].date(), DATES[-1].date())
+
+
 def one_pair(sigma: float = 0.01) -> pd.DataFrame:
     """A single pair {1, 2} with the given formation sigma."""
     return pd.DataFrame(
@@ -61,11 +67,14 @@ DIVERGING = [1.0, 1.0, 1.0, 1.03, 1.03, 1.03, 1.03, 1.03, 1.03, 1.03, 1.03, 1.03
 
 def test_adjusted_volume_scales_and_keeps_nan():
     vol = pd.Series([100.0, np.nan, 300.0])
-    fac = pd.Series([2.0, 2.0, np.nan])
+    fac = pd.Series([2.0, np.nan, 1.0])
     got = adjusted_volume(vol, fac)
     assert got.iloc[0] == 200.0
     assert np.isnan(got.iloc[1])
     assert got.iloc[2] == 300.0
+    for bad in (np.nan, 0.0, np.inf, -1.0):
+        with pytest.raises(ValueError, match="share-adjustment factor"):
+            adjusted_volume(pd.Series([300.0]), pd.Series([bad]))
 
 
 def test_threshold_is_mean_plus_population_sd():

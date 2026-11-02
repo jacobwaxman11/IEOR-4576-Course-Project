@@ -240,12 +240,11 @@ def test_paper_targets_match_the_pdf():
     import table6_report as report
 
     targets = report.json.loads(report.TARGETS.read_text())
-    if not report.PDF.exists():
-        pytest.skip("the article PDF is unavailable")
-    try:
-        parsed = report.parse_pdf_table6()
-    except (FileNotFoundError, OSError, ValueError):
-        pytest.skip("pdftotext or the article PDF is unavailable")
+    import shutil
+    if shutil.which("pdftotext") is None or not (report.PDF.exists() or
+            (ROOT / "Pairs_Trading_RV_Arbitrage_Rule.pdf").exists()):
+        pytest.skip("pdftotext or either supported paper PDF is unavailable")
+    parsed = report.parse_pdf_table6()
     for key, values in targets["table6"].items():
         for port, value in values.items():
             assert parsed[key][port] == pytest.approx(value, abs=1e-12)

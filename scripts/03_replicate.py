@@ -480,7 +480,7 @@ FIGURE1 = {
     "day_tolerance": 3,
 }
 
-PRIMARY_UNIVERSE = "vol_common"
+PRIMARY_UNIVERSE = "traded_common"
 STEPS = ("tables", "table3", "figure1", "check")
 _SIC_FALLBACKS: tuple[pd.Series, ...] | None = None
 
@@ -510,8 +510,8 @@ def figures_dir(universe: str) -> Path:
     return base if universe == PRIMARY_UNIVERSE else base / universe
 
 
-CACHE_FORMAT = 6
-T1_CAPITALS = ("committed", "employed", "committed_count", "employed_count", "employed_literal")
+CACHE_FORMAT = 7
+T1_CAPITALS = ("committed", "employed", "committed_count", "employed_count", "employed_literal", "period_cash", "selected_cash")
 
 
 def read_cache_meta(universe: str) -> dict | None:
@@ -547,7 +547,7 @@ def verify_cache(universe: str, continued: bool) -> None:
             f"pass --normalization {meta.get('normalization')} or rebuild with --force"
         )
     for key in ("exclude_same_issuer", "max_stale_share", "telephone_sic", "trigger_sigma",
-                "short_weights", "size_deciles_top", "monthly_aggregation", "exclude_constant", "sic_fallback"):
+                "short_weights", "size_deciles_top", "monthly_aggregation", "exclude_constant", "sic_fallback", "universe", "delayed_entry", "idle_policy"):
         if meta.get(key) != want.get(key):
             built = f"{key}={meta[key]}" if key in meta else f"no {key} stamp"
             now = f"{key}={want[key]}" if key in want else f"no {key}"
@@ -616,6 +616,8 @@ class Job:
     monthly_aggregation: str = "books"
     exclude_constant: bool = False
     sic_fallback: str = "formation_end"
+    delayed_entry: str = "execute"
+    idle_policy: str = "zero"
 
 
 def init_worker(fallbacks: tuple[pd.Series, ...] | None = None) -> None:
@@ -779,21 +781,21 @@ def build_cohort(job: Job) -> tuple[int, int]:
         # stays byte-identical to the shipped cache.
         summary["size_deciles_top"] = job.size_deciles_top
     for wait in job.waits:
-        result = simulate_cohort(pairs, rets, term, wait=wait, start_levels=levels)
+        result = simulate_cohort(pairs, rets, term, wait=wait, start_levels=levels, delayed_entry=job.delayed_entry)
         result.trades.to_parquet(coh_dir / f"w{wait}_trades.parquet")
         result.opened.rename("opened").to_frame().to_parquet(coh_dir / f"w{wait}_opened.parquet")
         for pname, ranks in PORTFOLIOS.items():
             for capital in T1_CAPITALS:
                 monthly = portfolio_monthly(result, ranks, capital, job.short_weights,
-                                            job.monthly_aggregation)
+                                            job.monthly_aggregation, job.idle_policy)
                 rows += _monthly_rows("t1", "", wait, pname, capital, monthly)
                 if capital in ("employed", "committed"):
-                    daily = portfolio_daily(result, ranks, capital, job.short_weights)
+                    daily = portfolio_daily(result, ranks, capital, job.short_weights, job.idle_policy)
                     daily_rows.append(pd.DataFrame({
                         "date": daily.index, "wait": wait, "portfolio": pname,
                         "capital": capital, "ret": daily.to_numpy(),
                     }))
-            long_daily, short_daily = portfolio_legs(result, ranks, job.short_weights)
+            long_daily, short_daily = portfolio_legs(result, ranks, job.short_weights, job.idle_policy)
             for name, daily in zip(LEG_CAPITALS, (long_daily, short_daily)):
                 rows += _monthly_rows("t1", "", wait, pname, name, cohort_monthly(daily))
             if wait == 1:
@@ -818,13 +820,13 @@ def build_cohort(job: Job) -> tuple[int, int]:
         summary["sector_counts"][f"pairs_{sector}"] = len(sp)
         if sp.empty:
             continue
-        result = simulate_cohort(sp, rets, term, wait=1, start_levels=levels)
+        result = simulate_cohort(sp, rets, term, wait=1, start_levels=levels, delayed_entry=job.delayed_entry)
         for pname, ranks in TABLE3_PORTFOLIOS.items():
             if ranks is not None and len(sp) < max(ranks):
                 continue
             for capital in TABLE3_CAPITALS:
                 monthly = portfolio_monthly(result, ranks, capital, job.short_weights,
-                                            job.monthly_aggregation)
+                                            job.monthly_aggregation, job.idle_policy)
                 rows += _monthly_rows("t3", sector, 1, pname, capital, monthly)
 
     pd.DataFrame(rows, columns=["table", "sector", "wait", "portfolio", "capital",
@@ -853,11 +855,13 @@ def load_summaries(cohorts: list[tuple[int, int]], universe: str) -> tuple[pd.Da
     return pd.concat(frames, ignore_index=True), summaries
 
 
-def write_daily_outputs(cohorts: list[tuple[int, int]], universe: str, out_dir: Path) -> None:
+def write_daily_outputs(cohorts: list[tuple[int, int]], universe: str, out_dir: Path, report_start=None) -> None:
     """Persist overlap-averaged daily returns and the full Table 5B risk block."""
     frames = [pd.read_parquet(cohort_dir(universe) / f"{y:04d}-{m:02d}" / "daily.parquet")
               for y, m in cohorts]
     daily = pd.concat(frames, ignore_index=True)
+    if report_start is not None:
+        daily = daily[daily.date >= report_start]
     daily = daily.groupby(["wait", "portfolio", "capital", "date"], as_index=False)["ret"].mean()
     out_dir.mkdir(parents=True, exist_ok=True)
     daily.to_parquet(out_dir / "daily_returns.parquet", index=False)
@@ -1588,11 +1592,9 @@ def _figure3_comparison(frame: pd.DataFrame, curves_path: Path) -> list[str]:
         paper = curves[name].dropna()
         if r.empty or paper.empty:
             return []
-        # ours is set to the paper's level at its first read month, so the two paths
-        # start together and only what happens after that month is compared
+        # Start from one dollar before the reporting sample. Anchoring to a
+        # paper observation would hide early performance differences.
         level = (1.0 + r.fillna(0.0)).cumprod()
-        level = level / level.asof(paper.index[0]) * paper.iloc[0]
-        level = level[level.index >= paper.index[0]]
         logs = pd.concat([np.log(level), np.log(paper)], axis=1).dropna()
         for s in (level, paper):
             rise = np.log(s.iloc[-1] / s.iloc[0])
@@ -1602,7 +1604,7 @@ def _figure3_comparison(frame: pd.DataFrame, curves_path: Path) -> list[str]:
             rows["share of the log rise made after 1987"].append(
                 f"{np.log(s.iloc[-1] / s.asof(split)) / rise:.0%}")
         # a full-sample mean says where the path ends, not how it gets there
-        rows["end level, 2002-12"].append(f"{paper.iloc[0] * (1.0 + mean) ** (len(paper) - 1):.1f}")
+        rows["end level, 2002-12"].append(f"{(1.0 + mean) ** len(r):.1f}")
         for label in ("level at 1987-12", "peak (month)", "share of the log rise made after 1987"):
             rows[label].append("-")
         rows["correlation of the log paths"] += [
@@ -1612,13 +1614,10 @@ def _figure3_comparison(frame: pd.DataFrame, curves_path: Path) -> list[str]:
               "| paper's Table 1 B mean, compounded | committed, ours | paper's figure "
               "| paper's Table 1 B mean, compounded |"), "|---|---|---|---|---|---|---|"]
     lines += [f"| {label} | " + " | ".join(cells) + " |" for label, cells in rows.items()]
-    lines += ["", (f"The curves are read from {start:%Y-%m}, where the tracker first "
-                   "separates them; ours and the compounded"),
-              ("means start at the paper's level in that month. The compounded means ignore "
-               "volatility drag, which"),
-              ("is under a basis point a month at these standard deviations. The S&P 500, the "
-               "figure's third curve,"),
-              "is not read.", ""]
+    lines += ["", f"Paper curves are readable from {start:%Y-%m}. Our curve and the constant-mean",
+              "illustration start independently from $1 before July 1963; neither is scaled to the paper.",
+              "The constant-mean illustration omits volatility drag and is not the paper's realized path.",
+              "Log-path correlation uses common months. The S&P 500 curve is not digitized.", ""]
     return lines
 
 
@@ -2247,6 +2246,9 @@ def formation_options(args: argparse.Namespace) -> dict:
     options["monthly_aggregation"] = getattr(args, "monthly_aggregation", "books")
     options["exclude_constant"] = getattr(args, "exclude_constant", False)
     options["sic_fallback"] = getattr(args, "sic_fallback", "formation_end")
+    options["universe"] = getattr(args, "universe", "traded_common")
+    options["delayed_entry"] = getattr(args, "delayed_entry", "execute")
+    options["idle_policy"] = getattr(args, "idle_policy", "zero")
     return options
 
 
@@ -2267,7 +2269,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--specification", choices=tuple(PROFILES), default="paper",
                         help="paper rules and corrected accounting (default); legacy is a superseded comparison")
-    parser.add_argument("--start", default="1963-07", help="first cohort month YYYY-MM")
+    parser.add_argument("--report-start", default=None, help="first reported month; earlier cohorts supply staggered positions")
+    parser.add_argument("--delayed-entry", choices=("execute", "cancel"), default=argparse.SUPPRESS)
+    parser.add_argument("--idle-policy", choices=("zero", "exclude"), default=argparse.SUPPRESS)
+    parser.add_argument("--start", default="1963-02", help="first cohort month YYYY-MM, including warmup")
     parser.add_argument("--end", default="2002-12", help="last cohort month YYYY-MM")
     parser.add_argument("--wait", default="0,1", help="comma-separated waits, e.g. 0,1")
     parser.add_argument(
@@ -2280,7 +2285,7 @@ def main() -> None:
     parser.add_argument("--limit-cohorts", type=int, default=None, help="smoke test: first K cohorts")
     parser.add_argument("--force", action="store_true", help="rebuild cached cohorts")
     parser.add_argument(
-        "--universe", default=PRIMARY_UNIVERSE,
+        "--universe", default=argparse.SUPPRESS,
         help="formation universe variant; non-primary variants write to a subfolder",
     )
     parser.add_argument(
@@ -2363,6 +2368,9 @@ def main() -> None:
         raise SystemExit(f"unknown steps: {unknown}; choose from {STEPS}")
     start = parse_month(args.start)
     end = parse_month(args.end)
+    report_start = parse_month(args.report_start) if args.report_start else max(start, (1963, 7))
+    if not start <= report_start <= end:
+        raise SystemExit("report-start must lie between start and end")
     waits = tuple(int(w) for w in args.wait.split(","))
     continued = args.normalization == "continued"
     global CACHE_ROOT_OVERRIDE, OUT_ROOT_OVERRIDE, FORMATION_OPTIONS
@@ -2405,7 +2413,8 @@ def main() -> None:
                     args.trigger_sigma, args.short_weights,
                     size_deciles_top=args.size_deciles_top,
                     monthly_aggregation=args.monthly_aggregation,
-                    exclude_constant=args.exclude_constant, sic_fallback=args.sic_fallback)
+                    exclude_constant=args.exclude_constant, sic_fallback=args.sic_fallback,
+                    delayed_entry=args.delayed_entry, idle_policy=args.idle_policy)
                 for y, m in cohorts
                 if args.force or not cohort_cache_complete(y, m, waits, args.universe)
             ]
@@ -2417,11 +2426,21 @@ def main() -> None:
         if jobs:
             run_jobs(jobs, args.workers)
         monthly, summaries = load_summaries(cohorts, args.universe)
+        report_cohorts = [c for c in cohorts if c >= report_start]
+        if not report_cohorts:
+            raise SystemExit("No reported cohorts; move --report-start into the built interval")
+        monthly = monthly[monthly.month_end >= pd.Timestamp(month_start(*report_start))]
+        summaries = [s for s, c in zip(summaries, cohorts) if c >= report_start]
         if "tables" in steps:
             strategy, trading, composition, uni_summary = aggregate(
-                monthly, summaries, waits, end, cohorts)
-            write_outputs(strategy, trading, waits, len(cohorts), out_dir, composition, uni_summary)
-            write_daily_outputs(cohorts, args.universe, out_dir)
+                monthly, summaries, waits, end, report_cohorts)
+            write_outputs(strategy, trading, waits, len(report_cohorts), out_dir, composition, uni_summary)
+            write_daily_outputs(cohorts, args.universe, out_dir, pd.Timestamp(month_start(*report_start)))
+            (out_dir.parent / "run_metadata.json").write_text(json.dumps({
+                "cohort_start": args.start, "report_start": f"{report_start[0]:04d}-{report_start[1]:02d}",
+                "end": args.end, "built_cohorts": len(cohorts), "reported_cohorts": len(report_cohorts),
+                "settings": _expected_meta(continued),
+            }, indent=2) + "\n")
             print(f"Tables 1 and 2 written to {out_dir}", flush=True)
         if "table3" in steps:
             write_table3(*table3_from_cache(monthly, summaries, end), out_dir)

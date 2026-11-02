@@ -28,7 +28,7 @@ Usage
     python scripts/claims/table7.py --csv out.csv --json out.json
 
 With no ``--cache-root`` the script reads the checkout's own
-``data/processed/replication/vol_common/cohorts`` (or the shared fallback), and never
+``data/processed/replication/traded_common/cohorts`` (or the shared fallback), and never
 writes it.
 """
 
@@ -372,7 +372,7 @@ def resolve_cache(cache_root: str | None, universe: str) -> Path:
     return local
 
 
-def build(cache_root: str | None = None, universe: str = "vol_common",
+def build(cache_root: str | None = None, universe: str = "traded_common",
           factors: pd.DataFrame | None = None, start: tuple[int, int] | None = None,
           end: tuple[int, int] | None = None, french_dir: str | None = None) -> dict:
     """Read the cache and build every number the report prints."""
@@ -388,6 +388,9 @@ def build(cache_root: str | None = None, universe: str = "vol_common",
     if not cohorts:
         raise FileNotFoundError(f"no cohorts under {cohorts_dir}")
     monthly, _ = rep.load_summaries(cohorts, universe)
+    # Earlier cohorts seed the six staggered portfolios, not additional
+    # observations outside the paper's reporting sample.
+    monthly = monthly[monthly.month_end >= pd.Timestamp("1963-07-01")]
     books = book_series(monthly, cohorts[-1])
     french = french_dir_or_none(french_dir)
     factors = load_factors(french) if factors is None else factors
@@ -475,8 +478,8 @@ def _frame(payload: dict, key: str) -> pd.DataFrame:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--cache-root", default=None,
-                        help="cohorted cache root (default: this checkout's vol_common cache)")
-    parser.add_argument("--universe", default="vol_common")
+                        help="cohorted cache root (default: this checkout's traded_common cache)")
+    parser.add_argument("--universe", default="traded_common")
     parser.add_argument("--french-dir", default=None,
                         help="directory with French's factor archives (default: data/raw/french, "
                              "or the shared tree's pulled copies when LFS is not)")

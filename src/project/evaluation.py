@@ -212,7 +212,7 @@ def _leg_arrays(result, sel: list, short_weights: str) -> tuple[np.ndarray, np.n
     return long_ret, short_ret, n_open
 
 
-def portfolio_legs(result, ranks, short_weights: str = "value") -> tuple[pd.Series, pd.Series]:
+def portfolio_legs(result, ranks, short_weights: str = "value", idle_policy: str = "zero") -> tuple[pd.Series, pd.Series]:
     """The long book's and the short book's daily value-weighted returns (Table 7).
 
     Eq. (2) applied to each leg separately: ``sum dL / sum L`` over the long
@@ -223,19 +223,21 @@ def portfolio_legs(result, ranks, short_weights: str = "value") -> tuple[pd.Seri
     Table 1 Panel B and the difference of Table 7's two columns (REVIEW_NOTES
     section 33).
 
-    Both series are NaN on a day with no position, so ``cohort_monthly`` skips
-    it. They are what Table 7 summarises; `portfolio_daily` returns their daily
-    difference.
+    Idle cash earns zero (section 2.3 footnote 6), including a whole idle month.
+    ``exclude`` is the prior sensitivity that drops idle cohorts from the desk.
     """
     index = result.pair_returns.index
     sel = _resolve_ranks(result.pair_returns, ranks)
+    if idle_policy not in ("zero", "exclude"):
+        raise ValueError("idle_policy must be zero or exclude")
+    idle = 0.0 if idle_policy == "zero" else np.nan
     if not sel:
         empty = pd.Series(np.nan, index=index)
         return empty, empty.copy()
     long_ret, short_ret, n_open = _leg_arrays(result, sel, short_weights)
     live = n_open > 0
-    return (pd.Series(np.where(live, long_ret, np.nan), index=index),
-            pd.Series(np.where(live, short_ret, np.nan), index=index))
+    return (pd.Series(np.where(live, long_ret, idle), index=index),
+            pd.Series(np.where(live, short_ret, idle), index=index))
 
 
 def _vw_legs(
@@ -263,7 +265,8 @@ def _vw_legs(
     return excess, n_open
 
 
-def portfolio_daily(result, ranks, capital: str, short_weights: str = "value") -> pd.Series:
+def portfolio_daily(result, ranks, capital: str, short_weights: str = "value",
+                    idle_policy: str = "zero") -> pd.Series:
     """Daily portfolio excess return, GGR (2006) §2.3 (PDF p. 14).
 
     Each trade holds $1 long and $1 short, bought and held (eqs. 2-3 weight the
@@ -290,7 +293,7 @@ def portfolio_daily(result, ranks, capital: str, short_weights: str = "value") -
           value-weighted daily return of the long book minus that of the short
           book, each position weighted by its value since it opened
           (``sum dL / sum L_{t-1} - sum dS / sum S_{t-1}`` over open positions;
-          NaN on a day with none, which ``cohort_monthly`` skips).
+          zero on a day with none under the default idle-cash policy).
         - "committed": "employed" scaled by ``n_t / N``, ``n_t`` the pairs
           holding a position on day t and N the pairs selected (0 on a day
           with none). The two are the conventions since 2026-10-19; see the
@@ -325,6 +328,8 @@ def portfolio_daily(result, ranks, capital: str, short_weights: str = "value") -
         raise ValueError(f"capital must be one of {CAPITAL_CHOICES}, got {capital!r}")
     if short_weights not in SHORT_WEIGHTS:
         raise ValueError(f"short_weights must be one of {SHORT_WEIGHTS}, got {short_weights!r}")
+    if idle_policy not in ("zero", "exclude"):
+        raise ValueError("idle_policy must be zero or exclude")
     pr = result.pair_returns
     index = pr.index
     sel = _resolve_ranks(pr, ranks)
@@ -333,6 +338,8 @@ def portfolio_daily(result, ranks, capital: str, short_weights: str = "value") -
         excess, n_open = _vw_legs(result, sel, index, short_weights)
         if capital == "committed":
             excess = np.nan_to_num(excess) * n_open / len(sel) if sel else excess
+        if idle_policy == "zero" and sel:
+            excess = np.nan_to_num(excess)
         return pd.Series(excess, index=index)
     payoff, w_prev = _payoffs_and_accounts(result, sel, len(index))
     num = np.nansum(payoff, axis=1)
@@ -373,7 +380,7 @@ def cohort_monthly(daily: pd.Series) -> pd.Series:
 
 
 def portfolio_monthly(result, ranks, capital: str, short_weights: str = "value",
-                      aggregation: str = "books") -> pd.Series:
+                      aggregation: str = "books", idle_policy: str = "zero") -> pd.Series:
     """GGR section 2.3: compound each book, then subtract its monthly return.
 
     For employed capital this is identically Table 7 long minus short, also
@@ -384,14 +391,30 @@ def portfolio_monthly(result, ranks, capital: str, short_weights: str = "value",
     Committed capital scales both daily books by the fraction of selected pairs
     accruing a payoff that day, before compounding; unused capital earns zero.
     Count/account capital definitions remain legacy diagnostics and retain their
-    former aggregation. Missing employed-book days remain missing, not zero.
+    former aggregation. Zero-return idle months retain their cohort's allocation.
     """
+    if capital in ("period_cash", "selected_cash"):
+        # Explicit alternative to active-book reinvestment: fixed $1 trades,
+        # idle proceeds earning zero, and a constant cohort denominator.
+        # Summing dollar payoffs (not compounding dollar changes) preserves
+        # the cash ledger. This is a sensitivity, not the baseline return.
+        sel = _resolve_ranks(result.pair_returns, ranks)
+        if not sel:
+            return pd.Series(dtype=float)
+        n = (sum(bool(result.opened.get(c, False)) for c in sel)
+             if capital == "period_cash" else len(sel))
+        payoff = result.pair_payoffs[sel].sum(axis=1)
+        monthly = payoff.groupby(payoff.index.to_period("M")).sum()
+        monthly.index = monthly.index.to_timestamp(how="end").normalize()
+        return monthly / n if n else monthly * 0.0
     if aggregation not in ("books", "daily_difference"):
         raise ValueError("aggregation must be 'books' or 'daily_difference'")
     if aggregation == "daily_difference" or capital not in VW_CAPITALS:
-        return cohort_monthly(portfolio_daily(result, ranks, capital, short_weights))
+        return cohort_monthly(portfolio_daily(result, ranks, capital, short_weights, idle_policy))
     index = result.pair_returns.index
     sel = _resolve_ranks(result.pair_returns, ranks)
+    if idle_policy not in ("zero", "exclude"):
+        raise ValueError("idle_policy must be zero or exclude")
     if not sel:
         return pd.Series(dtype=float)
     long_ret, short_ret, n_open = _leg_arrays(result, sel, short_weights)
@@ -399,8 +422,9 @@ def portfolio_monthly(result, ranks, capital: str, short_weights: str = "value",
         scale = n_open / len(sel)
         long_ret, short_ret = long_ret * scale, short_ret * scale
     else:
-        long_ret = np.where(n_open > 0, long_ret, np.nan)
-        short_ret = np.where(n_open > 0, short_ret, np.nan)
+        idle = 0.0 if idle_policy == "zero" else np.nan
+        long_ret = np.where(n_open > 0, long_ret, idle)
+        short_ret = np.where(n_open > 0, short_ret, idle)
     long_month = cohort_monthly(pd.Series(long_ret, index=index))
     short_month = cohort_monthly(pd.Series(short_ret, index=index))
     return long_month - short_month

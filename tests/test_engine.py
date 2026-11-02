@@ -110,7 +110,7 @@ def test_wait1_forced_exit_is_not_delayed():
 def test_wait1_skips_when_prices_cross_on_the_open_day():
     P2 = np.array([1.0, 1.0, 1.0, 1.03, 1.00, 1.00, 1.00, 1.00])
     rets = rets_from_prices(np.column_stack([np.ones(8), P2]))
-    res1 = simulate_cohort(one_pair(), rets, terminal_frame(), wait=1)
+    res1 = simulate_cohort(one_pair(), rets, terminal_frame(), wait=1, delayed_entry="cancel")
     assert res1.trades.empty
     assert not bool(res1.opened.loc[1])
     assert res1.pair_returns[1].abs().sum() == pytest.approx(0.0)

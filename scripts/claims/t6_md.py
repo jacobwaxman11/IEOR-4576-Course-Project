@@ -72,13 +72,8 @@ def verdict_text(result):
                  % (round(result["within10"] * result["cells"]), result["cells"],
                     100 * result["within10"], 100 * result["within25"]))
     lines.append("")
-    lines.append(
-        "The standard-deviation criterion is the one that does not hold in every "
-        "column: in the top-120 column the random pairs are quieter than the true "
-        "pairs, while in the top-5, top-20 and top-100-120 columns they are "
-        "noisier, as the paper describes. The mean, the negative random-pair "
-        "level and the true-minus-random difference behave as the paper says "
-        "in all sixteen series.")
+    failed = [key for key, value in result["checks"].items() if not value]
+    lines.append("Criteria not met: " + (", ".join(failed) if failed else "none") + ".")
     return "\n".join(lines)
 
 

@@ -1,7 +1,7 @@
 # Replication coverage
 
-Current status is tied to the corrected paper profile and cache format 6.
-See [the audit](ACCOUNTING_CORRECTIONS.md) for the run scope and measured gaps.
+Current status is tied to the corrected paper profile and cache format 7.
+See [the audit](FIDELITY_VALIDATION.md) for the run scope and measured gaps.
 "Implemented" means reproducible code exists, not that published numbers match.
 
 | Exhibit | Pipeline output | Scope / qualification |
@@ -12,12 +12,12 @@ See [the audit](ACCOUNTING_CORRECTIONS.md) for the run scope and measured gaps.
 | Table 4 | `table4.csv` and related factor files | Conditional on available factor inputs; French reversal is a proxy |
 | Table 5 A | `table5_var.csv` | Monthly tail risk |
 | Table 5 B | `daily_returns.parquet`, `table5_daily.csv` | 36 reported daily statistics; 35 relative-error comparisons, zero target printed unscored |
-| Table 6 | `scripts/claims/table6_random_pairs.py` | Corrected vectorized engine; fresh bootstrap required for current claim |
+| Table 6 | `scripts/claims/table6_random_pairs.py` | Full true-pair control verified; current bootstrap results are in the fidelity audit |
 | Table 7 | `table7.csv`; `scripts/claims/table7.py` | Book moments share Table 1 accounting; factor block remains a proxy check |
 | Table 8 | `table8_subperiod.csv` | Moments and available proxy-factor regressions; no universal significance claim |
-| Table 9 A/B | Size-screened driver / recall driver | Code available; older reports are historical, not current replication proof |
+| Table 9 A/B | Size-screened driver / recall driver | 9A rebuilt and checked; 9B requires missing share-adjustment inputs |
 | Figure 1 | `figure1.json`, `figure1.png` | Regenerated against the stored example target |
-| Figures 2/3 | `scripts/replication_figures.py` | Historical digitized-image comparisons are not revalidated by this audit |
+| Figures 2/3 | `scripts/replication_figures.py` | Rebuilt; Figure 3 starts from $1 without anchoring to the paper |
 | Figure 4 | `figure4.csv` | Proxy-factor correlations; does not establish causal mispricing |
 
 Generated outputs remain local. The committed `outputs/`, `REPLICATION_CHECK.md`,

@@ -80,10 +80,12 @@ from project.models import CohortResult
 
 SHARED_CACHE = Path(os.environ.get(
     "GGR_SHARED_REPLICATION", str(_ROOT / "data" / "processed" / "replication")
-)) / "vol_common"
+)) / "traded_common"
 SHARED_MONTHLY = Path(os.environ.get(
     "GGR_SHARED_DATA_RAW", str(_ROOT / "data" / "raw")
 )) / "wrds_api" / "monthly_stocks.parquet"
+if SHARED_MONTHLY.with_name("monthly_returns_bootstrap.parquet").exists():
+    SHARED_MONTHLY = SHARED_MONTHLY.with_name("monthly_returns_bootstrap.parquet")
 PAPER_TARGETS = Path(__file__).resolve().parent / "table6_paper.json"
 
 #: Portfolios of Table 6: ranks 1-5, 1-20, 101-120 and the top 120 pairs.
@@ -94,7 +96,7 @@ PORTFOLIOS: dict[str, tuple[int, int]] = {
     "top120": (1, 120),
 }
 #: The three portfolios the shipped cache also holds, for the control comparison.
-SHIPPED_PORTFOLIOS = ("top5", "top20", "101-120")
+SHIPPED_PORTFOLIOS = ("top5", "top20", "101-120", "all")
 #: Table 1's two capital definitions: fully invested = "employed", committed.
 CAPITALS = ("employed", "committed")
 WAITS = (0, 1)
@@ -104,7 +106,7 @@ SERIES_KEYS = [f"w{w}|{p}|{c}" for (w, p, c) in SERIES]
 #: Table 6 rows: two panels x two capital blocks x three statistics.
 STATS = ("mean", "std", "median")
 END = (2002, 12)
-UNIVERSE = "vol_common"
+UNIVERSE = "traded_common"
 MAX_STALE_SHARE = None
 DEFAULT_SEED = 20060101
 #: The pipeline's eq. (3) short weight (``--short-weights position``).
@@ -302,18 +304,22 @@ def control_cohort(cache_root: Path, year: int, month: int, wait: int) -> dict:
     return out
 
 
-def run_control(cache_root: Path, cohorts: list[tuple[int, int]], waits: tuple[int, ...]) -> int:
+def run_control(cache_root: Path, cohorts: list[tuple[int, int]], waits: tuple[int, ...],
+                output: Path | None = None) -> int:
     rows = [control_cohort(cache_root, y, m, w) for y, m in cohorts for w in waits]
     frame = pd.DataFrame(rows)
     print(frame.to_string(index=False), flush=True)
     summary = {
         "cohort_waits": len(frame),
-        "cells_compared": int(6 * len(frame)),
+        "cells_compared": int(len(SHIPPED_PORTFOLIOS) * len(CAPITALS) * len(frame)),
         "max_diff_shipped": float(frame["max_diff_shipped"].max()),
         "max_diff_vector_layer": float(frame["max_diff_vector"].max()),
         "max_diff_trade_payoff": float(frame["payoff_max_diff"].max()),
     }
     print("\ncontrol summary: " + json.dumps(summary), flush=True)
+    if output is not None:
+        output.mkdir(parents=True, exist_ok=True)
+        (output / "control.json").write_text(json.dumps(summary, indent=2) + "\n")
     checks = ("max_diff_shipped", "max_diff_vector_layer", "max_diff_trade_payoff")
     return 0 if all(np.isfinite(summary[k]) and summary[k] < 1e-12 for k in checks) else 1
 
@@ -326,14 +332,15 @@ def run_control(cache_root: Path, cohorts: list[tuple[int, int]], waits: tuple[i
 def monthly_frame() -> pd.DataFrame:
     """CRSP monthly returns for the whole sample, one row per permno-month.
 
-    The vendor file carries up to two rows per permno-month (one with and one
-    without the security-header columns); the 3,289 duplicated groups agree, so
-    the first row is kept.
+    Identical analysis rows are collapsed; conflicting return observations for
+    the same security-month fail instead of silently choosing the first row.
     """
     global _MONTHLY
     if _MONTHLY is None:
         frame = pd.read_parquet(SHARED_MONTHLY, columns=["permno", "mthcaldt", "mthret"])
-        frame = frame.drop_duplicates(["permno", "mthcaldt"])
+        frame = frame.drop_duplicates()
+        if frame.duplicated(["permno", "mthcaldt"]).any():
+            raise ValueError("Conflicting monthly return observations")
         frame["month_code"] = [d.year * 12 + d.month for d in frame["mthcaldt"]]
         _MONTHLY = frame[["permno", "month_code", "mthret"]]
     return _MONTHLY
@@ -359,7 +366,7 @@ def cohort_panel(cache_root: Path, year: int, month: int) -> CohortPanel:
     """Formation universe, formation levels and trading-window data for a cohort.
 
     The universe is the cohort's own formation universe (the pipeline's
-    ``vol_common`` rule over its 12-month window); ``levels`` is the last row of
+    ``traded_common`` rule over its 12-month window); ``levels`` is the last row of
     the formation ``normalized_prices``, where the engine's continued
     normalization starts; the returns are the trading window's daily returns for
     every universe member, so any drawn security can be priced.  ``deciles`` maps
@@ -544,7 +551,6 @@ def run_cohort(cache_root: Path, year: int, month: int, reps: int, seed: int,
     """Bootstrap and true-pair series of one cohort, both panels."""
     panel = cohort_panel(cache_root, year, month)
     months = np.unique(panel.month_of_day)
-    month_index = pd.DatetimeIndex([month_timestamp(int(k)) for k in months])
     random = np.full((reps, months.size, len(SERIES)), np.nan)
     true = np.full((months.size, len(SERIES)), np.nan)
     stats: dict = {"cohort": f"{year:04d}-{month:02d}", "universe": int(panel.permnos.size),
@@ -595,27 +601,18 @@ def run_cohort(cache_root: Path, year: int, month: int, reps: int, seed: int,
             close = np.where(live, close, opens)
             vals = eng.account(opens, close, ids_l.ravel(), ids_s.ravel(), panel.returns)
             books = eng.rank_books(vals, events["rank"].to_numpy(np.int64), N_RANKS, c)
-            for rep in range(c):
-                sl = np.arange(rep, len(events) * c, c)
-                log = pd.DataFrame({
-                    "rank": events["rank"].to_numpy(),
-                    "open_day": opens[sl],
-                    "close_day": close[sl],
-                    "reason": reason[sl],
-                    "long_permno": panel.permnos[ids_l.ravel()[sl]],
-                    "short_permno": panel.permnos[ids_s.ravel()[sl]],
-                    "payoff": np.nan,
-                })
-                log["open_date"] = panel.dates.to_numpy()[log["open_day"].to_numpy()]
-                log["close_date"] = panel.dates.to_numpy()[log["close_day"].to_numpy()]
-                result = result_from_books({k: v[:, :, rep] for k, v in books.items()}, log,
-                                           N_RANKS, panel.dates)
-                for j, (w, portfolio, capital) in enumerate(SERIES):
-                    if w != wait:
-                        continue
-                    lo, hi = PORTFOLIOS[portfolio]
-                    monthly = portfolio_monthly(result, list(range(lo, hi + 1)), capital, SHORT_WEIGHTS)
-                    random[start + rep, :, j] = monthly.reindex(month_index).to_numpy()
+            # The full true-pair control pins this vectorized aggregation to
+            # portfolio_monthly for every cohort and both capital definitions.
+            for j, (w, portfolio, capital) in enumerate(SERIES):
+                if w != wait:
+                    continue
+                lo, hi = PORTFOLIOS[portfolio]
+                keys, employed, committed = eng.portfolio_months(
+                    books, list(range(lo, hi + 1)), np.array([month_of(d) for d in panel.dates]))
+                if not np.array_equal(keys, months):
+                    raise ValueError("Bootstrap aggregation changed the month calendar")
+                values = employed if capital == "employed" else committed
+                random[start:stop, :, j] = values.T
     return {"months": months, "random": random, "true": true,
             "stats": np.array(json.dumps(stats))}
 
@@ -715,8 +712,8 @@ def strategy_series(frames: list[dict], reps: int) -> dict:
                 good = np.isfinite(values)
                 if good.any():
                     rep_by_cohort[rep][stamp] = pd.Series(values[good], index=stamps[good])
-        out[key] = {"true": overlap_average(true_by_cohort),
-                    "reps": [overlap_average(m) for m in rep_by_cohort]}
+        out[key] = {"true": overlap_average(true_by_cohort).loc["1963-07-01":],
+                    "reps": [overlap_average(m).loc["1963-07-01":] for m in rep_by_cohort]}
     return out
 
 
@@ -764,7 +761,7 @@ def main() -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--mode", choices=("control", "run", "shard", "report"), default="control")
     parser.add_argument("--cache-root", default=str(SHARED_CACHE),
-                        help="vol_common cache directory holding cohorts/ (read read-only)")
+                        help="paper-profile cache directory holding cohorts/ (read only)")
     parser.add_argument("--out-root", default=str(_ROOT / "results" / "replication" / "table6"),
                         help="private output directory")
     parser.add_argument("--wait", default="0,1")
@@ -775,27 +772,32 @@ def main() -> int:
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--shards", type=int, default=1)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--report-dir", type=Path,
+                        help="write generated report here instead of the historical claims directory")
     args = parser.parse_args()
 
     cache_root = Path(args.cache_root).resolve()
     source_meta = json.loads((cache_root / "cohorts/cache_meta.json").read_text())
     validate_paper_cache(source_meta)
-    if args.mode != "control":
-        stamp_experiment(args.out_root, source_meta,
-                         {"reps": args.reps, "seed": args.seed, "wait": args.wait},
-                         read_only=args.mode == "report")
+    stamp_experiment(args.out_root, source_meta,
+                     {"reps": args.reps, "seed": args.seed, "wait": args.wait},
+                     read_only=args.mode == "report")
     waits = tuple(int(w) for w in args.wait.split(",") if w.strip())
     cohorts = cohort_list(cache_root)
     if args.limit_cohorts is not None:
         cohorts = cohorts[: args.limit_cohorts]
     if args.mode == "control":
-        return run_control(cache_root, cohorts, waits)
+        return run_control(cache_root, cohorts, waits, Path(args.out_root))
     if args.mode == "shard":
         return run_shard(args, cohorts, args.shard, args.shards)
     if args.mode == "run":
         return run_all(args, cohorts)
     if args.mode == "report":
         import table6_report as report
+        if args.report_dir:
+            report.REPORT_DIR = args.report_dir
+            report.REPORT_MD = args.report_dir / "TABLE6.md"
+            report.REPORT_CSV = args.report_dir / "TABLE6.csv"
         return report.main(Path(args.out_root).resolve(), args.reps)
     raise SystemExit(f"unknown mode {args.mode}")
 

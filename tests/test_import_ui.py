@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from project.import_ui import file_sha256, import_calendar, import_daily_csv
+from project.import_ui import file_sha256, import_calendar, import_daily_csv, import_monthly_csv
 
 
 def rows():
@@ -61,3 +61,21 @@ def test_calendar_uses_observed_dates_and_refuses_duplicate_days(tmp_path):
     pd.DataFrame({"dlycaldt": ["2000-01-03", "2000-01-03"]}).to_csv(source, index=False)
     with pytest.raises(ValueError, match="one nonmissing"):
         import_calendar(source, tmp_path / "invalid.parquet")
+
+
+def test_monthly_duplicates_are_compared_and_source_preserved(tmp_path):
+    source, out = tmp_path / "monthly.csv.gz", tmp_path / "monthly.parquet"
+    frame = pd.DataFrame({"PERMNO": [1, 1, 2], "MthCalDt": ["2000-01-31"] * 3,
+                          "MthRet": [.1, .1, -.5], "MthRetx": .1, "MthCap": 100.,
+                          "PrimaryExch": "N", "SecurityType": "EQTY", "ShareType": "NS"})
+    frame.to_csv(source, index=False)
+    before = file_sha256(source)
+    audit = import_monthly_csv(source, out, 2000, 2000)
+    assert audit["rows"] == 2 and audit["identical_duplicates_removed"] == 1
+    assert before == file_sha256(source) == audit["source_sha256"]
+    assert pd.read_parquet(out).mthret.tolist() == [.1, -.5]
+    frame.loc[1, "MthRet"] = .2
+    frame.to_csv(source, index=False)
+    with pytest.raises(ValueError, match="Conflicting monthly"):
+        import_monthly_csv(source, tmp_path / "bad.parquet", 2000, 2000)
+    assert not (tmp_path / "bad.parquet").exists()

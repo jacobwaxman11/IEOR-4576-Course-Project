@@ -22,8 +22,8 @@ _spec.loader.exec_module(rep)
 
 
 def test_primary_universe_writes_to_repo_result_folders():
-    assert rep.tables_dir("vol_common") == ROOT / "results" / "replication" / "tables"
-    assert rep.figures_dir("vol_common") == ROOT / "results" / "replication" / "figures"
+    assert rep.tables_dir("traded_common") == ROOT / "results" / "replication" / "tables"
+    assert rep.figures_dir("traded_common") == ROOT / "results" / "replication" / "figures"
     assert rep.tables_dir("vol_ns") == ROOT / "results" / "replication" / "tables" / "vol_ns"
 
 
@@ -68,6 +68,7 @@ def test_formation_options_stamp_every_value():
     assert rep.formation_options(defaults) == {
         "exclude_same_issuer": True, "telephone_sic": "4811", "trigger_sigma": "rms",
         "short_weights": "position", "monthly_aggregation": "books", "exclude_constant": False, "sic_fallback": "formation_end",
+        "universe": "traded_common", "delayed_entry": "execute", "idle_policy": "zero",
     }
     other = argparse.Namespace(same_issuer="allow", max_stale_share=0.9, telephone_sic="481x",
                                trigger_sigma="std", short_weights="value",
@@ -76,6 +77,7 @@ def test_formation_options_stamp_every_value():
         "exclude_same_issuer": False, "max_stale_share": 0.9, "telephone_sic": "481x",
         "trigger_sigma": "std", "short_weights": "value", "size_deciles_top": 3,
         "monthly_aggregation": "books", "exclude_constant": False, "sic_fallback": "formation_end",
+        "universe": "traded_common", "delayed_entry": "execute", "idle_policy": "zero",
     }
 
 

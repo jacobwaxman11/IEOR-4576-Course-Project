@@ -46,7 +46,7 @@ say the random pair is re-ordered by price at the open. It is closed on its
 own next price crossing, or early on a delisting, a leg's last available row
 or the end of the trading period. Accounting, portfolio
 construction and monthly compounding use the shipped engine's conventions
-(paper eqq. 2-3, the pipeline's --short-weights position, cohort_monthly, then
+(paper eqq. 2-3, the pipeline's --short-weights value, separately compounded books, then
 the overlap average across cohorts).
 
 Choices where the paper is silent, and the reading used:
@@ -58,7 +58,7 @@ Choices where the paper is silent, and the reading used:
 | prior month | calendar month before the opening date (for a first-month open, the last filing month before trading) | "previous month" |
 | open date and size | the true pair's opening day; each drawn stock keeps its true leg's long/short role ($1 each) | "the set of historical dates on which the pairs open"; "we replace the actual stocks" |
 | close | the random pair's own next crossing; forced exits on delisting, last row, period end | "after the next crossing of prices" |
-| accounting | buy-and-hold $1 legs, eq. (2) payoff, eq. (3) short weight floored at zero | the pipeline's conventions |
+| accounting | buy-and-hold $1 legs, eq. (2) payoff, shorted-security value weights, with zero idle cash returns | the pipeline's conventions |
 | portfolios | ranks 1-5, 1-20, 101-120, 1-120 of each cohort's ranking | Table 6's columns; "All 120" is the top 120 pairs |
 | replications | 200, fixed seed | the paper's count; reproducible |
 | drawn legs with no price after the open | no position | the engine cannot trade a stock with no row |
@@ -126,21 +126,24 @@ True minus random, replication by replication:
 
 ## 8. How to regenerate
 
-One command rebuilds everything below from a clean checkout (about 15 minutes
-with eight workers); the four steps are the same one-liners:
+First build the paper-profile cohorts, including February–June 1963 warmup,
+with `scripts/03_replicate.py`. The example below uses the controlled audit's
+combined cache. All generated outputs stay under ignored `results/`.
+Runtime depends on the machine; one worker limits peak memory.
 
-    # 1. control: rebuilds the true series from the cached trade log
-    python scripts/claims/table6_random_pairs.py --mode control --out-root scratch/t6control \
-        > scratch/t6control.log 2>&1
-    # 2. the control summary as JSON, read by the report
-    python scripts/claims/t6_control_json.py scratch/t6control.log scratch/t6run/control.json
-    # 3. the bootstrap: 200 replications over 474 cohorts, eight subprocess shards
-    python scripts/claims/table6_random_pairs.py --mode run --reps 200 --workers 8 \
-        --out-root scratch/t6run
-    # 4. the report and its CSV (also checks the paper targets against the PDF)
-    python scripts/claims/table6_random_pairs.py --mode report --reps 200 \
-        --out-root scratch/t6run
+```sh
+python scripts/claims/table6_random_pairs.py --mode control \
+    --cache-root data/processed/replication/fidelity/combined \
+    --out-root results/replication/fidelity/table6
+python scripts/claims/table6_random_pairs.py --mode run --reps 200 --workers 1 \
+    --cache-root data/processed/replication/fidelity/combined \
+    --out-root results/replication/fidelity/table6
+python scripts/claims/table6_random_pairs.py --mode report --reps 200 \
+    --cache-root data/processed/replication/fidelity/combined \
+    --out-root results/replication/fidelity/table6 \
+    --report-dir results/replication/fidelity/table6/report
+```
 
-The report reads the control numbers from scratch/t6run/control.json; without it
-the control section says so instead of quoting a stale number. Unit tests:
-``python -m pytest tests/test_table6.py -q``.
+The control writes `control.json` directly into the output directory. The
+report checks the Table 6 targets against the attached paper PDF. Unit tests:
+`python -m pytest tests/test_table6.py -q`.

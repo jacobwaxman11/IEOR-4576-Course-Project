@@ -226,7 +226,7 @@ def book_returns(
     return minus the short book's, ``n_t`` positions counted open while either
     leg still has value, and the committed return equal to the employed return
     scaled by ``n_t / N`` with ``N`` the pairs selected (``len(ranks)``).
-    Days with no open position are NaN in the employed series and 0 in the
+    Days with no open position are 0 in both the employed series and the
     committed one, exactly as ``portfolio_daily`` returns them.
     """
     idx = np.asarray(list(ranks), dtype=np.int64) - 1
@@ -246,8 +246,8 @@ def book_returns(
     with np.errstate(invalid="ignore", divide="ignore"):
         long_ret = np.where(long_val > 0, lpay / long_val, 0.0)
         short_ret = np.where(short_val > 0, short_pay / short_val, 0.0)
-    long_ret = np.where(n_open > 0, long_ret, np.nan)
-    short_ret = np.where(n_open > 0, short_ret, np.nan)
+    long_ret = np.where(n_open > 0, long_ret, 0.0)
+    short_ret = np.where(n_open > 0, short_ret, 0.0)
     return long_ret, short_ret, n_open / n_selected
 
 

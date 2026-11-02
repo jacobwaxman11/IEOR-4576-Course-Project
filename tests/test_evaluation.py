@@ -454,7 +454,7 @@ def test_value_weighted_books_hand_calc():
     res = _legs_stub(long_pay, long_val, short_pay, short_val, idx)
     employed = portfolio_daily(res, [1, 2], "employed")
     committed = portfolio_daily(res, [1, 2], "committed")
-    assert np.isnan(employed.iloc[0])
+    assert employed.iloc[0] == 0.0
     assert np.isclose(employed.iloc[1], 0.05 / 2.0 - 0.02 / 2.0)
     assert np.isclose(employed.iloc[2], 0.11 / 1.1 - 0.3 / 3.0)
     assert np.isclose(committed.iloc[0], 0.0)

@@ -235,6 +235,11 @@ def load_ibbotson_factors(goyal_path: Path = GOYAL_WELCH,
         raise FileNotFoundError(f"{goyal_path} not found")
     if goyal_path.read_bytes()[:24].startswith(b"version https://git-lfs"):
         raise FileNotFoundError(f"{goyal_path} is a Git LFS pointer; run `git lfs pull`")
+    needed = ["sp500_monthly.parquet", "treasuries_monthly.parquet",
+              "dfscx_monthly.parquet", "monthly_stocks.parquet"]
+    missing = [name for name in needed if not (Path(wrds_dir) / name).exists()]
+    if missing:
+        raise FileNotFoundError("Ibbotson proxy inputs missing: " + ", ".join(missing))
     gw = pd.read_excel(goyal_path, sheet_name="Monthly")
     gw.index = _month_end(gw["yyyymm"].astype(int).astype(str).str.cat(["01"] * len(gw)))
     sp = pd.read_parquet(wrds_dir / "sp500_monthly.parquet", columns=["caldt", "vwretd"])

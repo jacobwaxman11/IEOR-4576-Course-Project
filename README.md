@@ -25,11 +25,21 @@ and `data/raw/goyal_welch`; without them the factor-regression rows are not comp
 
 The replication pipeline is implemented. Its default `--specification paper` uses
 formation-spread standard deviation, stock-value short weights, and separate book
-compounding. The explicitly named `legacy` profile preserves superseded settings
+compounding. Formation requires an observed transaction price and a finite return
+on every trading day; idle cohorts retain zero cash returns. Delayed entries keep
+the signal-day direction. Five warmup cohorts precede the July 1963 reporting start.
+The explicitly named `legacy` profile preserves superseded settings
 for sensitivity analysis. See [the replication summary](report/replication/REPLICATION_SUMMARY.md)
 and [the corrections audit](report/replication/ACCOUNTING_CORRECTIONS.md) for measured
 results, limitations, and exact reproduction commands. This is a partial replication.
 The extension script remains a placeholder; `make all` rebuilds the replication only.
+
+`make validate-fidelity` rebuilds five controlled variants and compares all of them
+with the paper. It verifies the full reporting calendar, accounting identities,
+and unchanged selections/trades where a rule should not affect them. See
+[the fidelity validation](report/replication/FIDELITY_VALIDATION.md) for current
+results, including deteriorations and inputs still unavailable. Use
+`REPLICATION_WORKERS=1` on a machine with limited memory or free disk space.
 
 ### WRDS access
 
