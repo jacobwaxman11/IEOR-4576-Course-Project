@@ -12,6 +12,7 @@ import json
 import tempfile
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -19,6 +20,99 @@ import pyarrow.csv as csv
 import pyarrow.parquet as pq
 
 from project.data import _RAW_COLUMNS, _clean_year, _write_processed
+from project.recalls import adjusted_volume
+
+
+def import_volume_csv(source: Path, output: Path, first_year=1962, last_year=2002) -> dict:
+    """Stream a four-column WRDS volume export into validated, local yearly files.
+
+    Preserve the raw archive. Publish only after every requested year validates;
+    a duplicate key with different observations is an error, never a row choice.
+    The destination directory must be new, allowing atomic directory publication.
+    """
+    source, output = Path(source), Path(output)
+    if output.exists():
+        raise FileExistsError(output)
+    if first_year > last_year:
+        raise ValueError("first_year must not exceed last_year")
+    columns = ["permno", "dlycaldt", "dlyvol", "dlycumfacshr"]
+    with pa.input_stream(source) as stream:
+        lookup = {name.lower(): name for name in csv.open_csv(stream).schema.names}
+    if missing := set(columns) - lookup.keys():
+        raise ValueError(f"Missing volume fields: {sorted(missing)}")
+    names = [lookup[name] for name in columns]
+    types = dict(zip(names, [pa.int64(), pa.date32(), pa.float64(), pa.float64()]))
+    output.parent.mkdir(parents=True, exist_ok=True)
+    audit = {"source_file": source.name, "requested_years": [first_year, last_year],
+             "source_rows": 0, "selected_rows": 0, "years": {},
+             "adjustment": "dlyvol * dlycumfacshr; unknown factors are not filled",
+             "duplicate_policy": "collapse identical rows; conflicting keys fail"}
+    with tempfile.TemporaryDirectory(prefix="volume-import-", dir=output.parent) as tmp:
+        stage = Path(tmp)
+        ready = stage / "ready"
+        ready.mkdir()
+        writers = {}
+        try:
+            with pa.input_stream(source) as stream:
+                reader = csv.open_csv(
+                    stream, read_options=csv.ReadOptions(block_size=8 << 20),
+                    convert_options=csv.ConvertOptions(
+                        include_columns=names, column_types=types,
+                        null_values=["", "NA", "NaN", "."],
+                    ),
+                )
+                for batch in reader:
+                    table = pa.Table.from_batches([batch]).rename_columns(columns)
+                    audit["source_rows"] += len(table)
+                    if table["permno"].null_count or table["dlycaldt"].null_count:
+                        raise ValueError("Volume security-date keys cannot be missing")
+                    years = pc.year(table["dlycaldt"])
+                    table = table.filter(pc.and_(pc.greater_equal(years, first_year),
+                                                pc.less_equal(years, last_year)))
+                    audit["selected_rows"] += len(table)
+                    years = pc.year(table["dlycaldt"])
+                    for year in pc.unique(years).to_pylist():
+                        if year not in writers:
+                            writers[year] = pq.ParquetWriter(
+                                stage / f"{year}.parquet", table.schema, compression="zstd")
+                        writers[year].write_table(table.filter(pc.equal(years, year)))
+        finally:
+            for writer in writers.values():
+                writer.close()
+        for year in range(first_year, last_year + 1):
+            raw_path = stage / f"{year}.parquet"
+            if not raw_path.exists():
+                raise ValueError(f"Source has no observations for requested year {year}")
+            frame = pq.read_table(raw_path).to_pandas()
+            raw_rows = len(frame)
+            frame = frame.drop_duplicates()
+            if frame.duplicated(["permno", "dlycaldt"]).any():
+                raise ValueError(f"Conflicting volume observations in {year}")
+            observed = frame.dlyvol.notna()
+            if ((~np.isfinite(frame.dlyvol) | frame.dlyvol.lt(0)) & observed).any():
+                raise ValueError(f"Invalid observed volume in {year}")
+            adjusted = adjusted_volume(frame.dlyvol, frame.dlycumfacshr)
+            if (~np.isfinite(adjusted) & observed).any():
+                raise ValueError(f"Nonfinite adjusted volume in {year}")
+            frame = frame.sort_values(["dlycaldt", "permno"]).reset_index(drop=True)
+            table = pa.Table.from_pandas(frame, preserve_index=False)
+            idx = table.schema.get_field_index("dlycaldt")
+            table = table.set_column(idx, "dlycaldt", table["dlycaldt"].cast(pa.date32()))
+            target = ready / f"{year}.parquet"
+            pq.write_table(table, target, compression="zstd")
+            audit["years"][str(year)] = {
+                "raw_rows": raw_rows, "rows": len(frame),
+                "identical_duplicates_removed": raw_rows - len(frame),
+                "missing_volume_rows": int(frame.dlyvol.isna().sum()),
+                "first_date": str(frame.dlycaldt.min()),
+                "last_date": str(frame.dlycaldt.max()), "sha256": file_sha256(target),
+            }
+            raw_path.unlink()
+            print(f"Validated volume {year}: {len(frame):,} rows", flush=True)
+        audit["source_sha256"] = file_sha256(source)
+        (ready / "source.json").write_text(json.dumps(audit, indent=2) + "\n")
+        ready.rename(output)
+    return audit
 
 
 def file_sha256(path: Path) -> str:

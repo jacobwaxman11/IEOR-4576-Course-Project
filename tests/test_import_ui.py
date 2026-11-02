@@ -3,7 +3,9 @@
 import pandas as pd
 import pytest
 
-from project.import_ui import file_sha256, import_calendar, import_daily_csv, import_monthly_csv
+from project.import_ui import (
+    file_sha256, import_calendar, import_daily_csv, import_monthly_csv, import_volume_csv,
+)
 
 
 def rows():
@@ -14,6 +16,59 @@ def rows():
         "DlyPrc": [10., 8.], "DlyPrcFlg": "TR", "DlyRet": [.1, -.2],
         "DlyVol": 100., "DlyCap": 1000.,
     })
+
+
+def volume_rows():
+    return pd.DataFrame({"PERMNO": [1, 1, 2],
+                         "DlyCalDt": ["2000-01-03", "2000-01-04", "2000-01-03"],
+                         "DlyVol": [100., 200., float("nan")],
+                         "DlyCumFacShr": [2., 1., float("nan")]})
+
+
+def test_volume_import_preserves_source_and_date_type(tmp_path):
+    import datetime
+    import pyarrow.dataset as ds
+
+    source, out = tmp_path / "volume.csv.gz", tmp_path / "volume"
+    pd.concat([volume_rows(), volume_rows().iloc[:1]]).to_csv(source, index=False)
+    before = file_sha256(source)
+    audit = import_volume_csv(source, out, 2000, 2000)
+    table = ds.dataset(out / "2000.parquet").to_table(
+        filter=ds.field("dlycaldt") == datetime.date(2000, 1, 3))
+    assert len(table) == 2
+    assert audit["source_sha256"] == before == file_sha256(source)
+    assert audit["years"]["2000"]["identical_duplicates_removed"] == 1
+    assert audit["years"]["2000"]["missing_volume_rows"] == 1
+    assert (out / "source.json").exists()
+    with pytest.raises(FileExistsError):
+        import_volume_csv(source, out, 2000, 2000)
+
+
+@pytest.mark.parametrize("problem,match", [
+    ("conflict", "Conflicting"), ("factor", "positive"),
+    ("key", "keys"), ("negative", "Invalid observed volume"),
+    ("year", "2001"),
+])
+def test_bad_volume_import_publishes_nothing(tmp_path, problem, match):
+    frame = volume_rows()
+    last_year = 2000
+    if problem == "conflict":
+        row = frame.iloc[:1].copy()
+        row["DlyVol"] = 999.
+        frame = pd.concat([frame, row])
+    elif problem == "factor":
+        frame.loc[0, "DlyCumFacShr"] = float("nan")
+    elif problem == "key":
+        frame.loc[0, "DlyCalDt"] = None
+    elif problem == "negative":
+        frame.loc[0, "DlyVol"] = -1.
+    else:
+        last_year = 2001
+    source, out = tmp_path / "volume.csv.gz", tmp_path / "volume"
+    frame.to_csv(source, index=False)
+    with pytest.raises(ValueError, match=match):
+        import_volume_csv(source, out, 2000, last_year)
+    assert not out.exists()
 
 
 def test_import_preserves_source_and_ciz_delisting_return(tmp_path):

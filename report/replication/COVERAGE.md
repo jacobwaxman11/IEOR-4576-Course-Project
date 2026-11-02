@@ -1,7 +1,9 @@
 # Replication coverage
 
-Current status is tied to the corrected paper profile and cache format 7.
-See [the audit](FIDELITY_VALIDATION.md) for the run scope and measured gaps.
+Current status distinguishes the frozen strict-price reference from the subsequent
+CIZ/SIZ universe experiments, all using cache format 7. See
+[WRDS follow-up](WRDS_FOLLOWUP.md) for current findings and the
+[historical strict-price audit](FIDELITY_VALIDATION.md) for the earlier run.
 "Implemented" means reproducible code exists, not that published numbers match.
 
 | Exhibit | Pipeline output | Scope / qualification |
@@ -15,7 +17,7 @@ See [the audit](FIDELITY_VALIDATION.md) for the run scope and measured gaps.
 | Table 6 | `scripts/claims/table6_random_pairs.py` | Full true-pair control verified; current bootstrap results are in the fidelity audit |
 | Table 7 | `table7.csv`; `scripts/claims/table7.py` | Book moments share Table 1 accounting; factor block remains a proxy check |
 | Table 8 | `table8_subperiod.csv` | Moments and available proxy-factor regressions; no universal significance claim |
-| Table 9 A/B | Size-screened driver / recall driver | 9A rebuilt and checked; 9B requires missing share-adjustment inputs |
+| Table 9 A/B | Size-screened driver / recall driver | Both executed on the frozen strict-price reference. 9B now has real volume/adjustment inputs and 479 exact controls; the employed-capital recall effect has the opposite sign to the paper. |
 | Figure 1 | `figure1.json`, `figure1.png` | Regenerated against the stored example target |
 | Figures 2/3 | `scripts/replication_figures.py` | Rebuilt; Figure 3 starts from $1 without anchoring to the paper |
 | Figure 4 | `figure4.csv` | Proxy-factor correlations; does not establish causal mispricing |

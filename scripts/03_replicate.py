@@ -547,7 +547,7 @@ def verify_cache(universe: str, continued: bool) -> None:
             f"pass --normalization {meta.get('normalization')} or rebuild with --force"
         )
     for key in ("exclude_same_issuer", "max_stale_share", "telephone_sic", "trigger_sigma",
-                "short_weights", "size_deciles_top", "monthly_aggregation", "exclude_constant", "sic_fallback", "universe", "delayed_entry", "idle_policy"):
+                "short_weights", "size_deciles_top", "monthly_aggregation", "exclude_constant", "sic_fallback", "universe", "delayed_entry", "idle_policy", "data_source"):
         if meta.get(key) != want.get(key):
             built = f"{key}={meta[key]}" if key in meta else f"no {key} stamp"
             now = f"{key}={want[key]}" if key in want else f"no {key}"
@@ -716,7 +716,7 @@ def build_cohort(job: Job) -> tuple[int, int]:
     # ``size_deciles_top`` -- the size deciles of the formation universe.
     row = load_daily(end_day, end_day, ["permno", "cap", "exch", "common", "siccd"])
     row = row.set_index("permno")
-    formation_cols = [*formation_columns(job.universe, job.max_stale_share), "date"]
+    formation_cols = list(dict.fromkeys([*formation_columns(job.universe, job.max_stale_share), "date"]))
     form_panel = load_daily(form_start, form_end, formation_cols)
     universe = formation_universe(
         form_start, form_end, universe=job.universe, max_stale_share=job.max_stale_share,
@@ -2249,6 +2249,10 @@ def formation_options(args: argparse.Namespace) -> dict:
     options["universe"] = getattr(args, "universe", "traded_common")
     options["delayed_entry"] = getattr(args, "delayed_entry", "execute")
     options["idle_policy"] = getattr(args, "idle_policy", "zero")
+    from project.data import processed_source_identity
+
+    if source := processed_source_identity():
+        options["data_source"] = source
     return options
 
 

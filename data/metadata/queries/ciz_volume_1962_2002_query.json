@@ -1,0 +1,22 @@
+{
+  "source": "WRDS CRSP web query",
+  "query_id": 11858708,
+  "downloaded_date": "2026-11-02",
+  "sample_start": "1962-01-01",
+  "sample_end": "2002-12-31",
+  "universe": "All securities, no identifier filter",
+  "fields": [
+    "permno",
+    "dlycaldt",
+    "dlyvol",
+    "dlycumfacshr"
+  ],
+  "version": "Quarterly CIZ, available through 2026-03-31",
+  "format": "CSV gzip, ISO dates",
+  "ui_reported_rows": 57606932,
+  "file": "data/raw/crsp_volume/ciz_volume_1962_2002.csv.gz",
+  "bytes": 279995581,
+  "sha256": "27d70fe15d38d38c0aa56f6cd45ece0ed161568d076404b8c7efa63fe788d228",
+  "access": "Restricted: observations remain local; this record contains acquisition metadata only",
+  "return_convention": "Volume/factor supplement; no returns"
+}

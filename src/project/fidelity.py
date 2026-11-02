@@ -154,7 +154,7 @@ def compare_all(out_root: Path, cache_root: Path) -> dict:
               "prior_pr": prior, "warmup_change_bp": startup,
               "limitations": ["Current CIZ is not the authors' historical CRSP vintage",
                               "Original reversal and SBBI factors unavailable or unvalidated",
-                              "Table 9B requires missing daily share-adjustment factors",
+                              "Table 9B is a separate volume-input experiment; see WRDS_FOLLOWUP.md",
                               "Capital denominator and SIC mapping remain interpretations"]}
     (out_root / "evidence.json").write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
     lines = ["# Historical fidelity validation", "",

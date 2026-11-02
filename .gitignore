@@ -37,6 +37,10 @@ data/processed/taq/
 data/processed/replication/
 # Pulls made through the WRDS API (licensed CRSP data) stay local.
 data/raw/wrds_api
+# Licensed legacy extracts and share-adjusted volume stay local.
+data/raw/crsp_siz/
+data/raw/crsp_volume/
+data/processed/crsp_siz/
 # Public re-downloads (French library, Goyal-Welch); the LFS copies stay canonical.
 data/raw/public/
 

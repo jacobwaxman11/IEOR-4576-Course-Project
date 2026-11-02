@@ -17,7 +17,8 @@ import pandas as pd
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-PDF = ROOT / "pairs-trading-performance-of-a-relative-value-arbitrage-rule_final.pdf"
+PDF = ROOT / "Pairs_Trading_RV_Arbitrage_Rule.pdf"
+sys.path.insert(0, str(ROOT / "scripts" / "claims"))
 _spec = importlib.util.spec_from_file_location("pdftxt", ROOT / "scripts" / "claims" / "pdftxt.py")
 pdftxt = importlib.util.module_from_spec(_spec)
 sys.modules["pdftxt"] = pdftxt
@@ -159,3 +160,12 @@ def test_recall_lock_stops_the_pair_for_good():
                           recall=flags([6]), recall_lock=True)
     assert len(got.trades) == 1
     assert got.trades.iloc[0]["reason"] == "recalled"
+
+
+def test_conflicting_volume_rows_are_rejected():
+    from table9b_recalls import volume_wide
+    x = pd.DataFrame({"permno": [1, 1], "date": [DATES[0]] * 2, "adjvol": [10., 20.]})
+    with pytest.raises(ValueError, match="Conflicting adjusted volume"):
+        volume_wide(x, [1])
+    x.adjvol = 10.
+    assert volume_wide(x, [1]).iloc[0, 0] == 10.

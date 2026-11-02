@@ -1,6 +1,6 @@
 # Fidelity fixes and full-sample validation
 
-The implementation is more explicit and internally consistent, but it **does not reproduce the paper numerically**. The new liquidity screen improves the top-5 tail and worsens average-return fit. No rule was selected to maximize the target-match score.
+This is the historical strict-price experiment from commit `b8f41ce`; it **does not reproduce the paper numerically**. The follow-up WRDS audit found that a bid–ask price is not proof of no trading, especially for historical Nasdaq observations. The strict screen below is a sensitivity, not a verified implementation of the paper's liquidity filter. See [WRDS follow-up](WRDS_FOLLOWUP.md) for subsequent results.
 
 This follows the accounting audit at commit `846a777`. All mean-return comparisons below report percentages per month. The new experiment has 474 reporting months (July 1963–December 2002), 9,944 daily observations, and 479 cohorts, including five warmup cohorts. The attached February 2006 working-paper PDF is the textual source. Its Table 1 targets agree with those already used in the project; the absent published-article PDF is not silently substituted for a verified source.
 
@@ -35,7 +35,7 @@ CRSP field meanings are documented in the [official CIZ guide](https://www.crsp.
 | Table 1B | 101-120 | 0.8001 | 0.8806 | 0.7950 |
 | Table 1B | all | 0.7973 | 0.7529 | 0.7150 |
 
-The four-portfolio mean absolute error rises from **11.2624 to 22.4020 bp** without the wait and **11.6029 to 15.3083 bp** with the wait. The 492-cell weighted score falls from **239.5 to 219.0**: 156 cells within 10%, 126 additional cells within 25%, and 210 outside 25%. Better rule fidelity is not uniform improvement in the paper comparison.
+The four-portfolio mean absolute error rises from **11.2624 to 22.4020 bp** without the wait and **11.6029 to 15.3083 bp** with the wait. The 492-cell weighted score falls from **239.5 to 219.0**: 156 cells within 10%, 126 additional cells within 25%, and 210 outside 25%. This run does not establish better liquidity-rule fidelity and worsens the average-return comparison.
 
 | Table 1B diagnostic | Prior PR | New | Paper |
 |---|---:|---:|---:|
@@ -67,7 +67,7 @@ The control adds warmup cohorts to the prior PR rules. Liquidity, execution and 
 | Panel B mean absolute error, bp | 11.3877 | 16.1591 | 12.2328 | 11.2063 | 15.3083 |
 | Weighted comparison points | 240.5000 | 217.0000 | 241.0000 | 242.0000 | 219.0000 |
 
-The formation screen drives the change: the control averages 2,300.6 eligible stocks and 2,013.4 selected pairs per cohort, versus 1,799.1 stocks and 1,561.1 pairs under the new screen. The paper reports roughly 2,057 pairs. The screen removes an observable non-trading-price issue, but does not recover the paper's universe and worsens mean-return fit.
+The formation screen drives the change: the control averages 2,300.6 eligible stocks and 2,013.4 selected pairs per cohort, versus 1,799.1 stocks and 1,561.1 pairs under the new screen. The paper reports roughly 2,057 pairs. The screen removes bid–ask-priced observations, including some with positive volume. It does not recover the paper's universe and worsens mean-return fit.
 
 The delayed-execution-only change lowers the top-5 one-day-wait mean from 0.4992% to 0.4698% (paper 0.7450%); it leaves every no-wait trade unchanged. Idle-cash treatment moves only the top-5 reported means at four-decimal precision. Adding warmup cohorts changes each mean by less than one basis point relative to the prior PR; it cannot explain the main mismatch.
 

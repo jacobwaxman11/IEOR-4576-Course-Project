@@ -136,6 +136,28 @@ PROCESSED_DIR = next(
     (base / "daily" for base in _PROCESSED_CANDIDATES if (base / "daily").exists()),
     _PROCESSED_CANDIDATES[0] / "daily",
 )
+# An explicit experiment input overrides the local default, unlike the shared
+# checkout fallback. Children inherit it, so every cohort reads the same vintage.
+if os.environ.get("GGR_PROCESSED_DIR"):
+    PROCESSED_DIR = Path(os.environ["GGR_PROCESSED_DIR"]).resolve()
+
+
+def processed_source_identity() -> dict | None:
+    """Stamp explicitly selected panels by their acquisition manifest, not a path alone."""
+    if not os.environ.get("GGR_PROCESSED_DIR"):
+        return None  # Existing CIZ cache stamps remain readable.
+    import hashlib
+    import json
+
+    path = PROCESSED_DIR / "source.json"
+    if not path.exists():
+        raise FileNotFoundError(f"Explicit processed panel requires provenance: {path}")
+    payload = path.read_bytes()
+    manifest = json.loads(payload)
+    return {"manifest_sha256": hashlib.sha256(payload).hexdigest(),
+            "return_convention": manifest["return_convention"]}
+
+
 DAILY_INDEX_FILE = WRDS_API_DIR / "daily_indexes.parquet"
 RAW_DAILY_DIR = WRDS_API_DIR / "daily_stocks"
 
@@ -151,6 +173,8 @@ _RAW_COLUMNS = [
 ]
 
 UNIVERSES: dict[str, tuple[str, str]] = {
+    "informative_common": ("vol_nonzero", "common"),
+    "activity_common": ("observed_activity", "common"),
     "traded_common": ("observed_trade", "common"),
     "vol_common": ("vol_nonzero", "common"),
     "volpos_common": ("vol_pos", "common"),
@@ -159,9 +183,10 @@ UNIVERSES: dict[str, tuple[str, str]] = {
 }
 
 _DAY_RULES = {
-    # Positive CIZ prices can be bid/ask averages. Require the actual trade
-    # flag, reject recorded zero volume, and never impute a formation return.
+    # Frozen strict-price sensitivity. BA is not proof of no trading: Nasdaq
+    # historically reported bid/ask prices even on days with positive volume.
     "observed_trade": lambda p: p["tr"] & ~p["vol_zero"] & np.isfinite(p["ret"]),
+    "observed_activity": lambda p: p["prc_ok"] & (p["tr"] | p["vol_pos"]) & ~p["vol_zero"],
     "tr": lambda p: p["tr"],
     "vol_nonzero": lambda p: p["prc_ok"] & ~p["vol_zero"],
     "vol_pos": lambda p: p["prc_ok"] & p["vol_pos"],
@@ -186,6 +211,7 @@ def _universe_panel_columns(universe: str) -> list[str]:
     """The processed columns needed to evaluate ``universe`` row flags."""
     day_rule, share_filter = UNIVERSES[universe]
     day_cols = {
+        "observed_activity": ["date", "prc_ok", "tr", "vol_pos", "vol_zero", "ret"],
         "observed_trade": ["tr", "vol_zero", "ret"],
         "tr": ["tr"],
         "vol_nonzero": ["prc_ok", "vol_zero"],
@@ -204,6 +230,8 @@ def formation_columns(universe: str = "vol_common",
     near-frozen-quote filter needs.
     """
     extra = ["vol_zero", "vol_pos"] if max_stale_share is not None else []
+    if universe == "informative_common":
+        extra += ["tr", "vol_pos"]
     return list(dict.fromkeys([*_universe_panel_columns(universe), "ret", *extra]))
 
 
@@ -435,6 +463,12 @@ def formation_universe(
         if missing:
             raise KeyError(f"preloaded panel lacks {missing} needed by universe {universe!r}")
     flags = universe_flags(panel, universe)
+    if universe == "activity_common":
+        # The rebasing day's own return is not part of normalized prices.
+        # Every subsequent formation return is required; no internal gaps
+        # are converted to zero for this explicitly observed-activity variant.
+        first = trading_calendar(start, end)[0]
+        flags &= np.isfinite(panel["ret"]) | panel["date"].eq(first)
     # The preloaded frame is the driver's formation window, the biggest object a
     # cohort holds; narrowing it with ``panel[columns]`` first would copy it
     # whole, which is what this path exists to avoid. ``universe_flags`` only
@@ -445,6 +479,14 @@ def formation_universe(
     moved = rows["ret"].fillna(0.0).ne(0.0).groupby(rows["permno"]).any()
     full = counts[counts == n_days].index
     keep = full[moved.reindex(full, fill_value=False).to_numpy()] if exclude_constant else full
+    if universe == "informative_common":
+        # Explicit sensitivity: static quotes without any observed activity
+        # contain neither a price signal nor evidence of trading. Unlike the
+        # broader exclude_constant flag, retain static paths with positive
+        # volume or a transaction-price observation. This is not a paper rule.
+        observed = (rows["tr"] | rows["vol_pos"]).groupby(rows["permno"]).any()
+        informative = moved | observed
+        keep = keep[informative.reindex(keep, fill_value=False).to_numpy()]
     if max_stale_share is not None:
         stale_day = ~rows["vol_zero"] & ~rows["vol_pos"] & rows["ret"].fillna(0.0).eq(0.0)
         share = stale_day.groupby(rows["permno"]).mean()

@@ -1,8 +1,9 @@
 # Claims status after the replication audit
 
 The project is a **partial replication**. No "23/25 claims replicate" tally is
-supported by the corrected experiment. [The audit](FIDELITY_VALIDATION.md)
-records current historical results and the precise changes to the paper's rules.
+supported by the corrected experiment. [WRDS follow-up](WRDS_FOLLOWUP.md)
+records current source/universe results and the completed recall test. The
+[earlier audit](FIDELITY_VALIDATION.md) preserves the strict-price experiment.
 The [legacy ledger](CLAIMS_LEGACY.md) retains the old numerical evidence and verdicts,
 explicitly superseded. It must not be used as evidence for the corrected run.
 
@@ -15,11 +16,11 @@ explicitly superseded. It must not be used as evidence for the corrected run.
 | Table 5 risk | Both monthly and daily statistics are rebuildable. Tail disagreement remains a substantive gap. |
 | Table 6 random pairs | Uses the same corrected book accounting and rejects old caches. Full control verified; see the fidelity audit for the new 200-replication result. |
 | Table 9A size screen | Rebuilt with 479 cohorts and 474 report months; positive profits persist, but some levels and changes disagree. |
-| Table 9B recalls | Corrected monthly accounting is wired in. Missing files/factors now fail explicitly. Fresh split-adjusted-volume inputs and a full rerun are required; the old result increased returns and did not reproduce the stated recall cost. |
+| Table 9B recalls | Executed with fresh WRDS volume/adjustment inputs: 479 identical no-recall trade logs, zero monthly control error, all 44 targets checked. Primary recalls increase employed-capital returns; 4/44 targets are within 10%, 14/44 within 25%. The numerical level and recall-cost claim fail. Alternative re-entry policies and past-only thresholds remain separately reported. |
 | Temporary mispricing / law of one price | **Not established.** Profitability, robustness, or residual correlation alone does not identify a causal mechanism. |
 
 Even the superseded results had important exceptions: top-5 post-1988 alpha t=1.35
 versus 2.12 in the paper, significant top-20 long-book alpha (2.17 versus 1.27), and
 recalls raising rather than lowering returns. These exceptions cannot be dismissed
-by an aggregate "in substance" count. They remain historical diagnostics until
-recomputed with the corrected specification.
+by an aggregate "in substance" count. The new recall experiment confirms that its
+effect remains unresolved; historical factor diagnostics retain their stated inputs.

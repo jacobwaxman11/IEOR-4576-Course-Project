@@ -1,7 +1,11 @@
-"""Explicit paper baseline and a frozen, superseded comparison specification.
+"""Frozen paper-derived reference and a superseded comparison specification.
 
 The legacy profile exists to measure changes on identical observations. Its inverse
 short weights and daily-spread compounding are not buy-and-hold accounting.
+The historical ``paper`` profile name is retained for cache reproducibility, but
+its strict transaction-price screen is not a verified recovery of section 2.1:
+historical Nasdaq bid-ask prices can coexist with actual trading. See
+report/replication/WRDS_FOLLOWUP.md for explicit universe sensitivities.
 """
 
 PROFILES = {
@@ -27,13 +31,14 @@ def resolve_profile(args):
     return args
 
 
-def validate_paper_cache(meta: dict, *, size_deciles_top=None) -> None:
+def validate_paper_cache(meta: dict, *, size_deciles_top=None,
+                         universe="traded_common", exclude_constant=False) -> None:
     """Claim experiments must not silently mix old selections or return conventions."""
     expected = {
         "format": 7, "normalization": "continued", "telephone_sic": "4811",
-        "universe": "traded_common", "delayed_entry": "execute", "idle_policy": "zero",
+        "universe": universe, "delayed_entry": "execute", "idle_policy": "zero",
         "size_deciles_top": size_deciles_top, "exclude_same_issuer": False, "max_stale_share": None,
-        "exclude_constant": False, "trigger_sigma": "std", "short_weights": "value",
+        "exclude_constant": exclude_constant, "trigger_sigma": "std", "short_weights": "value",
         "monthly_aggregation": "books", "sic_fallback": "formation_end",
     }
     bad = {key: (meta.get(key), value) for key, value in expected.items()
