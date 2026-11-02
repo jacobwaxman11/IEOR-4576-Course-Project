@@ -2730,21 +2730,40 @@ decile row costs 0.5 (top 5 from ~ to ✗).
 | sigma as the demeaned standard deviation | -6.0 | the paper's only direct measurement of sigma, Table 2A's trigger (p. 809), is closer under RMS in three columns and tied in the fourth (section 21) |
 | warm-up cohorts from 1963-02 | | contradicts p. 806: "with the exception of the first 12 months, which are needed to estimate pairs" |
 
-**Table 6's design, re-examined.** The bootstrap draws each random leg from its true leg's decile of the
-previous calendar month's return and closes the random pair on its own next crossing. Two other
-readings of the caption were measured in scratch runs (each with the engine's control matching the
-cache exactly). Ranking stocks on the trailing month that ends on the open day makes random pairs
-earn +0.09 to +0.16% a month (on PR #8's other conventions), the short-term reversal profit, against
-the paper's "slightly negative"; the calendar-month reading, which is also §3.6's "previous month's
-performance" (p. 818), stays primary. Closing each random pair when its true pair closes (the
-caption's "closes the position after the next crossing of prices", p. 819, read as the true pair's
-crossing) raises the random standard deviations about 15% toward the paper's and deepens the
-losses (no wait: -0.20 / -0.31 / -0.31 / -0.34% against -0.16 / -0.23 / -0.23 / -0.24%; paper
--0.14 / -0.11 / -0.11 / -0.11%); it is the documented alternative, not adopted on fit. Under every
-design the claim holds: true minus random is positive with t > 2 in all 16 series. The sign of the
-random-pair mean is set by the short-weight convention, not by the bootstrap: under PR #8's value
-weights the random means are near zero, under this repository's position weights they are
-negative, as in the paper.
+**Table 6's design: the random position opens and closes with its true trade.** The caption
+(p. 819) opens "a position in a random pair when the stocks in the true pair diverge by two
+historical standard deviations and closes the position after the next crossing of prices", and
+§3.6 (p. 818) takes "the set of historical dates on which the various pairs open" and reads "the
+difference between the actual and the simulated pairs returns" as "the portion of our pairs return
+that is not due to reversion". The only crossing the sentence defines is the true pair's, and the
+A/B difference isolates stock selection only if both sides hold their positions over the same
+dates. So each random position now opens and closes with the true trade it replaces (earlier only
+if a drawn stock delists or its data end); the drawn stocks keep their true legs' long and short
+roles. The previous primary closed on the drawn stocks' own next crossing, a reading with no
+sentence behind it. Three designs were measured on this build's accounting (no wait, fully
+invested, top 5 / top 20 / 101-120 / all 120):
+
+| design | random means | random SDs | Table 6 cells ✓ / ~ / ✗ |
+|---|---|---|---|
+| (a) open and close with the true trade (primary) | -0.20 / -0.31 / -0.31 / -0.34% | 4.12 / 2.13 / 2.15 / 1.01% | 8 / 10 / 30 |
+| (b) close on the drawn stocks' own crossing (`--close own`) | -0.16 / -0.23 / -0.23 / -0.24% | 3.49 / 1.84 / 1.92 / 0.85% | 1 / 18 / 29 |
+| (c) the drawn stocks on their own 2-sigma rule (scratch only) | -0.11 / -0.15 / -0.18 / -0.17% | 4.79 / 3.88 / 3.98 / 3.12% | 9 / 6 / 33 |
+| paper | -0.14 / -0.11 / -0.11 / -0.11% | 5.52 / 2.30 / 2.26 / 1.20% | |
+
+(a) was chosen on the text; it also scores best (13.0 of 48 against 10.0 and 12.0). (c) contradicts
+the caption's open and does not diversify like the paper's random pairs: their SD falls from 5.5%
+to 1.2% between 5 and 120 pairs, (a)'s from 4.1% to 1.0%, (c)'s only from 4.8% to 3.1%. The
+decile stays the previous calendar month (§3.6, "previous month's performance"): ranking on the
+trailing month that ends on the open day made random pairs earn +0.09 to +0.16% a month on PR #8's
+other conventions, the reversal profit, against the paper's "slightly negative". In every design
+true minus random is positive with t > 2 in all 16 series. The sign of the random-pair mean is set
+by the short-weight convention, not by the bootstrap: under PR #8's value weights the random means
+are near zero, under this repository's position weights they are negative, as in the paper.
+
+**Claim 4 is no longer counted.** "Pairs trading profits from temporary mispricing of close
+substitutes" (p. 797) is the abstract's interpretation, used nowhere else in the paper (its body
+speaks of the "Law of One Price"). `CLAIMS.md` lists it under "Not tested" and counts 24 claims:
+19 replicate (5 with the paper's numbers, 14 in substance), 4 partly, 1 not as stated.
 
 **Legacy SIZ, for the data question.** A run of the shipped code on CRSP's legacy SIZ daily file
 (final December 2024 release; `data/raw/wrds_api/legacy/dsf/`) scores 249.5 with the usual share

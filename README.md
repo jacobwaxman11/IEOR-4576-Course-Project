@@ -105,10 +105,10 @@ folder is the repository root; there is no extra nested `project-name/` folder.
 large, significant excess returns that transaction costs, conventional risk factors and
 short-term reversal do not explain. They link the profits to a latent common factor that weakened
 after 1988. Rebuilt from CRSP with the paper's stated rules, **the paper's conclusions replicate
-but its tables only partly do**. Of its 25 claims, 19 replicate (5 with the paper's numbers, 14 in
-direction and significance), 4 partly, 1 does not hold as stated (the top-20 long-book alpha is
-significant), and 1 is the paper's interpretation, which replication cannot test (temporary
-mispricing). The check scores 261.0 weighted points over the 481 printed cells (✓ within 10% = 1,
+but its tables only partly do**. Of its 24 testable claims, 19 replicate (5 with the paper's
+numbers, 14 in direction and significance), 4 partly, and 1 does not hold as stated (the top-20
+long-book alpha is significant). The abstract's "temporary mispricing" is the paper's
+interpretation and is not counted. The check scores 261.0 weighted points over the 481 printed cells (✓ within 10% = 1,
 ~ within 25% = ½): 207 cells within 10% and 315 within 25%. The gaps trace to data and to
 underspecified methods, above all a reversal factor the paper's description does not pin down.
 
