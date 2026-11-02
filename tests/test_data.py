@@ -193,7 +193,7 @@ def _variant_panel(tmp_path, monkeypatch) -> None:
       400 closed-end fund FUND/CEF/NS -> vol_ns only
       500 sharetype SB throughout   -> eligible nowhere
       600 zero-volume day (else TR) -> price_common only
-      800 clean but zero return every day -> eligible nowhere
+      800 clean but zero return every day -> eligible unless the extra screen is enabled
     """
     rows = []
     for d in DATES:
@@ -221,10 +221,10 @@ def _variant_panel(tmp_path, monkeypatch) -> None:
 
 
 EXPECTED = {
-    "vol_common": [100, 200],
-    "volpos_common": [100],
-    "price_common": [100, 600],
-    "vol_ns": [100, 200, 400],
+    "vol_common": [100, 200, 800],
+    "volpos_common": [100, 800],
+    "price_common": [100, 600, 800],
+    "vol_ns": [100, 200, 400, 800],
 }
 
 
@@ -461,3 +461,9 @@ def test_issuer_map_rejects_duplicate_permnos(tmp_path) -> None:
     pd.DataFrame({"permno": [10, 10], "permco": [5, 6]}).to_parquet(path)
     with pytest.raises(ValueError, match="more than one row per permno"):
         pdata.issuer_map(path)
+
+
+def test_constant_price_exclusion_is_an_explicit_sensitivity(tmp_path, monkeypatch):
+    _variant_panel(tmp_path, monkeypatch)
+    assert 800 in pdata.formation_universe(DATES[0], DATES[-1])
+    assert 800 not in pdata.formation_universe(DATES[0], DATES[-1], exclude_constant=True)

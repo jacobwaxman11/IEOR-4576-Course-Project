@@ -1,10 +1,16 @@
 # Replication score log
 
-This is the one place that records the replication score: the current total, how it is
-counted, and every shipped change to it. Other documents point here instead of quoting the
-number, so there is one thing to update.
+> **Historical snapshot, superseded by the accounting audit.** This document describes
+> the legacy run retained at `6644cbf`. Current defaults, corrected rules, and measured
+> validation are in [ACCOUNTING_CORRECTIONS.md](ACCOUNTING_CORRECTIONS.md). The old 267.5 is weighted
+> points across 481 comparisons: 214 cells within 10%, 321 within 25%, 160 outside.
+> It is not a count of 267.5 matching cells or evidence for the corrected run.
 
-Current shipped score: 267.5 of 481 cells
+
+This archive records how the superseded score changed. Current-run evidence is
+in ACCOUNTING_CORRECTIONS.md; fresh scores are generated into ignored results/.
+
+Legacy shipped score: 267.5 weighted points across 481 cells
 
 Cells outside 25% of the paper (✗): 160 = Table 1 23, Table 2 Panel A 0, Table 2 Panel B 10,
 Table 3 36, Table 7 2, Table 4 32, Table 5 Panel A 8, Table 8 45, Figure 4 4. By mark: ✓ 214,

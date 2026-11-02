@@ -1,28 +1,8 @@
-"""Paper-conformance regression guard: do the published tables still match?
+"""Historical snapshot integrity and fresh-run accounting/coverage checks.
 
-Three guards:
-
-1. The shipped full-sample check (report/replication/REPLICATION_CHECK.md, all
-   474 cohorts) must score at least the full-sample threshold. Text only, so
-   it always runs.
-2. A smoke test regenerates the tables on a fixed sample of cohorts (every
-   24th month of 1963-07 .. 2002-12 -> 20 cohorts, deterministic, ~15 s) and
-   scores comparison cells against the paper's published numbers, frozen
-   below from the RFS 2006 tables, independently of the driver's own report
-   writer. Its threshold is the shipped sample score. The sample is a poor
-   proxy for the full result (it can move the other way), so it only catches
-   breakage. It covers Tables 1-3 and 7 and the 43 cells of SCORE_LOG row 15
-   that need no factor data (Table 4's Sharpe ratios, Table 5 Panel A, Table 8's
-   moments, Figure 4's raw correlations). The other 115 cells of that row (Table
-   4's two regression blocks and equity premium, Table 8's regressions, Figure
-   4's residual correlations) need the Git LFS factor files and the Goyal-Welch
-   workbook, which a fresh checkout lacks; they are guarded by 1 and 3, and their
-   paper values by ``scripts/verify_paper_targets.py`` against the PDF.
-3. With REPLICATION_FULL=1 (`make conformance-full`, a few minutes) the full
-   sample is rebuilt and must reproduce the shipped check's summary lines.
-
-2 and 3 are skipped when the CRSP daily panel is absent (fresh checkouts); run
-`make build-data` first to produce it.
+The committed legacy snapshot has a frozen score for archival integrity. Fresh
+runs must preserve accounting identities and emit daily risk statistics; they
+are NOT required to beat a target-fit threshold. The full rebuild is opt-in.
 """
 
 from __future__ import annotations
@@ -129,7 +109,8 @@ def _score(out_tables: Path) -> dict:
             "score": round(full + 0.5 * half, 1), "failing": failing}
 
 
-PANEL_PRESENT = (ROOT / "data" / "processed" / "crsp" / "daily").exists()
+PANEL_PRESENT = all((ROOT / "data/processed/crsp/daily" / f"{y}.parquet").exists()
+                    for y in range(1962, 2003))
 CALENDAR_PRESENT = (ROOT / "data" / "raw" / "wrds_api" / "daily_indexes.parquet").exists()
 
 
@@ -137,12 +118,10 @@ CALENDAR_PRESENT = (ROOT / "data" / "raw" / "wrds_api" / "daily_indexes.parquet"
 @pytest.mark.skipif(not (PANEL_PRESENT and CALENDAR_PRESENT),
                     reason="requires the CRSP daily panel and the trading-calendar "
                            "extract (make build-data)")
-def test_tables_match_the_paper() -> None:
-    threshold = float(SPEC["threshold"])
+def test_sample_rebuild_reports_gaps_and_preserves_accounting() -> None:
     out = SCRATCH / "out"
     cache = SCRATCH / "cache"
-    venv_python = ROOT / ".venv" / "bin" / "python"
-    python = str(venv_python if venv_python.exists() else Path(sys.executable))
+    python = sys.executable
     cmd = [
         python, str(ROOT / "scripts" / "03_replicate.py"),
         "--universe", "vol_common", "--start", "1963-07", "--end", "2002-12",
@@ -156,12 +135,22 @@ def test_tables_match_the_paper() -> None:
     built = subprocess.run(cmd, check=False, cwd=ROOT, env=env, capture_output=True, text=True)
     assert built.returncode == 0, f"sample rebuild failed: {built.stderr[-2000:]}"
 
+    # Matching targets is evidence to report, not a constraint used to tune the strategy.
     cells = _score(out / "tables")
-    assert cells["score"] >= threshold, (
-        f"replication regressed below the shipped score: weighted {cells['score']} < "
-        f"{threshold} (full {cells['full']}, half {cells['half']}, miss {cells['miss']}); "
-        f"cells outside 25% of the paper: {', '.join(d['cell'] for d in cells['failing'])}"
-    )
+    assert cells["full"] + cells["half"] + cells["miss"] > 0
+    _assert_accounting(out / "tables")
+
+
+def _assert_accounting(tables):
+    table1 = pd.read_csv(tables / "table1.csv", header=[0, 1], index_col=0)
+    table7 = pd.read_csv(tables / "table7.csv", index_col=0)
+    for name in ("top5", "top20", "101-120", "all"):
+        expected = table7.loc["long: mean monthly return", name] - table7.loc["short: mean monthly return", name]
+        assert table1.loc["mean", ("B", name)] == pytest.approx(expected, abs=1e-12)
+    daily = pd.read_csv(tables / "table5_daily.csv", index_col=0)
+    assert daily.shape == (9, 4)
+    assert np.isfinite(daily.to_numpy()).all()
+
 
 
 MARK_POINTS = {"✓": 1.0, "~": 0.5, "✗": 0.0}
@@ -197,11 +186,10 @@ def test_shipped_full_sample_check_meets_its_threshold() -> None:
 @pytest.mark.skipif(not (PANEL_PRESENT and CALENDAR_PRESENT),
                     reason="requires the CRSP daily panel and the trading-calendar "
                            "extract (make build-data)")
-def test_full_sample_rebuild_reproduces_the_shipped_check() -> None:
+def test_full_sample_rebuild_preserves_accounting_and_exports_daily_risk() -> None:
     out = SCRATCH / "full_out"
     cache = SCRATCH / "full_cache"
-    venv_python = ROOT / ".venv" / "bin" / "python"
-    python = str(venv_python if venv_python.exists() else Path(sys.executable))
+    python = sys.executable
     workers = os.environ.get("REPLICATION_WORKERS", "4")
     cmd = [
         python, str(ROOT / "scripts" / "03_replicate.py"),
@@ -216,6 +204,7 @@ def test_full_sample_rebuild_reproduces_the_shipped_check() -> None:
     assert built.returncode == 0, f"full rebuild failed: {built.stderr[-2000:]}"
 
     rebuilt = (out / "tables" / "replication_check.md").read_text(encoding="utf-8")
-    shipped = SHIPPED_CHECK.read_text(encoding="utf-8")
-    assert _check_score(rebuilt) >= float(SPEC["full_sample"]["threshold"])
-    assert _summary_lines(rebuilt) == _summary_lines(shipped)
+    assert "Table 5 Panel B" in rebuilt
+    _assert_accounting(out / "tables")
+    monthly = pd.read_parquet(out / "tables/monthly_returns.parquet")
+    assert monthly["month_end"].nunique() == 474

@@ -1,5 +1,12 @@
 # Replication outputs
 
+> **Historical snapshot, superseded by the accounting audit.** This document describes
+> the legacy run retained at `6644cbf`. Current defaults, corrected rules, and measured
+> validation are in [ACCOUNTING_CORRECTIONS.md](../ACCOUNTING_CORRECTIONS.md). The old 267.5 is weighted
+> points across 481 comparisons: 214 cells within 10%, 321 within 25%, 160 outside.
+> It is not a count of 267.5 matching cells or evidence for the corrected run.
+
+
 Generated files, committed so they can be read without the licensed CRSP data. `results/` is
 git-ignored, so these are copies of one run over the full 474-cohort cache (score 267.5).
 

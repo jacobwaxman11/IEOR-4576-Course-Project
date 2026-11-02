@@ -248,9 +248,11 @@ def check_cohort(cache_root: Path, cohort: str, top: int = 3) -> str:
     cal = trading_calendar(form_start, form_end)
     end_day = cal[-1].date()
     row = load_daily(end_day, end_day, ["permno", "cap", "exch", "common"]).set_index("permno")
-    # the driver's defaults: vol_common with the 0.95 stale-share screen
+    # Read the actual stamped formation settings of the restricted build.
+    meta = json.loads((Path(cache_root) / "cohorts/cache_meta.json").read_text())
     universe = formation_universe(form_start, form_end, universe="vol_common",
-                                  max_stale_share=0.95)
+                                  max_stale_share=meta.get("max_stale_share"),
+                                  exclude_constant=meta.get("exclude_constant", False))
     caps = row["cap"].astype(float)
     brk = caps[row["exch"].isin(("N", "A")) & row["common"].eq(True)]
     deciles = size_deciles(caps, brk)

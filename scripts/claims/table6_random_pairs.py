@@ -73,7 +73,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import t6_engine as eng
 
 from project.data import formation_columns, formation_universe, load_daily, trading_calendar
-from project.evaluation import cohort_monthly, overlap_average, portfolio_daily, summary_stats
+from project.evaluation import overlap_average, portfolio_monthly, summary_stats
+from project.specification import validate_paper_cache, stamp_experiment
 from project.features import normalized_prices
 from project.models import CohortResult
 
@@ -104,10 +105,10 @@ SERIES_KEYS = [f"w{w}|{p}|{c}" for (w, p, c) in SERIES]
 STATS = ("mean", "std", "median")
 END = (2002, 12)
 UNIVERSE = "vol_common"
-MAX_STALE_SHARE = 0.95
+MAX_STALE_SHARE = None
 DEFAULT_SEED = 20060101
 #: The pipeline's eq. (3) short weight (``--short-weights position``).
-SHORT_WEIGHTS = "position"
+SHORT_WEIGHTS = "value"
 #: Ranks drawn from each cohort's pair ranking: Table 6's widest column.
 N_RANKS = 120
 DECILES = 10
@@ -271,7 +272,7 @@ def control_cohort(cache_root: Path, year: int, month: int, wait: int) -> dict:
 
     for portfolio, ranks in rank_sel.items():
         for capital in CAPITALS:
-            ours = cohort_monthly(portfolio_daily(result, list(ranks), capital, SHORT_WEIGHTS))
+            ours = portfolio_monthly(result, list(ranks), capital, SHORT_WEIGHTS)
             if portfolio in SHIPPED_PORTFOLIOS:
                 paper = shipped_series(portfolio, capital)
                 common = ours.index.intersection(paper.index)
@@ -282,8 +283,8 @@ def control_cohort(cache_root: Path, year: int, month: int, wait: int) -> dict:
                 diff = float(np.abs(ours.reindex(common).to_numpy() - paper.to_numpy()).max())
                 out["max_diff_shipped"] = max(out["max_diff_shipped"], diff)
             sel = [int(r) for r in ranks if r <= n_ranks]
-            daily_v = eng.vw_returns(books_vec, sel)[0 if capital == "employed" else 1][:, 0]
-            keys, months = eng.monthly_returns(daily_v, month_of_day)
+            keys, employed, committed = eng.portfolio_months(books_vec, sel, month_of_day)
+            months = employed if capital == "employed" else committed
             vector = pd.Series(months[:, 0],
                                index=pd.DatetimeIndex([month_timestamp(int(k)) for k in keys]))
             common = ours.index.intersection(vector.dropna().index)
@@ -313,7 +314,8 @@ def run_control(cache_root: Path, cohorts: list[tuple[int, int]], waits: tuple[i
         "max_diff_trade_payoff": float(frame["payoff_max_diff"].max()),
     }
     print("\ncontrol summary: " + json.dumps(summary), flush=True)
-    return 0 if summary["max_diff_shipped"] == 0.0 else 1
+    checks = ("max_diff_shipped", "max_diff_vector_layer", "max_diff_trade_payoff")
+    return 0 if all(np.isfinite(summary[k]) and summary[k] < 1e-12 for k in checks) else 1
 
 
 # ---------------------------------------------------------------------------
@@ -532,8 +534,8 @@ def true_pair_series(cache_root: Path, panel: CohortPanel, wait: int) -> tuple[n
         if w != wait:
             continue
         lo, hi = PORTFOLIOS[portfolio]
-        daily = portfolio_daily(result, list(range(lo, hi + 1)), capital, SHORT_WEIGHTS)
-        block[:, j] = cohort_monthly(daily).reindex(index).to_numpy()
+        monthly = portfolio_monthly(result, list(range(lo, hi + 1)), capital, SHORT_WEIGHTS)
+        block[:, j] = monthly.reindex(index).to_numpy()
     return block, len(keep)
 
 
@@ -612,9 +614,8 @@ def run_cohort(cache_root: Path, year: int, month: int, reps: int, seed: int,
                     if w != wait:
                         continue
                     lo, hi = PORTFOLIOS[portfolio]
-                    daily = portfolio_daily(result, list(range(lo, hi + 1)), capital,
-                                            SHORT_WEIGHTS)
-                    random[start + rep, :, j] = cohort_monthly(daily).reindex(month_index).to_numpy()
+                    monthly = portfolio_monthly(result, list(range(lo, hi + 1)), capital, SHORT_WEIGHTS)
+                    random[start + rep, :, j] = monthly.reindex(month_index).to_numpy()
     return {"months": months, "random": random, "true": true,
             "stats": np.array(json.dumps(stats))}
 
@@ -627,6 +628,8 @@ def run_shard(args, cohorts: list[tuple[int, int]], shard: int, shards: int) -> 
     out_root = Path(args.out_root).resolve()
     (out_root / "cohorts").mkdir(parents=True, exist_ok=True)
     cache_root = Path(args.cache_root).resolve()
+    if args.mode != "report":
+        validate_paper_cache(json.loads((cache_root / "cohorts/cache_meta.json").read_text()))
     mine = [c for i, c in enumerate(cohorts) if i % shards == shard]
     done = 0
     for year, month in mine:
@@ -762,7 +765,7 @@ def main() -> int:
     parser.add_argument("--mode", choices=("control", "run", "shard", "report"), default="control")
     parser.add_argument("--cache-root", default=str(SHARED_CACHE),
                         help="vol_common cache directory holding cohorts/ (read read-only)")
-    parser.add_argument("--out-root", default=str(_ROOT / "scratch" / "t6"),
+    parser.add_argument("--out-root", default=str(_ROOT / "results" / "replication" / "table6"),
                         help="private output directory")
     parser.add_argument("--wait", default="0,1")
     parser.add_argument("--limit-cohorts", type=int, default=None)
@@ -775,6 +778,12 @@ def main() -> int:
     args = parser.parse_args()
 
     cache_root = Path(args.cache_root).resolve()
+    source_meta = json.loads((cache_root / "cohorts/cache_meta.json").read_text())
+    validate_paper_cache(source_meta)
+    if args.mode != "control":
+        stamp_experiment(args.out_root, source_meta,
+                         {"reps": args.reps, "seed": args.seed, "wait": args.wait},
+                         read_only=args.mode == "report")
     waits = tuple(int(w) for w in args.wait.split(",") if w.strip())
     cohorts = cohort_list(cache_root)
     if args.limit_cohorts is not None:

@@ -144,7 +144,7 @@ def _build(tmp_path, monkeypatch, month, size_deciles_top):
     )
     monkeypatch.setattr(
         rep, "formation_universe",
-        lambda s, e, universe, max_stale_share=None, panel=None: [1, 2, 3, 4, 5, 6],
+        lambda s, e, universe, max_stale_share=None, panel=None, exclude_constant=False: [1, 2, 3, 4, 5, 6],
     )
     rep.init_worker((pd.Series(dtype="int64"), pd.Series(dtype="int64")))
     job = rep.Job(2020, month, (2020, 12), (0, 1), "vol_common", True,

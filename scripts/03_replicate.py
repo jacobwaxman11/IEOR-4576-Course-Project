@@ -13,7 +13,8 @@ Usage:
         [--normalization continued|rebased] [--aggregate-only]
         [--same-issuer exclude|allow] [--max-stale-share SHARE|none]
         [--telephone-sic 4811|481x] [--trigger-sigma rms|std]
-        [--size-deciles-top N]
+        [--size-deciles-top N] [--specification paper|legacy]
+        [--monthly-aggregation books|daily_difference]
 
 Cohorts are cached under data/processed/replication/{NAME}/cohorts/, stamped
 with their trading normalization, cache format and formation options in
@@ -74,9 +75,11 @@ from project.evaluation import (
     PORTFOLIOS,
     cohort_monthly,
     composition_stats,
+    daily_risk_table,
     overlap_average,
     portfolio_daily,
     portfolio_legs,
+    portfolio_monthly,
     restrict_to_size_deciles,
     summary_stats,
     trading_components,
@@ -95,6 +98,8 @@ from project.factors import (
 from project.features import normalized_prices, select_pairs, select_pairs_within_groups
 from project.models import simulate_cohort
 from project.paths import ROOT
+from project.specification import PROFILES, resolve_profile
+from project.replication_report import conventions
 from project.plotting import plot_pair_trading_period, position_indicator
 from project.sectors import (
     SECTORS,
@@ -289,6 +294,20 @@ PAPER_TABLE5: dict[str, dict[str, float]] = {
                 "var_10": -0.00756, "var_25": -0.00145},
     "all": {"serial_correlation": 0.12, "var_1": -0.01994, "var_5": -0.00877,
             "var_10": -0.00614, "var_25": -0.00146},
+}
+PAPER_TABLE5_DAILY = {
+    "top5": {"mean": .00033, "std": .00492, "serial_correlation": -.12,
+             "var_1": -.01236, "var_5": -.00710, "var_10": -.00504, "var_25": -.00239,
+             "share_negative": .47, "min": -.10079},
+    "top20": {"mean": .00040, "std": .00296, "serial_correlation": -.06,
+              "var_1": -.00647, "var_5": -.00398, "var_10": -.00293, "var_25": -.00133,
+              "share_negative": .44, "min": -.06723},
+    "101-120": {"mean": .00035, "std": .00277, "serial_correlation": .00,
+                "var_1": -.00653, "var_5": -.00400, "var_10": -.00288, "var_25": -.00130,
+                "share_negative": .45, "min": -.01987},
+    "all": {"mean": .00027, "std": .00169, "serial_correlation": .35,
+            "var_1": -.00327, "var_5": -.00202, "var_10": -.00149, "var_25": -.00071,
+            "share_negative": .46, "min": -.01069},
 }
 PAPER_TABLE8: dict[str, dict[str, float]] = {
     "top5": {"pre_mean": 0.01034, "pre_std": 0.02259, "post_mean": 0.00217,
@@ -491,7 +510,7 @@ def figures_dir(universe: str) -> Path:
     return base if universe == PRIMARY_UNIVERSE else base / universe
 
 
-CACHE_FORMAT = 5
+CACHE_FORMAT = 6
 T1_CAPITALS = ("committed", "employed", "committed_count", "employed_count", "employed_literal")
 
 
@@ -528,7 +547,7 @@ def verify_cache(universe: str, continued: bool) -> None:
             f"pass --normalization {meta.get('normalization')} or rebuild with --force"
         )
     for key in ("exclude_same_issuer", "max_stale_share", "telephone_sic", "trigger_sigma",
-                "short_weights", "size_deciles_top"):
+                "short_weights", "size_deciles_top", "monthly_aggregation", "exclude_constant", "sic_fallback"):
         if meta.get(key) != want.get(key):
             built = f"{key}={meta[key]}" if key in meta else f"no {key} stamp"
             now = f"{key}={want[key]}" if key in want else f"no {key}"
@@ -588,12 +607,15 @@ class Job:
     exclude_same_issuer: bool = False
     max_stale_share: float | None = None
     telephone_sic: str = "4811"
-    trigger_sigma: str = "rms"
-    short_weights: str = "position"
+    trigger_sigma: str = "std"
+    short_weights: str = "value"
     #: Largest CRSP size decile a formation-end stock may sit in (``None``: no
     #: screen). ``3`` forms pairs only inside the top three deciles, the universe
     #: of the paper's Table 9 Panel A. Judge eligibility first, then the screen.
     size_deciles_top: int | None = None
+    monthly_aggregation: str = "books"
+    exclude_constant: bool = False
+    sic_fallback: str = "formation_end"
 
 
 def init_worker(fallbacks: tuple[pd.Series, ...] | None = None) -> None:
@@ -696,7 +718,7 @@ def build_cohort(job: Job) -> tuple[int, int]:
     form_panel = load_daily(form_start, form_end, formation_cols)
     universe = formation_universe(
         form_start, form_end, universe=job.universe, max_stale_share=job.max_stale_share,
-        panel=form_panel,
+        panel=form_panel, exclude_constant=job.exclude_constant,
     )
     if job.size_deciles_top is not None:
         # Table 9 Panel A's size screen: pairs form only inside the top deciles.
@@ -712,8 +734,9 @@ def build_cohort(job: Job) -> tuple[int, int]:
     issuers = _issuer_series() if job.exclude_same_issuer else None
     pairs = select_pairs(prices, issuers, job.trigger_sigma)
 
+    fallbacks = _sic_fallbacks(job.cohorts_root) if job.sic_fallback == "legacy" else ()
     labels = sectors_for(row["siccd"].reindex(universe).fillna(0),
-                         *_sic_fallbacks(job.cohorts_root), telephone=job.telephone_sic)
+                         *fallbacks, telephone=job.telephone_sic)
     sector_pairs = select_pairs_within_groups(prices, labels, issuers, job.trigger_sigma)
     levels = prices.iloc[-1] if job.continued else None
     del prices
@@ -742,6 +765,7 @@ def build_cohort(job: Job) -> tuple[int, int]:
     pairs.to_parquet(coh_dir / "pairs.parquet")
     sigma = pairs.set_index("rank")["sigma"]
     rows: list[dict] = []
+    daily_rows: list[pd.DataFrame] = []
     summary: dict = {
         "waits": list(job.waits),
         "stocks": int(pd.concat([pairs["permno_1"], pairs["permno_2"]]).nunique()),
@@ -760,8 +784,15 @@ def build_cohort(job: Job) -> tuple[int, int]:
         result.opened.rename("opened").to_frame().to_parquet(coh_dir / f"w{wait}_opened.parquet")
         for pname, ranks in PORTFOLIOS.items():
             for capital in T1_CAPITALS:
-                monthly = cohort_monthly(portfolio_daily(result, ranks, capital, job.short_weights))
+                monthly = portfolio_monthly(result, ranks, capital, job.short_weights,
+                                            job.monthly_aggregation)
                 rows += _monthly_rows("t1", "", wait, pname, capital, monthly)
+                if capital in ("employed", "committed"):
+                    daily = portfolio_daily(result, ranks, capital, job.short_weights)
+                    daily_rows.append(pd.DataFrame({
+                        "date": daily.index, "wait": wait, "portfolio": pname,
+                        "capital": capital, "ret": daily.to_numpy(),
+                    }))
             long_daily, short_daily = portfolio_legs(result, ranks, job.short_weights)
             for name, daily in zip(LEG_CAPITALS, (long_daily, short_daily)):
                 rows += _monthly_rows("t1", "", wait, pname, name, cohort_monthly(daily))
@@ -792,18 +823,20 @@ def build_cohort(job: Job) -> tuple[int, int]:
             if ranks is not None and len(sp) < max(ranks):
                 continue
             for capital in TABLE3_CAPITALS:
-                monthly = cohort_monthly(portfolio_daily(result, ranks, capital, job.short_weights))
+                monthly = portfolio_monthly(result, ranks, capital, job.short_weights,
+                                            job.monthly_aggregation)
                 rows += _monthly_rows("t3", sector, 1, pname, capital, monthly)
 
     pd.DataFrame(rows, columns=["table", "sector", "wait", "portfolio", "capital",
                                 "month_end", "ret"]).to_parquet(coh_dir / "monthly.parquet")
+    pd.concat(daily_rows, ignore_index=True).to_parquet(coh_dir / "daily.parquet", index=False)
     (coh_dir / "summary.json").write_text(json.dumps(summary, default=float) + "\n")
     return job.year, job.month
 
 
 def cohort_cache_complete(year: int, month: int, waits: tuple[int, ...], universe: str) -> bool:
     path = cohort_dir(universe) / f"{year:04d}-{month:02d}" / "summary.json"
-    if not path.exists():
+    if not path.exists() or not (path.parent / "daily.parquet").exists():
         return False
     return set(waits) <= set(json.loads(path.read_text()).get("waits", []))
 
@@ -818,6 +851,22 @@ def load_summaries(cohorts: list[tuple[int, int]], universe: str) -> tuple[pd.Da
         frames.append(frame)
         summaries.append(json.loads((coh / "summary.json").read_text()))
     return pd.concat(frames, ignore_index=True), summaries
+
+
+def write_daily_outputs(cohorts: list[tuple[int, int]], universe: str, out_dir: Path) -> None:
+    """Persist overlap-averaged daily returns and the full Table 5B risk block."""
+    frames = [pd.read_parquet(cohort_dir(universe) / f"{y:04d}-{m:02d}" / "daily.parquet")
+              for y, m in cohorts]
+    daily = pd.concat(frames, ignore_index=True)
+    daily = daily.groupby(["wait", "portfolio", "capital", "date"], as_index=False)["ret"].mean()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    daily.to_parquet(out_dir / "daily_returns.parquet", index=False)
+    employed = daily[(daily.wait == 1) & (daily.capital == "employed")]
+    if employed.empty:
+        (out_dir / "table5_daily.csv").unlink(missing_ok=True)
+        return
+    series = {p: g.set_index("date")["ret"] for p, g in employed.groupby("portfolio")}
+    daily_risk_table(series).reindex(columns=list(PORTFOLIOS)).to_csv(out_dir / "table5_daily.csv")
 
 
 def _strategy_series(frame: pd.DataFrame, end_ts: pd.Timestamp) -> pd.Series:
@@ -963,15 +1012,13 @@ def _reversal_alternative_section(out_dir: Path, total: list) -> list[str]:
     alt = pd.read_csv(path, index_col=0)
     t4 = pd.read_csv(out_dir / "table4.csv", index_col=0)
     t8 = pd.read_csv(out_dir / "table8_subperiod.csv", index_col=0)
-    lines = ["## Reversal factor: the paper's own, as Table 8 implies it (unscored)", "",
-             "The scored regressions above use French's ST_Rev, the long-short factor the paper",
-             "describes. The paper built its own reversal factor, and its Table 8 regressions are",
-             "consistent only with a factor whose standard deviation is near the printed 0.072",
-             "before 1989 and whose correlation with the market is about +0.8: the profile of a",
-             "long-only portfolio of prior-month losers, not of a long-short factor (REVIEW_NOTES",
-             "section 51, `scripts/audit_reversal_factor.py`). The rows below repeat the regressions",
-             "with that series, French's equal-weighted bottom three prior-month deciles less the",
-             "T-bill, in place of ST_Rev. They are not scored.", ""]
+    lines = ["## Reversal factor: reconstructed losers-only sensitivity (unscored)", "",
+             "The scored regressions use French's ST_Rev as a proxy. The paper's own",
+             "reversal-factor observations are unavailable. A prior audit inferred that",
+             "a long-only losers factor could explain some printed moments; that inference",
+             "does not recover or authenticate the original series. The alternative below",
+             "uses French's equal-weighted bottom three prior-month deciles less the T-bill.",
+             "Neither version is an exact replication of the proprietary factor regression.", ""]
     alt_marks, scored_marks = [], []
     for half, label, paper_of, ours_of in (
             ("full", "Table 4, full sample", lambda p, r: PAPER_TABLE4[p][r],
@@ -1258,12 +1305,11 @@ def write_comparison(
             "the paper's 'using CRSP breakpoints')",
             "on the last trading day of the formation window, 1 = largest. The",
             "`_allpanel` rows (table2_panelB.csv only) use breakpoints from every",
-            "panel row on that date. The paper's 'average decile difference for",
-            "mixed pairs' (0.97) is below 1, the least a mean of integer gaps",
-            "between mixed pairs can be, so its row here is the average over all",
-            "pairs, same-decile pairs counting 0 (SCORE_LOG.md row 6); the mean",
-            "over mixed pairs only is `avg_decile_diff_mixed_only`",
-            "(table2_panelB.csv only), 1.67 for the top 5 (REVIEW_NOTES section 34).",
+            "panel row on that date. Average decile difference for mixed pairs",
+            "uses only pairs whose two stocks occupy different deciles. The",
+            "all-pairs average is reported separately in table2_panelB.csv.",
+            "The paper's target below one is unresolved under integer deciles;",
+            "the named statistic is not redefined to move it closer to the target.",
             "",
         ]
         stats = list(next(iter(PAPER_TABLE2B.values())).keys())
@@ -1403,45 +1449,11 @@ def _tally_line(tally: list) -> str:
 def _score_line(marks: list) -> str:
     """The weighted total the scorer, the conformance test and SCORE_LOG.md all use."""
     n = sum(m != "" for m in marks)
-    return (f"Score: {marks.count('✓') + 0.5 * marks.count('~'):.1f} of {n} compared cells "
+    return (f"Score: {marks.count('✓') + 0.5 * marks.count('~'):.1f} weighted points across {n} compared cells "
             "(✓ = 1, ~ = ½, ✗ = 0); history in SCORE_LOG.md.")
 
 
 PCT_STATS = {"mean", "nw_se", "median", "std", "min", "max", "committed_mean"}
-
-
-def _short_weight_header(short_weights: str) -> tuple[list[str], list[str]]:
-    """The check header's description of the eq. (3) short weight, matching the run's setting."""
-    if short_weights == "position":
-        portfolio = [
-            "positions minus that of the short positions, each position weighted by eq. (3)",
-            "applied to its own return (a long by its value, a short by prod(1 - r), which",
-            "shrinks as the shorted stock rises), and committed returns scale it by the",
-            "share of selected pairs holding a position (fully-invested/committed ratios",
-            "1.61-2.02 against the paper's 1.58-1.81, the \"all\" column furthest off);",
-        ]
-        disclosure = [
-            "The short-position weight is also our reading: weighting a short by the",
-            "shorted stock's value instead (--short-weights value) gives SCORE_LOG.md row",
-            "12. The weight is floored at zero; 780 of the 2,968,816 Table 1 positions",
-            "carry zero weight after their shorted stock doubles in a day, none of them in",
-            "the top 5, top 20 or 101-120 portfolios, so the floor acts on the \"all\"",
-            "columns. REVIEW_NOTES section 29 gives the evidence and the objections (Table",
-            "8 before 1989 and the 1999 draft).",
-        ]
-    else:
-        portfolio = [
-            "positions minus that of the short positions, each position weighted by its",
-            "value since it opened (a short by the shorted stock's value), and committed",
-            "returns scale it by the share of selected pairs holding a position",
-            "(fully-invested/committed ratios 1.60-1.90 against the paper's 1.58-1.81);",
-        ]
-        disclosure = [
-            "The short-position weight is also our reading: this run uses --short-weights",
-            "value, SCORE_LOG.md row 12's convention; the default since row 13 weights a",
-            "short by prod(1 - r), and REVIEW_NOTES section 29 compares the two.",
-        ]
-    return portfolio, disclosure
 
 
 def _monthly_series(frame: pd.DataFrame, wait: int, portfolio: str, capital: str) -> pd.Series:
@@ -1679,53 +1691,10 @@ def _best_offset(joined: pd.DataFrame) -> int:
 def write_replication_check(out_dir: Path, fig_dir: Path, universe: str,
                             short_weights: str) -> Path:
     """Compare Figures 1 and 4 and Tables 1-4, 5A, 7 and 8 with the paper; writes the check."""
-    portfolio, disclosure = _short_weight_header(short_weights)
     lines = [
-        f"# Replication check: GGR (2006) Figures 1 and 4, Tables 1-4, 5 Panel A, 7 and 8 ({universe})",
-        "",
-        "Cells show ours / paper. ✓ within 10% of the paper, ~ within 25%, ✗ further.",
-        "",
-        "Conventions that are our reading of the paper, not its words: fully invested",
-        "returns are eq. (2) across the portfolio, the value-weighted return of the long",
-        *portfolio,
-        "trading prices continue the",
-        "formation normalization (GGR Figure 1); a no-trade day is a day with recorded",
-        "zero volume, a stock whose price never moves in the formation window is",
-        "excluded, and so is a stock with no recorded volume and an unchanged price on",
-        "more than 95% of the formation days (near-frozen quotes); a stock is never",
-        "matched with another security of its own issuer (same CRSP permco, e.g. two",
-        "share classes). The paper states none of these three exclusions beyond",
-        "screening out stocks with a no-trade day; REVIEW_NOTES section 18 gives the",
-        "evidence, and SCORE_LOG.md the score without them. Telephone utilities are",
-        "SIC 4811, the 1972 telephone code that CRSP carries before 1987 (4810 and the",
-        "1987 codes 4812-4819 are Industrials); the paper gives no SIC ranges, and",
-        "REVIEW_NOTES section 20 gives the evidence. Waste management (SIC",
-        "4950-4959) is Industrials, following GICS; S&P's contemporaneous scheme is",
-        "unverified and the 1999 draft is neutral on it, so this is a classification",
-        "choice worth five cells in the Utilities 101-120 band (REVIEW_NOTES section",
-        "24). The trigger's sigma is the",
-        "formation spread's root mean square about zero, sqrt(SSD/N), not its standard",
-        "deviation about its mean; the paper says \"historical standard deviations\",",
-        "and REVIEW_NOTES section 21 gives the evidence. The one-day wait skips a",
-        "signal whose prices cross back on the intervening day; the paper states no",
-        "such condition, and dropping it changes no mark (REVIEW_NOTES section 47).",
-        "Table 1 compounds the daily difference of the long and the short book,",
-        "while the paper's Table 1 = Table 7 identity implies compounding each book",
-        "first; that reading scores 184.0 of 291 (REVIEW_NOTES section 33).",
-        *disclosure,
-        "",
-        "The paper's five-factor block rests on a reversal factor it does not name: its",
-        "printed statistics pin a 2.19%/month premium at 7.23% monthly volatility, and the",
-        "Table 8 Panel A loadings need a reversal factor whose variance Mkt-RF/SMB/HML/UMD",
-        "already explain 95% of, where French ST_Rev is 26% explained. That is implausible",
-        "rather than contradictory -- PAPER_CONSISTENCY.md reports the arithmetic, the",
-        "joint test and its rounding sensitivity, and `scripts/paper_consistency.py`",
-        "reproduces them -- so a ✗ in those rows is a gap here as much as in the source.",
-        "",
-        "The score total, its history and how it is counted live in SCORE_LOG.md. The",
-        "open gaps are in OPEN_QUESTIONS.md; the 1999 NBER draft is scored separately",
-        "in EDITION_1999.md.",
-        "",
+        f"# Replication check: GGR (2006) Tables 1-5, 7 and 8; Figures 1 and 4 ({universe})",
+        "", "Cells show ours / paper. ✓ within 10%, ~ between 10% and 25%, ✗ outside 25%.",
+        "", *conventions(FORMATION_OPTIONS, short_weights),
     ]
     header_len = len(lines)
     summary = []
@@ -1827,36 +1796,25 @@ def write_replication_check(out_dir: Path, fig_dir: Path, universe: str,
     base323 = list(marks)
 
     risk_note = [
-        "## Tables 4, 5 Panel A and 8 and Figure 4: conventions",
-        "",
-        "Tables 4, 5 Panel A and 8 and Figure 4 describe the one-day-wait series of Table 1",
-        "Panel B; rows that repeat a scored row (means, standard deviations, Table 4's serial",
-        "correlation, Table 5's loss probability and minimum) are left out. Percentiles are",
-        "linearly interpolated (pandas' default) and serial correlation is the lag-1",
-        "correlation of calendar-adjacent months; the paper states neither estimator. The",
-        "regressions are OLS on French's market, SMB, HML, momentum and short-term reversal",
-        "factors, and on Ibbotson's market, small-stock, default and horizon premia (Ibbotson's",
-        "bond returns from Goyal and Welch's data, the small-stock series rebuilt from CRSP by",
-        "its recipe; coefficients and R2 are scored, the paper's Newey-West t-statistics and factor",
-        "standard deviations are not; the intercepts' t-statistics, six lags, are printed beside",
-        "the paper's). Table 4's equity-premium column is French's Mkt-RF, the regressions' market",
-        "factor, which Table 8 names the \"U.S. equity risk-premium\" (REVIEW_NOTES section 50).",
-        "French's reversal factor is losers minus winners, the sign",
-        "of the paper's printed loadings. The paper built its own reversal factor (French's",
-        "dates from 2006), and Table 8 identifies it as no long-short factor: its regressions",
-        "need a standard deviation near 0.072 before 1989, against ST_Rev's 0.026, and a +0.8",
-        "correlation with the market. Its loadings are therefore not expected to match; the",
-        "regressions with the series it resembles, prior-month losers less the bill, are",
-        "reported unscored at the end (REVIEW_NOTES section 51). Marks are ratios, so they read",
-        "harshly where the paper's value is near zero (a 25th percentile of +0.054%, an SMB",
-        "loading of 0.001).",
-        "",
+        "## Risk comparisons: scope", "",
+        "Tables 4, 5A, 7 and 8 use the same one-day-wait monthly series; Table 5B uses",
+        "daily book differences, overlap-averaged across cohorts before its statistics.",
+        "Percentiles use linear interpolation. Monthly serial correlation pairs adjacent",
+        "calendar months; daily serial correlation pairs adjacent trading observations.",
+        "Repeated monthly moments are excluded from the score. Daily Table 5B is a distinct",
+        "frequency and includes all nine rows. A zero target is printed without a relative-error mark.",
+        "Missing inputs are shown as NA, not treated as replication. Five-factor regressions",
+        "use the French reversal proxy; Ibbotson reconstruction is a separate proxy model.",
+        "Near-zero loadings make percentage-error marks unstable; inspect signs, absolute",
+        "differences and significance as well. No claim count is inferred from the score.", "",
     ]
     lines += risk_note
     for fname, paper_tab, title, pct, digits in (
         ("table4.csv", PAPER_TABLE4, "Table 4 (systematic risk, one-day wait)", TABLE4_PCT, 3),
         ("table5_var.csv", PAPER_TABLE5, "Table 5 Panel A (monthly value at risk)",
          {"var_1", "var_5", "var_10", "var_25"}, 3),
+        ("table5_daily.csv", PAPER_TABLE5_DAILY, "Table 5 Panel B (daily value at risk)",
+         {"mean", "std", "var_1", "var_5", "var_10", "var_25", "share_negative", "min"}, 3),
         ("table8_subperiod.csv", PAPER_TABLE8, "Table 8 (subperiod analysis)", TABLE8_PCT, 3),
     ):
         if not (out_dir / fname).exists():
@@ -2197,12 +2155,13 @@ def run_jobs(jobs: list[Job], workers: int) -> None:
     started = time.perf_counter()
     # Before the temporary dir exists: a cold scan takes a minute and no child can
     # start without the cache file it writes.
-    sic_cache = sic_cache_path(jobs[0].cohorts_root)
-    earliest_known_sic(cache_path=sic_cache)
-    expected_cache = sic_cache if sic_cache is not None else default_cache_path()
-    if not expected_cache.exists():
-        print(f"warning: could not write the SIC fallback cache {expected_cache}; "
-              "every shard will rescan the panel", file=sys.stderr)
+    if any(job.sic_fallback == "legacy" for job in jobs):
+        sic_cache = sic_cache_path(jobs[0].cohorts_root)
+        earliest_known_sic(cache_path=sic_cache)
+        expected_cache = sic_cache if sic_cache is not None else default_cache_path()
+        if not expected_cache.exists():
+            print(f"warning: could not write the SIC fallback cache {expected_cache}; "
+                  "every shard will rescan the panel", file=sys.stderr)
     shard_dir = Path(tempfile.mkdtemp(prefix="ggr-build-"))
     pending = _write_shards(shard_dir, jobs, _shard_size(len(jobs), workers))
     total_shards = len(pending)
@@ -2285,6 +2244,9 @@ def formation_options(args: argparse.Namespace) -> dict:
     options["telephone_sic"] = args.telephone_sic
     options["trigger_sigma"] = args.trigger_sigma
     options["short_weights"] = args.short_weights
+    options["monthly_aggregation"] = getattr(args, "monthly_aggregation", "books")
+    options["exclude_constant"] = getattr(args, "exclude_constant", False)
+    options["sic_fallback"] = getattr(args, "sic_fallback", "formation_end")
     return options
 
 
@@ -2303,6 +2265,8 @@ def main_shard(args) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--specification", choices=tuple(PROFILES), default="paper",
+                        help="paper rules and corrected accounting (default); legacy is a superseded comparison")
     parser.add_argument("--start", default="1963-07", help="first cohort month YYYY-MM")
     parser.add_argument("--end", default="2002-12", help="last cohort month YYYY-MM")
     parser.add_argument("--wait", default="0,1", help="comma-separated waits, e.g. 0,1")
@@ -2325,29 +2289,35 @@ def main() -> None:
              "Figure 1) or are rebased to 1 on the first trading day",
     )
     parser.add_argument(
-        "--same-issuer", choices=("allow", "exclude"), default="exclude",
-        help="exclude pairs of two securities of one issuer (same CRSP permco); default exclude",
+        "--same-issuer", choices=("allow", "exclude"), default=argparse.SUPPRESS,
+        help="issuer-pair sensitivity; paper profile allows, legacy excludes",
     )
     parser.add_argument(
-        "--max-stale-share", type=_stale_share, default=0.95,
+        "--max-stale-share", type=_stale_share, default=argparse.SUPPRESS,
         help="drop stocks with no recorded volume and an unchanged price on more than "
-             "this share of the formation days; 'none' keeps them (default 0.95)",
+             "this share of the formation days; paper profile has no extra screen",
     )
+    parser.add_argument("--sic-fallback", choices=("formation_end", "legacy"),
+                        default=argparse.SUPPRESS, help="use only dated formation-end SIC (paper), or legacy full-panel/header fallback")
+    parser.add_argument("--exclude-constant", action=argparse.BooleanOptionalAction,
+                        default=argparse.SUPPRESS, help="optional flat-price exclusion, absent from the paper")
+    parser.add_argument("--monthly-aggregation", choices=("books", "daily_difference"),
+                        default=argparse.SUPPRESS,
+                        help="compound books then subtract (paper), or superseded daily-spread compounding")
     parser.add_argument(
         "--telephone-sic", choices=("4811", "481x"), default="4811",
         help="SIC codes of telephone utilities: 4811, the 1972 code CRSP carries before "
              "1987 (default), or the older 4810-4819 map",
     )
     parser.add_argument(
-        "--trigger-sigma", choices=("rms", "std"), default="rms",
+        "--trigger-sigma", choices=("rms", "std"), default=argparse.SUPPRESS,
         help="sigma of the 2-sigma rule: the formation spread's root mean square about "
-             "zero, sqrt(SSD/N) (default), or its standard deviation about its mean",
+             "zero, sqrt(SSD/N), or its standard deviation about its mean (paper default)",
     )
     parser.add_argument(
-        "--short-weights", choices=("value", "position"), default="position",
+        "--short-weights", choices=("value", "position"), default=argparse.SUPPRESS,
         help="eq. (3) weight of a short position in the value-weighted books: the position's "
-             "own compounded return, prod(1 - r), floored at zero (default), or the shorted "
-             "stock's value since the trade opened",
+             "own inverse return (legacy only), or the shorted stock's value (paper default)",
     )
     parser.add_argument(
         "--size-deciles-top", type=_decile_count, default=None,
@@ -2378,7 +2348,7 @@ def main() -> None:
         "--build-shard", default=None, metavar="SHARD_JSON",
         help="internal: build the cohorts of one shard file and exit (see run_jobs)",
     )
-    args = parser.parse_args()
+    args = resolve_profile(parser.parse_args())
     if args.build_shard is not None:
         raise SystemExit(main_shard(args))
     if args.workers is None:
@@ -2433,7 +2403,9 @@ def main() -> None:
                 Job(y, m, end, waits, args.universe, continued, args.cohorts_root,
                     exclude_same_issuer, args.max_stale_share, args.telephone_sic,
                     args.trigger_sigma, args.short_weights,
-                    size_deciles_top=args.size_deciles_top)
+                    size_deciles_top=args.size_deciles_top,
+                    monthly_aggregation=args.monthly_aggregation,
+                    exclude_constant=args.exclude_constant, sic_fallback=args.sic_fallback)
                 for y, m in cohorts
                 if args.force or not cohort_cache_complete(y, m, waits, args.universe)
             ]
@@ -2449,6 +2421,7 @@ def main() -> None:
             strategy, trading, composition, uni_summary = aggregate(
                 monthly, summaries, waits, end, cohorts)
             write_outputs(strategy, trading, waits, len(cohorts), out_dir, composition, uni_summary)
+            write_daily_outputs(cohorts, args.universe, out_dir)
             print(f"Tables 1 and 2 written to {out_dir}", flush=True)
         if "table3" in steps:
             write_table3(*table3_from_cache(monthly, summaries, end), out_dir)

@@ -9,11 +9,10 @@ Reversal: the paper defines its factor as prior-month winners minus losers but
 expects, and prints, positive exposures for pairs portfolios, which buy losers. The
 printed signs are those of losers minus winners, French's ``ST_Rev``, which is
 used as is. French added ST_Rev to his library in 2006, after the paper was written; the
-paper built its own factor. Table 8 identifies that factor: its regressions are consistent only
-with a standard deviation near the printed 0.072 before 1989 and a correlation of about +0.8
-with the market, the profile of a long-only portfolio of prior-month losers rather than of a
-long-short factor (REVIEW_NOTES section 51). ``load_losers_only`` returns that series for the
-check's unscored alternative; the scored regressions keep ST_Rev.
+paper built its own factor. Its original observations are unavailable. A prior audit
+inferred a losers-only alternative from printed moments; this is a sensitivity,
+not an identified or authenticated reconstruction. ``load_losers_only`` supplies
+that alternative; the default regressions retain ST_Rev and are proxy checks.
 
 Table 4's second model uses "Ibbotson factors": the market, the small-stock premium, the bond
 default premium and the bond horizon premium, each a monthly geometric difference. Ibbotson's
@@ -22,7 +21,8 @@ and Welch's predictor data (``data/raw/goyal_welch``, the 2005 edition, Git LFS)
 small-company series is rebuilt from CRSP by its documented recipe: NYSE common stocks in the
 bottom two capitalization deciles, re-formed every five years and value weighted, through 1981,
 then the DFA Small Company fund. The large-company series is the CRSP S&P 500 total return and
-the T-bill the CRSP 30-day bill.
+the T-bill the CRSP 30-day bill. These reconstructions have not been validated
+against the exact proprietary series and vintage used by the paper.
 """
 
 from __future__ import annotations

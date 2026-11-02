@@ -67,7 +67,7 @@ def test_formation_options_stamp_every_value():
                                   size_deciles_top=None)
     assert rep.formation_options(defaults) == {
         "exclude_same_issuer": True, "telephone_sic": "4811", "trigger_sigma": "rms",
-        "short_weights": "position",
+        "short_weights": "position", "monthly_aggregation": "books", "exclude_constant": False, "sic_fallback": "formation_end",
     }
     other = argparse.Namespace(same_issuer="allow", max_stale_share=0.9, telephone_sic="481x",
                                trigger_sigma="std", short_weights="value",
@@ -75,6 +75,7 @@ def test_formation_options_stamp_every_value():
     assert rep.formation_options(other) == {
         "exclude_same_issuer": False, "max_stale_share": 0.9, "telephone_sic": "481x",
         "trigger_sigma": "std", "short_weights": "value", "size_deciles_top": 3,
+        "monthly_aggregation": "books", "exclude_constant": False, "sic_fallback": "formation_end",
     }
 
 
@@ -146,9 +147,12 @@ def test_cohort_job_caches_everything_the_tables_need(tmp_path, monkeypatch):
                                                                    & (dates <= pd.Timestamp(e))])
     monkeypatch.setattr(
         rep, "formation_universe",
-        lambda s, e, universe, max_stale_share=None, panel=None: [1, 2, 3, 4, 5, 6],
+        lambda s, e, universe, max_stale_share=None, panel=None, exclude_constant=False: [1, 2, 3, 4, 5, 6],
     )
     rep.init_worker((pd.Series(dtype="int64"), pd.Series(dtype="int64")))
+    def forbid_future_sic(*args):
+        raise AssertionError("paper baseline consulted full-sample SIC")
+    monkeypatch.setattr(rep, "_sic_fallbacks", forbid_future_sic)
 
     job = rep.Job(2020, 7, (2020, 12), (0, 1), "vol_common", True)
     assert rep.build_cohort(job) == (2020, 7)
@@ -183,6 +187,15 @@ def test_cohort_job_caches_everything_the_tables_need(tmp_path, monkeypatch):
     assert counts["Utilities"].item() == 2
     trades = pd.read_parquet(tmp_path / "vol_common" / "cohorts" / "2020-07" / "w0_trades.parquet")
     assert {"open_day", "close_day"} <= set(trades.columns)
+    rep.write_daily_outputs([(2020, 7)], "vol_common", tmp_path / "tables")
+    daily = pd.read_parquet(tmp_path / "tables/daily_returns.parquet")
+    assert not daily.duplicated(["date", "wait", "portfolio", "capital"]).any()
+    risk = pd.read_csv(tmp_path / "tables/table5_daily.csv", index_col=0)
+    assert risk.shape == (9, 4)
+    for pname in ("top5", "top20", "all"):
+        block = strategy[1][pname]
+        np.testing.assert_allclose(block["employed"], block["long_book"] - block["short_book"], atol=1e-14)
+
 
 
 @pytest.mark.parametrize(
@@ -233,7 +246,7 @@ def test_check_scores_table1_cells_against_the_paper(tmp_path):
     n = 2 * len(rep.PORTFOLIOS) * len(rep.PAPER_TABLE1["A"]["top5"])
     assert f"Table 1: Cells: {n}; ✓ {n - 1} (within 10%), ~ 0 (within 25%), ✗ 1." in text
     assert "Figure 1 (Kennecott vs Uniroyal" in text and "Not run" in text
-    assert f"- Score: {n - 1:.1f} of {n} compared cells" in text
+    assert f"- Score: {n - 1:.1f} weighted points across {n} compared cells" in text
 
 
 def test_check_header_describes_the_short_weight_it_was_run_with(tmp_path):
@@ -242,10 +255,10 @@ def test_check_header_describes_the_short_weight_it_was_run_with(tmp_path):
                                       "position").read_text()
     val = rep.write_replication_check(tmp_path / "tab", tmp_path / "fig", "vol_common",
                                       "value").read_text()
-    assert "a short by prod(1 - r)" in pos and "1.61-2.02" in pos and "floored at zero" in pos
-    assert "a short by the shorted stock's value" in val and "1.60-1.90" in val
-    assert "this run uses --short-weights\nvalue" in val
-    assert "1.61-2.02" not in val and "floored at zero" not in val
+    assert "Short weights: `position`" in pos
+    assert "Short weights: `value`" in val
+    assert "superseded inverse-weight rule" in pos
+    assert "1.61-2.02" not in val and "1.60-1.90" not in val
 
 
 def _paper_table1(out: Path, panels=("A", "B")) -> None:
@@ -270,7 +283,7 @@ def test_check_scores_tables_5_and_8(tmp_path):
     text = rep.write_replication_check(out, tmp_path / "fig", "vol_common", "position").read_text()
     n = 2 * len(rep.PORTFOLIOS) * len(rep.PAPER_TABLE1["A"]["top5"])
     extra = sum(len(rep.PAPER_TABLE5[p]) + len(rep.PAPER_TABLE8[p]) for p in rep.PORTFOLIOS)
-    assert f"- Score: {n:.1f} of {n + extra} compared cells" in text
+    assert f"- Score: {n:.1f} weighted points across {n + extra} compared cells" in text
     assert "Diagnostics" not in text
     block = text.split("## Table 5 Panel A")[1]
     assert "| var_5 | -6.426% / -2.142% ✗ |" in block
@@ -285,8 +298,8 @@ def test_check_reports_a_missing_table1_panel_as_not_run(tmp_path):
     text = rep.write_replication_check(out, tmp_path / "fig", "vol_common", "position").read_text()
     n = len(rep.PORTFOLIOS) * len(rep.PAPER_TABLE1["A"]["top5"])
     assert "Not run (needs `--wait 1`)." in text
-    assert f"- Score: {n:.1f} of {n} compared cells" in text
-    assert text.count("Not run (needs the one-day-wait series") == 3
+    assert f"- Score: {n:.1f} weighted points across {n} compared cells" in text
+    assert text.count("Not run (needs the one-day-wait series") == 4
 
 
 def test_risk_tables_without_factors_write_sharpe_and_raw_correlations(tmp_path):
@@ -534,7 +547,7 @@ class TestOneRealCohortInAShard:
 
     def test_a_cohort_is_built_by_the_child_and_reported(self, tmp_path):
         panel_dir_value = sectors.default_panel_dir()
-        if not panel_dir_value.exists():
+        if not all((panel_dir_value / f"{year}.parquet").exists() for year in (1962, 1963)):
             pytest.skip("needs the processed CRSP daily panel")
         cache = tmp_path / sectors.default_cache_path().name
         sectors._write_cache(cache, pd.DataFrame({"permno": [1], "siccd": [4911]}),

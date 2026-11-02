@@ -19,7 +19,7 @@ parameters:
   formation_months: 12
   trading_months: 6
   overlapping_cohorts: 6
-  pair_counts: [5, 20, 100]
+  portfolios: [top5, top20, 101-120, all]
   entry_standard_deviations: 2.0
 
 extension:
@@ -28,3 +28,8 @@ extension:
   neural_methods: optional
   time_scales: [day, hour, minute]
   intraday_status: requires_separate_dataset_and_design
+
+# The executable profiles live in src/project/specification.py; CLI overrides
+# are recorded in each cohort cache. This YAML is a project summary, not a second
+# source of executable defaults.
+replication_specification: paper

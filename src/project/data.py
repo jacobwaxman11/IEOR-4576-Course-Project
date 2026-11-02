@@ -398,7 +398,7 @@ def trading_calendar(start, end) -> pd.DatetimeIndex:
 
 def formation_universe(
     start, end, universe: str = "vol_common", max_stale_share: float | None = None,
-    panel: pd.DataFrame | None = None,
+    panel: pd.DataFrame | None = None, exclude_constant: bool = False,
 ) -> pd.Index:
     """PERMNOs eligible per INTERFACES.md §2.1 over [start, end].
 
@@ -408,8 +408,8 @@ def formation_universe(
     days (no per-stock loop). Defaults to the primary ``vol_common`` variant;
     ``universe="price_common"`` reproduces the stage-1 rule exactly.
 
-    A stock whose daily return is zero on every day of the window is also
-    excluded: its price never moved, so there is no evidence it traded (in
+    ``exclude_constant=True`` optionally excludes a stock whose daily return
+    is zero on every day. This is an additional liquidity sensitivity (in
     practice a pre-1983 Nasdaq stock quoted at an unchanged bid/ask with no
     volume field). Its normalized price is constant, so two such stocks would
     pair at a distance of exactly zero and take the top ranks.
@@ -439,7 +439,7 @@ def formation_universe(
     counts = rows.groupby("permno").size()
     moved = rows["ret"].fillna(0.0).ne(0.0).groupby(rows["permno"]).any()
     full = counts[counts == n_days].index
-    keep = full[moved.reindex(full, fill_value=False).to_numpy()]
+    keep = full[moved.reindex(full, fill_value=False).to_numpy()] if exclude_constant else full
     if max_stale_share is not None:
         stale_day = ~rows["vol_zero"] & ~rows["vol_pos"] & rows["ret"].fillna(0.0).eq(0.0)
         share = stale_day.groupby(rows["permno"]).mean()

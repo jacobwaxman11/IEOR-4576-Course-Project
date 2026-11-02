@@ -69,20 +69,20 @@ from project.data import (
 )
 from project.evaluation import (
     PORTFOLIOS,
-    cohort_monthly,
     overlap_average,
-    portfolio_daily,
+    portfolio_monthly,
     summary_stats,
 )
 from project.features import normalized_prices
 from project.models import simulate_cohort
 from project.paths import ROOT
+from project.specification import validate_paper_cache, stamp_experiment
 from project.recalls import high_volume_days, volume_thresholds
 
 PRIMARY_UNIVERSE = "vol_common"
 WAIT = 1
 #: The cache stamp the shared cohort cache was built with (cache_meta.json).
-SHORT_WEIGHTS = "position"
+SHORT_WEIGHTS = "value"
 
 #: Statistics in Table 9 order, with the paper's own row labels.
 STAT_ROWS = [
@@ -330,7 +330,7 @@ def control_check(result, cfg: Config, year: int, month: int) -> dict:
     miss = 0
     for pname, ranks in PORTFOLIOS.items():
         for capital in ("employed", "committed"):
-            monthly = cohort_monthly(portfolio_daily(result, ranks, capital, SHORT_WEIGHTS))
+            monthly = portfolio_monthly(result, ranks, capital, SHORT_WEIGHTS)
             got = pd.Series(monthly.to_numpy(), index=pd.DatetimeIndex(monthly.index))
             part = want[(want["portfolio"] == pname) & (want["capital"] == capital)]
             ref = pd.Series(part["ret"].to_numpy(), index=pd.DatetimeIndex(part["month_end"]))
@@ -377,7 +377,7 @@ def build_cohort(cfg: Config, year: int, month: int) -> dict:
         )
         for pname, ranks in PORTFOLIOS.items():
             for capital in ("employed", "committed"):
-                monthly = cohort_monthly(portfolio_daily(result, ranks, capital, SHORT_WEIGHTS))
+                monthly = portfolio_monthly(result, ranks, capital, SHORT_WEIGHTS)
                 rows += monthly_rows(run, pname, capital, monthly)
         counts[run] = trade_counts(result, no_volume)
         if run == RUN_OFF:
@@ -1145,6 +1145,10 @@ def main(argv: list[str] | None = None) -> int:
         return build_shard(Path(args.path))
 
     cfg = config_from_args(args)
+    source_meta = json.loads((Path(cfg.cache_root) / "cohorts/cache_meta.json").read_text())
+    validate_paper_cache(source_meta)
+    stamp_experiment(cfg.out_root, source_meta, {"end": list(cfg.end)},
+                     read_only=args.command in ("table", "handcheck"))
     if args.command == "handcheck":
         year, month = parse_month(args.cohort)
         print(handcheck(cfg, year, month, args.rank))

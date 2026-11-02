@@ -43,3 +43,7 @@ data/raw/public/
 # Replication harness scratch output
 .dream-rsi/
 eval/
+
+# Local claim experiments and WRDS UI import provenance.
+scratch/
+data/processed/ui_import_manifest.json

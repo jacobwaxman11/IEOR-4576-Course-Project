@@ -241,8 +241,8 @@ def decomposition(table: pd.DataFrame, control: pd.DataFrame) -> pd.DataFrame:
     """The claim's quantity: each book's share of the pairs alpha, ours beside the paper's.
 
     Ours: the pair alpha is the control run's intercept (the shipped Table 4 regression on
-    the same months and factors), and the books' alphas sum to it up to the covariance term
-    between the legs (REVIEW_NOTES section 33). The paper's: its Table 7 intercepts and its
+    the same months and factors), and the book-alpha difference equals it under
+    corrected accounting. The paper's: its Table 7 intercepts and its
     Table 4 intercept, which satisfy the same identity exactly.
     """
     paper4 = rep.PAPER_TABLE4
@@ -277,9 +277,9 @@ def identity_check(books: dict[str, pd.Series], portfolio: dict[str, pd.Series])
 
     The paper's own arithmetic (REVIEW_NOTES section 33): its Table 7 books differ by its
     Table 1 Panel B mean to 1 bp in every column, which only holds if each leg is
-    compounded to a monthly return first and the two monthly returns are subtracted. Our
-    shipped portfolio series compounds the daily *difference* instead, so the gap column
-    measures that covariance term.
+    compounded to a monthly return first and the two monthly returns are subtracted.
+    The corrected portfolio series uses the same bookwise compounding, so the
+    gap must be zero to numerical tolerance.
     """
     rows = {}
     for pname in PAPER_PORTFOLIOS:
@@ -361,8 +361,8 @@ def resolve_cache(cache_root: str | None, universe: str) -> Path:
     """
     if cache_root:
         rep.CACHE_ROOT_OVERRIDE = Path(cache_root).resolve()
-        return rep.cohort_dir(universe)
-    local = rep.cohort_dir(universe)
+        return rep.cohort_dir(universe).parent
+    local = rep.cohort_dir(universe).parent
     if cohort_list(local / "cohorts"):
         return local
     shared = _SHARED_REPLICATION / universe
@@ -378,6 +378,8 @@ def build(cache_root: str | None = None, universe: str = "vol_common",
     """Read the cache and build every number the report prints."""
     cohorts_dir = resolve_cache(cache_root, universe) / "cohorts"
     meta = json.loads((cohorts_dir / "cache_meta.json").read_text())
+    from project.specification import validate_paper_cache
+    validate_paper_cache(meta)
     cohorts = cohort_list(cohorts_dir)
     if start is not None:
         cohorts = [c for c in cohorts if c >= start]
@@ -403,6 +405,9 @@ def build(cache_root: str | None = None, universe: str = "vol_common",
     control_rows = pd.DataFrame(
         {pname: regression_rows(s, five) for pname, s in control.items()}
     )
+    alt_control_rows = pd.DataFrame(
+        {pname: regression_rows(series, alt[FACTORS]) for pname, series in control.items()}
+    )
     return {
         "cache": str(cohorts_dir),
         "french_dir": str(french),
@@ -414,7 +419,7 @@ def build(cache_root: str | None = None, universe: str = "vol_common",
         "control": control_rows,
         "identity": identity_check(books, control),
         "decomposition": decomposition(table, control_rows),
-        "decomposition_losers": decomposition(table_alt, control_rows),
+        "decomposition_losers": decomposition(table_alt, alt_control_rows),
         "marks": paper_module.compare(table, paper7),
         "marks_losers": paper_module.compare(table_alt, paper7),
         "claim": claim_test(table),

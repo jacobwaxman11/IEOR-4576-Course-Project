@@ -3,8 +3,8 @@
 #   make test       - the test suite, including the paper-conformance
 #                     checks (the sample rebuild needs the CRSP daily panel
 #                     and is skipped when it is absent)
-#   make conformance-full - rebuild all 474 cohorts and require the shipped
-#                     full-sample check to be reproduced (a few minutes)
+#   make conformance-full - rebuild all 474 cohorts and check accounting and
+#                     daily-risk coverage; target closeness is reported, not tuned
 #   make build      - raw WRDS-API parquet -> processed yearly panels
 #   make build-data - pull the licensed CRSP source data (once; credentials
 #                     stay in ~/.pgpass via scripts/wrds_setup.py)
@@ -17,7 +17,12 @@
 
 export PATH := $(CURDIR)/.venv/bin:$(PATH)
 
-.PHONY: test conformance-full build build-data benchmark edition-1999 verify-targets
+.PHONY: all replicate test conformance-full build build-data benchmark edition-1999 verify-targets
+
+all: build-data replicate
+
+replicate:
+	python scripts/03_replicate.py --specification paper
 
 test:
 	python -m pytest tests/ -q

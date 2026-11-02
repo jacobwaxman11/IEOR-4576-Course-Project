@@ -18,9 +18,9 @@ Conventions (see ``report/replication/INTERFACES.md``):
   position that day. ``short_weights`` picks the eq. (3) weight of a short
   position: "value", the shorted stock's value since the trade opened, or
   "position", the position's own compounded return, prod (1 - r) (the
-  pipeline default since 2026-10-24; REVIEW_NOTES section 29). Their
-  fully-invested/committed ratios are 1.61-2.02 ("value": 1.60-1.90) against
-  the paper's 1.58-1.81, "all" furthest off. The count-based readings survive for comparison: "employed_count"
+  superseded legacy sensitivity). The corrected default is "value".
+  Monthly returns compound each book separately before subtraction.
+  The count-based readings survive for comparison: "employed_count"
   and "committed_count" (payoffs over the pairs open that day or over all
   selected pairs), "employed_nbar" (period-average count),
   "employed_literal", "committed_account" and "employed_account".
@@ -314,9 +314,8 @@ def portfolio_daily(result, ranks, capital: str, short_weights: str = "value") -
         The eq. (3) weight of a short position in "employed" and "committed"
         (see ``_vw_legs``); the other capitals ignore it. The default "value"
         works on any CohortResult, including one built without
-        ``short_position_values``. It does not track the driver's
-        ``--short-weights`` default: ``03_replicate.py`` always passes the
-        setting, and a caller that means the pipeline's reading must too.
+        ``short_position_values``. This is also the corrected driver's default.
+        ``position`` is retained only for the superseded inverse-weight sensitivity.
 
     Returns
     -------
@@ -371,6 +370,62 @@ def cohort_monthly(daily: pd.Series) -> pd.Series:
     monthly = grouped - 1.0
     monthly.index = monthly.index.to_timestamp(how="end").normalize()
     return monthly
+
+
+def portfolio_monthly(result, ranks, capital: str, short_weights: str = "value",
+                      aggregation: str = "books") -> pd.Series:
+    """GGR section 2.3: compound each book, then subtract its monthly return.
+
+    For employed capital this is identically Table 7 long minus short, also
+    after averaging overlapping cohorts. Stock-value short weights preserve the
+    liability of a buy-and-hold short. Inverse (``position``) weights and
+    ``daily_difference`` aggregation are explicit legacy sensitivities only.
+
+    Committed capital scales both daily books by the fraction of selected pairs
+    accruing a payoff that day, before compounding; unused capital earns zero.
+    Count/account capital definitions remain legacy diagnostics and retain their
+    former aggregation. Missing employed-book days remain missing, not zero.
+    """
+    if aggregation not in ("books", "daily_difference"):
+        raise ValueError("aggregation must be 'books' or 'daily_difference'")
+    if aggregation == "daily_difference" or capital not in VW_CAPITALS:
+        return cohort_monthly(portfolio_daily(result, ranks, capital, short_weights))
+    index = result.pair_returns.index
+    sel = _resolve_ranks(result.pair_returns, ranks)
+    if not sel:
+        return pd.Series(dtype=float)
+    long_ret, short_ret, n_open = _leg_arrays(result, sel, short_weights)
+    if capital == "committed":
+        scale = n_open / len(sel)
+        long_ret, short_ret = long_ret * scale, short_ret * scale
+    else:
+        long_ret = np.where(n_open > 0, long_ret, np.nan)
+        short_ret = np.where(n_open > 0, short_ret, np.nan)
+    long_month = cohort_monthly(pd.Series(long_ret, index=index))
+    short_month = cohort_monthly(pd.Series(short_ret, index=index))
+    return long_month - short_month
+
+
+def daily_risk_table(series: dict[str, pd.Series]) -> pd.DataFrame:
+    """Table 5 Panel B on overlap-averaged daily returns, in decimal units.
+
+    Serial correlation uses adjacent trading observations, not calendar days.
+    Quantiles use linear interpolation, as does the monthly Table 5A.
+    """
+    rows = {}
+    for name, daily in series.items():
+        daily = daily.sort_index()
+        if daily.index.has_duplicates:
+            raise ValueError("Daily risk inputs must be averaged across cohorts first")
+        valid = daily.dropna()
+        rows[name] = {
+            "mean": valid.mean(), "std": valid.std(ddof=1),
+            "serial_correlation": daily.autocorr(1),
+            **{f"var_{q}": valid.quantile(q / 100) for q in (1, 5, 10, 25)},
+            "share_negative": (valid < 0).mean() if len(valid) else np.nan,
+            "min": valid.min(),
+        }
+    return pd.DataFrame(rows).rename_axis("statistic")
 
 
 def overlap_average(cohort_months: dict[pd.Timestamp, pd.Series]) -> pd.Series:
@@ -496,12 +551,11 @@ def composition_stats(pairs_info: dict, ranks) -> pd.Series:
     Each pair contributes both of its stocks (a stock in several pairs counts
     once per pair).  Stocks with a NaN cap are excluded from the size-decile
     rows; sector rows use ``sector_of`` on every stock (unknown SIC = 0 =
-    Industrials).  The paper's "average decile difference for mixed pairs"
-    of 0.97 is below one, the least a mean of integer gaps between mixed pairs
-    can be, so the scored row ``avg_decile_diff_mixed_pairs`` carries the
-    average over *all* pairs (same-decile pairs count 0; SCORE_LOG row 6), as
-    does ``avg_decile_diff_all_pairs``.  The mean over mixed pairs only is
-    ``avg_decile_diff_mixed_only`` (NaN when no pair is mixed).
+    Industrials). ``avg_decile_diff_mixed_pairs`` averages only pairs in different
+    deciles (NaN if there are none); ``avg_decile_diff_all_pairs`` includes zero
+    gaps. ``avg_decile_diff_mixed_only`` remains a compatibility alias of the
+    mixed-pairs statistic. An awkward printed target is not a reason to change
+    the population named by the statistic.
 
     Returns a Series indexed by ``COMPOSITION_ROWS``; empty portfolios give NaN.
     """
@@ -535,9 +589,9 @@ def composition_stats(pairs_info: dict, ranks) -> pd.Series:
                 diff = np.abs(d1 - d2)
                 mixed = d1[ok] != d2[ok]
                 out["share_mixed_decile_pairs"] = float(mixed.mean())
-                out["avg_decile_diff_mixed_pairs"] = float(diff[ok].mean())
                 out["avg_decile_diff_all_pairs"] = float(diff[ok].mean())
                 if mixed.any():
+                    out["avg_decile_diff_mixed_pairs"] = float(diff[ok][mixed].mean())
                     out["avg_decile_diff_mixed_only"] = float(diff[ok][mixed].mean())
 
     if pairs_info.get("sectors") is not None:

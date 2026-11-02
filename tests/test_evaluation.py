@@ -366,10 +366,8 @@ class TestCompositionStats:
         assert np.isclose(stats["weight_top3_deciles_allpanel"], 0.4)
         assert np.isclose(stats["weight_top5_deciles_allpanel"], 0.6)
         assert np.isclose(stats["share_mixed_decile_pairs"], 0.5)
-        # The paper's "Average decile difference for mixed pairs" is 0.97 (< 1),
-        # impossible for an average over mixed-only pairs, so the row reports the
-        # all-pairs average (see REVIEW_NOTES section 16).
-        assert np.isclose(stats["avg_decile_diff_mixed_pairs"], 1.0)
+        # One of two valid pairs is mixed; its gap is two deciles.
+        assert np.isclose(stats["avg_decile_diff_mixed_pairs"], 2.0)
         assert np.isclose(stats["avg_decile_diff_all_pairs"], 1.0)
         # Half the pairs are mixed, so the mixed-only mean is twice the all-pairs one.
         assert np.isclose(stats["avg_decile_diff_mixed_only"], 2.0)
@@ -403,7 +401,7 @@ class TestCompositionStats:
         info["pairs"] = _pairs([(1, 5, 6)])
         stats = composition_stats(info, None)
         assert np.isclose(stats["share_mixed_decile_pairs"], 0.0)
-        assert np.isclose(stats["avg_decile_diff_mixed_pairs"], 0.0)
+        assert np.isnan(stats["avg_decile_diff_mixed_pairs"])
         assert np.isclose(stats["avg_decile_diff_all_pairs"], 0.0)
         assert np.isnan(stats["avg_decile_diff_mixed_only"])
 
