@@ -136,6 +136,28 @@ PROCESSED_DIR = next(
     (base / "daily" for base in _PROCESSED_CANDIDATES if (base / "daily").exists()),
     _PROCESSED_CANDIDATES[0] / "daily",
 )
+# An explicit experiment input overrides the local default, unlike the shared
+# checkout fallback. Children inherit it, so every cohort reads the same vintage.
+if os.environ.get("GGR_PROCESSED_DIR"):
+    PROCESSED_DIR = Path(os.environ["GGR_PROCESSED_DIR"]).resolve()
+
+
+def processed_source_identity() -> dict | None:
+    """Stamp explicitly selected panels by their acquisition manifest, not a path alone."""
+    if not os.environ.get("GGR_PROCESSED_DIR"):
+        return None  # Existing CIZ cache stamps remain readable.
+    import hashlib
+    import json
+
+    path = PROCESSED_DIR / "source.json"
+    if not path.exists():
+        raise FileNotFoundError(f"Explicit processed panel requires provenance: {path}")
+    payload = path.read_bytes()
+    manifest = json.loads(payload)
+    return {"manifest_sha256": hashlib.sha256(payload).hexdigest(),
+            "return_convention": manifest["return_convention"]}
+
+
 DAILY_INDEX_FILE = WRDS_API_DIR / "daily_indexes.parquet"
 RAW_DAILY_DIR = WRDS_API_DIR / "daily_stocks"
 
@@ -447,7 +469,9 @@ def formation_universe(
     return pd.Index(keep.sort_values(), name="permno")
 
 
-SECURITY_HEADER_FILE = WRDS_API_DIR / "security_info_header.parquet"
+SECURITY_HEADER_FILE = Path(os.environ.get(
+    "GGR_ISSUER_HEADER", WRDS_API_DIR / "security_info_header.parquet"
+))
 
 
 def issuer_map(path: Path = SECURITY_HEADER_FILE) -> pd.Series:

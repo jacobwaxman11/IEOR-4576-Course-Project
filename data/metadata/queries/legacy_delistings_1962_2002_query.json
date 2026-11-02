@@ -1,0 +1,24 @@
+{
+  "source": "WRDS CRSP web query",
+  "query_id": 11858721,
+  "downloaded_date": "2026-11-02",
+  "sample_start": "1962-01-01",
+  "sample_end": "2002-12-31",
+  "universe": "All securities, no identifier filter",
+  "fields": [
+    "permno",
+    "dlstdt",
+    "dlstcd",
+    "dlprc",
+    "dlpdt",
+    "dlret"
+  ],
+  "version": "Legacy annual SIZ daily delisting event file",
+  "format": "CSV gzip, ISO dates",
+  "ui_reported_rows": 38872,
+  "file": "data/raw/crsp_siz/legacy_delistings_1962_2002.csv.gz",
+  "bytes": 289099,
+  "sha256": "a91b09b53ef68b0245f1dcd137fddab0bfc817e9be471291b31eadb52443e18c",
+  "access": "Restricted: observations remain local; this record contains acquisition metadata only",
+  "return_convention": "SIZ RET and DLRET combined once by the explicit legacy importer"
+}

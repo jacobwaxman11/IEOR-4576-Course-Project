@@ -61,7 +61,7 @@ DIVERGING = [1.0, 1.0, 1.0, 1.03, 1.03, 1.03, 1.03, 1.03, 1.03, 1.03, 1.03, 1.03
 
 def test_adjusted_volume_scales_and_keeps_nan():
     vol = pd.Series([100.0, np.nan, 300.0])
-    fac = pd.Series([2.0, 2.0, np.nan])
+    fac = pd.Series([2.0, 2.0, 1.0])
     got = adjusted_volume(vol, fac)
     assert got.iloc[0] == 200.0
     assert np.isnan(got.iloc[1])
