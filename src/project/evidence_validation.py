@@ -71,4 +71,3 @@ def validate_outputs(output: Path, cache: Path, expected_cohorts: int = 479) -> 
         subset = monthly[(monthly.wait == 1) & (monthly.capital == capital)]
         summary["capital_sensitivities"][capital] = subset.groupby("portfolio").monthly_return.mean().to_dict()
     return summary
-

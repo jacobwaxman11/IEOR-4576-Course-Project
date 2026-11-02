@@ -91,3 +91,18 @@ def validate_cache_identity(meta: dict, *, expected_format: int, options=None) -
            if meta.get(key) != value}
     if bad:
         raise ValueError(f"Incompatible report cache: {bad}")
+
+
+def validate_claim_cache(meta: dict, *, specification="paper", size_deciles_top=None,
+                         universe="traded_common", exclude_constant=False) -> None:
+    """Require a declared complete profile before combining baseline claim reports."""
+    if specification == "paper":
+        return validate_paper_cache(meta, size_deciles_top=size_deciles_top,
+                                    universe=universe, exclude_constant=exclude_constant)
+    if specification != "baseline":
+        raise ValueError("Claim reports support baseline or paper specifications")
+    expected = dict(PROFILES[specification])
+    expected["exclude_same_issuer"] = expected.pop("same_issuer") == "exclude"
+    expected.update(format=7, normalization="continued", telephone_sic="4811",
+                    long_delisting_loss=None, waste_sic=None, size_deciles_top=size_deciles_top)
+    validate_cache_identity(meta, expected_format=7, options=expected)

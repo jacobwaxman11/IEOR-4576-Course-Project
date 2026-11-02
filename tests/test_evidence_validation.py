@@ -24,3 +24,15 @@ def test_bootstrap_report_rejects_wrong_draw_count_and_missing_month():
     with pytest.raises(ValueError, match="monthly"):
         validate_bootstrap_sample(frames, series, 2)
 
+
+def test_baseline_claim_cache_rejects_mixed_conventions():
+    from project.specification import PROFILES, validate_claim_cache
+    meta = dict(PROFILES["baseline"])
+    meta["exclude_same_issuer"] = meta.pop("same_issuer") == "exclude"
+    meta.update(format=7, normalization="continued", telephone_sic="4811",
+                long_delisting_loss=None, waste_sic=None, size_deciles_top=None)
+    validate_claim_cache(meta, specification="baseline")
+    for key, value in (("idle_policy", "zero"), ("short_weights", "position"),
+                       ("trigger_sigma", "std"), ("exclude_same_issuer", False)):
+        with pytest.raises(ValueError, match="Incompatible report cache"):
+            validate_claim_cache({**meta, key: value}, specification="baseline")
