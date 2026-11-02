@@ -26,7 +26,9 @@ git-ignored, so these are copies of one run over the full 474-cohort cache (scor
 | `figures/figure1.png`, `figure1.json` | Figure 1, the Kennecott-Uniroyal trading period | `scripts/03_replicate.py --steps figure1` |
 | `figures/figure2.png`, `figure3.png`, `figure4.png`, `figure4_rolling.csv` | Figures 2-4 against the paper's | `scripts/replication_figures.py` |
 
-The cell-by-cell comparison is [`../REPLICATION_CHECK.md`](../REPLICATION_CHECK.md); the summary is
+The archived cell check [`../REPLICATION_CHECK.md`](../REPLICATION_CHECK.md) also includes
+PR #12’s five printed Newey–West t-statistic row updates (`5499701`); these CSVs
+remain the `bc528c0` snapshot. Its score is unchanged. The current summary is
 [`../REPLICATION_SUMMARY.md`](../REPLICATION_SUMMARY.md). Tables 6 and 9 and the Table 7
 regressions have their own reports in [`../claims/`](../claims/).
 

@@ -143,7 +143,10 @@ replication has t = 1.99). The paper's slightly negative random-pair means and
 universally greater volatility are **not replicated**. This supports relative
 outperformance on the strict selections, not a fully replicated Table 6.
 
-**Validation:** 383 tests passed, 14 skipped. The skips cover unavailable published
+**Validation:** the full suite had 383 tests passed and 14 skipped; after integrating
+the team’s final #12 merge, 199 targeted tests passed and 2 skipped. The merged
+driver and trading kernel have identical executable ASTs to the full-run versions
+(only documentation changed). The skips cover unavailable published
 PDF/default-path artifacts and proprietary inputs, plus opt-in rebuilds. The
 actual full 474-cohort baseline and both sensitivities were executed separately;
 the exact full-baseline regression assertions were run against the rebuilt
@@ -221,6 +224,10 @@ python scripts/claims/table6_random_pairs.py --mode report --close true --reps 2
 python -m project.reconciliation
 python -m pytest tests/ -q
 ```
+
+The strict-reference command above reuses its preserved cache; to rebuild that
+cache from the processed inputs, omit `--aggregate-only` and retain the explicit
+February start and July report start.
 
 The older full Table 6 own-crossing outputs remain at
 `results/replication/fidelity/table6`; use `--close own` when reporting them.

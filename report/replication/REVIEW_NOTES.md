@@ -2824,3 +2824,23 @@ payoffs by the pairs that opened was considered and dropped: `mean_employed_lite
 0.856% for the top 20 against 0.807% committed and 1.387% fully invested, a ratio of 1.06
 against the paper's 1.8, so the literal denominator cannot produce the paper's fully invested
 numbers and the employed-capital reading the shipped headline uses is consistent with them.
+
+
+## 56. PR #8 reconciliation against Hao #9–10 and Eiko #12 (2026-11-02)
+
+Sections 54–55 above retain each teammate's original specification and measurements.
+They are historical evidence, not numbers for the reconciled baseline. The decisions,
+paper references, full-sample controls, side-by-side old/new/paper tables and exact
+commands are in [PR_RECONCILIATION.md](PR_RECONCILIATION.md).
+
+The new baseline rebuild covers 474 cohorts and months: eight Table 1 mean errors
+average 4.76 bp versus 18.86 bp for the strict reference. On the same 492-cell set
+the score moves from 219.0 to 258.5; the earlier nonconstant sensitivity scores
+263.5, so the reconciliation does not improve every metric. The actual -100%
+delisting-long test has a -11.29 bp top-20 effect versus -11.60 bp in footnote 4.
+The true-close Table 6 bootstrap has full controls but still misses its table levels.
+The 261.0/481 main archive uses a different cell set and cannot be compared directly.
+
+The task integrated main through the team's #12 merge (`5499701`) into the PR branch;
+it did not merge any GitHub PR. PR #8 remains for review. No restricted observation
+or new generated output is added.

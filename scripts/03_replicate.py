@@ -12,8 +12,9 @@ Usage:
         [--limit-cohorts K] [--force] [--universe vol_common]
         [--normalization continued|rebased] [--aggregate-only]
         [--same-issuer exclude|allow] [--max-stale-share SHARE|none]
-        [--telephone-sic 4811|481x] [--trigger-sigma rms|std]
-        [--size-deciles-top N] [--specification paper|legacy]
+        [--telephone-sic 4811|481x] [--waste-sic industrials|utilities]
+        [--trigger-sigma rms|std] [--long-delisting-loss]
+        [--size-deciles-top N] [--specification baseline|paper|legacy]
         [--monthly-aggregation books|daily_difference]
 
 Cohorts are cached under data/processed/replication/{NAME}/cohorts/, stamped
