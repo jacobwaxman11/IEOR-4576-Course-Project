@@ -35,10 +35,10 @@ PDF_PORTS = ["top5", "top20", "101-120", "top120"]
 ROW_LABELS = {"Mean excess return": "mean", "Standard deviation": "std", "Median": "median"}
 BLOCKS = {"Fully invested": "employed", "Committed capital": "committed"}
 PANELS = {"A. No waiting": "A", "B. Wait one day": "B"}
-NUM = re.compile(r"7?\d+\.\d+")
+NUM = re.compile(r"-?\d+\.\d+")
 
 
-def parse_pdf_table6(pdf: Path = PDF) -> dict[str, dict[str, float]]:
+def parse_pdf_table6(pdf: Path | None = None) -> dict[str, dict[str, float]]:
     """Read Table 6 out of the PDF text layer, keyed like the targets JSON.
 
     The article typesets this table's minus sign as the glyph "7" in front of the
@@ -46,21 +46,25 @@ def parse_pdf_table6(pdf: Path = PDF) -> dict[str, dict[str, float]]:
     ``scripts/verify_paper_targets.py`` documents for Table 3).  Other tokens are
     positive.
     """
+    if pdf is None:
+        pdf = PDF if PDF.exists() else ROOT / "Pairs_Trading_RV_Arbitrage_Rule.pdf"
     out = subprocess.run(["pdftotext", "-layout", str(pdf), "-"], check=True,
                          capture_output=True, text=True).stdout
     lines = out.splitlines()
-    start = next(i for i, line in enumerate(lines) if line.strip() == "Table 6")
+    start = next(i for i, line in enumerate(lines)
+                 if line.strip() == "Table 6" or line.strip().startswith("Table 6:"))
     table: dict[str, dict[str, float]] = {}
-    panel = block = None
-    for line in lines[start:start + 40]:
+    panel, block = "A", None
+    for line in lines[start:start + 45]:
         text = line.strip()
-        if text in PANELS:
-            panel = PANELS[text]
+        if text in PANELS or text.startswith("Panel B: Wait"):
+            panel = PANELS.get(text, "B")
             continue
-        if text in BLOCKS:
-            block = BLOCKS[text]
+        matched_block = next((v for k, v in BLOCKS.items() if k.lower() == text.lower()), None)
+        if matched_block:
+            block = matched_block
             continue
-        label = next((v for k, v in ROW_LABELS.items() if text.startswith(k)), None)
+        label = next((v for k, v in ROW_LABELS.items() if text.lower().startswith(k.lower())), None)
         if label is None or panel is None or block is None:
             continue
         tokens = NUM.findall(text)
@@ -132,8 +136,12 @@ def symbol(text: str) -> str:
 
 
 def collect(out_root: Path, reps: int) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    from project.fidelity import validate_bootstrap_sample
+
     frames = t6.load_cohort_outputs(out_root)
     series = t6.strategy_series(frames, reps)
+    sample = validate_bootstrap_sample(frames, series, reps)
+    (out_root / "sample_validation.json").write_text(json.dumps(sample, indent=2) + "\n")
     stats = t6.summarise(series, reps)
     diffs = t6.difference_stats(series, reps)
     months = [int(np.isfinite(series[k]["true"]).sum()) for k in t6.SERIES_KEYS]
@@ -258,18 +266,18 @@ def verdict(stats: pd.DataFrame, diffs: pd.DataFrame, count: dict,
             bool((random_sd > true_sd).all()),
         "the true-minus-random difference has t > 2 in all 16 series":
             bool((diffs["t_mean"] > 2).all()),
-        "the difference is positive in the paper's eight Table 1 columns":
+        "the difference is positive in all 12 comparable Table 1 series":
             bool((table1_rows["ours_diff"] > 0).all()),
         "the difference is within 25% of the paper's everywhere it is defined":
             bool(np.isfinite(table1_rows["diff_ratio"].dropna()).all()
                  and (1 - table1_rows["diff_ratio"].dropna()).abs().max() <= 0.25),
     }
     if within10 >= 0.5:
-        tier = "replicated with numbers"
+        tier = "partial numerical agreement (at least half the cells within 10%)"
     elif checks["random-pair means sit below the true pairs in all 16 series"] \
             and checks["the true-minus-random difference has t > 2 in all 16 series"] \
-            and checks["the difference is positive in the paper's eight Table 1 columns"]:
-        tier = "replicated in substance"
+            and checks["the difference is positive in all 12 comparable Table 1 series"]:
+        tier = "relative outperformance supported; table levels not replicated"
     else:
         tier = "not replicated"
     return {"tier": tier, "checks": checks, "within10": within10, "within25": within25,

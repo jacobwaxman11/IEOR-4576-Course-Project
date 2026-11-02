@@ -37,6 +37,10 @@ data/processed/taq/
 data/processed/replication/
 # Pulls made through the WRDS API (licensed CRSP data) stay local.
 data/raw/wrds_api
+# Licensed legacy extracts and share-adjusted volume stay local.
+data/raw/crsp_siz/
+data/raw/crsp_volume/
+data/processed/crsp_siz/
 # Public re-downloads (French library, Goyal-Welch); the LFS copies stay canonical.
 data/raw/public/
 
@@ -44,8 +48,11 @@ data/raw/public/
 .dream-rsi/
 eval/
 
+# Local claim experiments and WRDS UI import provenance.
+scratch/
+data/processed/ui_import_manifest.json
+
 # Local import/audit products and issuer mappings.
-data/processed/crsp_siz/
 data/processed/crsp_siz_reits/
 data/interim/ciz_issuer_header.parquet
 data/interim/ciz_issuer_header.source.json

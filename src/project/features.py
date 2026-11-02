@@ -112,23 +112,25 @@ def _nearest_neighbours(prices: pd.DataFrame, issuers: pd.Series | None,
 
 
 def select_pairs(
-    prices: pd.DataFrame, issuers: pd.Series | None = None, sigma: str = "rms",
+    prices: pd.DataFrame, issuers: pd.Series | None = None, sigma: str = "std",
 ) -> pd.DataFrame:
     """Exhaustive minimum-distance pairing on normalized formation prices.
 
     Each stock i is matched with ``j* = argmin_{j != i} D_ij``; the pair set is
     the unique unordered ``{i, j*}``. Pairs are ranked by distance ascending,
     ties broken by (permno_1, permno_2). ``sigma`` is the spread of
-    formation-normalized prices measured about zero, ``sqrt(SSD / N)`` (the
-    root mean square, default ``"rms"``), or about its mean with ddof=0
-    (``"std"``). The rule opens at a divergence from parity and closes at a
-    crossing, so ``"rms"`` measures from the same point. With ``issuers`` (see
+    formation-normalized prices measured about its mean with ddof=0 (``"std"``,
+    the default, GGR section 2.2 and Table 2A). ``"rms"`` is the legacy
+    sensitivity, measured about zero, ``sqrt(SSD / N)``; it is not a standard
+    deviation when the formation spread has a nonzero mean. With ``issuers`` (see
     ``ssd_matrix``) a stock is matched to the nearest stock of another issuer,
     and a stock with no such partner is left unpaired.
 
     Returns a DataFrame with columns rank, permno_1, permno_2 (permno_1 <
     permno_2), distance, sigma.
     """
+    if sigma not in ("std", "rms"):
+        raise ValueError("sigma must be 'std' or the legacy sensitivity 'rms'")
     columns = {
         "rank": pd.Series(dtype=int),
         "permno_1": pd.Series(dtype=np.int64),
@@ -185,7 +187,7 @@ def select_pairs(
 
 def select_pairs_within_groups(
     prices: pd.DataFrame, groups: pd.Series, issuers: pd.Series | None = None,
-    sigma: str = "rms",
+    sigma: str = "std",
 ) -> pd.DataFrame:
     """Sector-restricted pairing (paper §2.1, Table 3).
 

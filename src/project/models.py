@@ -10,9 +10,8 @@ The optional ``recall`` input adds paper §3.9's short-recall robustness check
 early, with the same timing the rule uses for any other close. It is off by
 default, so every shipped number is produced by the same code path as before.
 
-The optional ``long_delisting_loss`` switch is the robustness check of the
-paper's footnote 4 (RFS p. 804): an open position whose *long* leg delists
-earns -100% on that leg that day. It is also off by default.
+The optional ``long_delisting_loss`` switch applies the delisted-long robustness
+check in footnote 4 (RFS p. 804); it is off by default.
 
 The day loop runs in a numba kernel over plain arrays; ``simulate_cohort``
 prepares the arrays and wraps the results in pandas objects.
@@ -85,7 +84,7 @@ def _empty_result(dates: pd.Index) -> CohortResult:
 
 @numba.njit(cache=True, error_model="numpy")
 def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait, RC, use_recall, recall_lock,
-                      recall_rearm, long_delisting_loss=0):
+                      recall_rearm, cancel_crossed_entry, long_delisting_loss=0):
     """Day loop of the trading rule; see ``simulate_cohort`` for the conventions.
 
     ``RC`` (days x stock columns, bool) marks the high-volume days of a short
@@ -209,15 +208,19 @@ def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait, RC, use_re
 
             if wait == 1 and pending[k] and not locked[k]:
                 pending[k] = False
-                if sign == pending_sign[k] and alive and not term_t and not lastrow_t:
+                if (not cancel_crossed_entry or sign == pending_sign[k]) and alive and not term_t and not lastrow_t:
                     is_open[k] = True
                     opened[k] = True
                     L[k] = 1.0
                     S[k] = 1.0
                     Q[k] = 1.0
                     s0[k] = pending_sign[k]
+                    # Keep the signal-day direction. A crossing on the execution
+                    # day schedules liquidation on the next day, as for any
+                    # other crossing under the one-day-wait rule.
+                    exit_pending[k] = sign != pending_sign[k]
                     open_day[k] = t
-                    if sign < 0:
+                    if pending_sign[k] < 0:
                         long_col[k], short_col[k] = a, b
                     else:
                         long_col[k], short_col[k] = b, a
@@ -270,6 +273,7 @@ def simulate_cohort(
     recall: pd.DataFrame | None = None,
     recall_lock: bool = False,
     recall_rearm: bool = False,
+    delayed_entry: str = "execute",
     long_delisting_loss: bool = False,
 ) -> CohortResult:
     """Simulate one cohort's 6-month trading period.
@@ -287,7 +291,7 @@ def simulate_cohort(
         0 opens at the close of the signal day (returns accrue from the next
         day) and closes at the close of the crossing day; 1 opens at the close
         of the following day (returns accrue two days after the signal),
-        skipping signals whose prices cross on that intervening day, and
+        retaining the signal direction even if prices cross before entry, and
         closes at the close of the day after the crossing. A wait-1 signal on
         the second-to-last day is dropped, since it could only open on the last
         day with nothing to accrue. Forced exits (delisting, a stock's last
@@ -303,6 +307,9 @@ def simulate_cohort(
         normalized prices cross. GGR's Figure 1 shows this convention (both
         stocks start the trading period near 1.10). When None (default),
         prices are rebased to 1 at the close of the first trading day.
+    delayed_entry:
+        ``execute`` follows the unconditional next-day entry in section 3.1.
+        ``cancel`` reproduces the old, undocumented persistence condition.
     recall:
         Optional wide (trading dates x permno) bool table of *short recalls*,
         True on a day on which that stock's daily volume is a high-volume day
@@ -375,6 +382,8 @@ def simulate_cohort(
     sigma = pairs["sigma"].to_numpy(float)
     ranks = pairs["rank"].to_numpy()
 
+    if delayed_entry not in ("execute", "cancel"):
+        raise ValueError("delayed_entry must be execute or cancel")
     if recall is None:
         RC = np.zeros((len(dates), 1), dtype=np.bool_)
         use_recall = 0
@@ -402,6 +411,7 @@ def simulate_cohort(
         use_recall,
         int(recall_lock),
         int(recall_rearm),
+        int(delayed_entry == "cancel"),
         int(long_delisting_loss),
     )
 

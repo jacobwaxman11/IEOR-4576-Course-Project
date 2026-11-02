@@ -42,13 +42,10 @@ position to the return-matrix column. The random pair is opened at the true
 pair's opening day, $1 each, with each drawn stock kept in its true leg's role
 (the true long leg's replacement is bought, the true short leg's replacement
 sold short); the paper replaces "the actual stocks" of the pair and does not
-say the random pair is re-ordered by price at the open. It is closed when the
-true trade it replaces closes, at the true pair's next price crossing (or the
-end of the trading period), or earlier if a drawn stock delists or its data
-end. Open and close are the true pair's signals, so the random trade differs
-from the true trade only in the stocks held. Accounting, portfolio
+say the random pair is re-ordered by price at the open. This run uses
+`--close {{CLOSE_RULE}}`: {{CLOSE_METHOD}}. Accounting, portfolio
 construction and monthly compounding use the shipped engine's conventions
-(paper eqq. 2-3, the pipeline's --short-weights position, cohort_monthly, then
+(paper eqq. 2-3, the pipeline's --short-weights value, separately compounded books, then
 the overlap average across cohorts).
 
 Choices where the paper is silent, and the reading used:
@@ -59,8 +56,8 @@ Choices where the paper is silent, and the reading used:
 | decile population | that universe's cross-section of mthret in the prior month | "same decile of previous month's performance" |
 | prior month | calendar month before the opening date (for a first-month open, the last filing month before trading) | "previous month" |
 | open date and size | the true pair's opening day; each drawn stock keeps its true leg's long/short role ($1 each) | "the set of historical dates on which the pairs open"; "we replace the actual stocks" |
-| close | with the true trade it replaces (the true pair's next crossing, or period end); earlier only on a drawn stock's delisting or last row | the caption ties the open to "the stocks in the true pair" and closes "after the next crossing of prices"; the dates come from the true trades ("the set of historical dates on which the various pairs open", "the entire set of trading dates") |
-| accounting | buy-and-hold $1 legs, eq. (2) payoff, eq. (3) short weight floored at zero | the pipeline's conventions |
+| close | {{CLOSE_METHOD}} (`--close {{CLOSE_RULE}}`) | "after the next crossing of prices" |
+| accounting | buy-and-hold $1 legs, eq. (2) payoff, shorted-security value weights, with zero idle cash returns | the pipeline's conventions |
 | portfolios | ranks 1-5, 1-20, 101-120, 1-120 of each cohort's ranking | Table 6's columns; "All 120" is the top 120 pairs |
 | replications | 200, fixed seed | the paper's count; reproducible |
 | drawn legs with no price after the open | no position | the engine cannot trade a stock with no row |
@@ -116,34 +113,38 @@ True minus random, replication by replication:
 - The bootstrap trades every true opening, including the second and later
  round trips of a pair, and each draw is a fresh pair (the paper does not say
  whether stocks are resampled per opening or per pair).
+- Under `--close own`, because a random pair closes on its own crossing, a later opening of the same
+ rank can arrive while an earlier random position is still open; the two are
+ then held together in that rank's book (the true-pair rule re-opens a pair
+ only after it has closed).
 - A random leg with no price after the opening day produces no position.
-- The caption does not say whose crossing closes the random position. Closing
- on the drawn stocks' own next crossing (`--close own`) is the measured
- alternative: random means -0.16 / -0.23 / -0.23 / -0.24% without the wait,
- standard deviations 3.5 / 1.8 / 1.9 / 0.8%, and the claim holds as well
- (REVIEW_NOTES section 54). A third reading, trading the drawn stocks on their
- own 2-sigma rule, contradicts the caption's open and does not diversify like
- the paper's random pairs (top-120 standard deviation 3.1% against 1.2%).
+- The caption does not explicitly identify whose crossing closes the position.
+ `--close true` holds the true trade’s schedule fixed to isolate selection;
+ `--close own` preserves the earlier experiment. Results from the two methods
+ use separate output directories and cannot be mixed.
 - The significance test is a Newey-West t of the monthly true-minus-random
  series, averaged over replications, not the paper's own (unreported) test.
 
 ## 8. How to regenerate
 
-One command rebuilds everything below from a clean checkout (about 15 minutes
-with eight workers); the four steps are the same one-liners:
+First build the paper-profile cohorts, including February–June 1963 warmup,
+with `scripts/03_replicate.py`. The example below uses the controlled audit's
+combined cache. All generated outputs stay under ignored `results/`.
+Runtime depends on the machine; one worker limits peak memory.
 
-    # 1. control: rebuilds the true series from the cached trade log
-    python scripts/claims/table6_random_pairs.py --mode control --out-root scratch/t6control \
-        > scratch/t6control.log 2>&1
-    # 2. the control summary as JSON, read by the report
-    python scripts/claims/t6_control_json.py scratch/t6control.log scratch/t6run/control.json
-    # 3. the bootstrap: 200 replications over 474 cohorts, eight subprocess shards
-    python scripts/claims/table6_random_pairs.py --mode run --reps 200 --workers 8 \
-        --out-root scratch/t6run
-    # 4. the report and its CSV (also checks the paper targets against the PDF)
-    python scripts/claims/table6_random_pairs.py --mode report --reps 200 \
-        --out-root scratch/t6run
+```sh
+python scripts/claims/table6_random_pairs.py --mode control \
+    --cache-root data/processed/replication/fidelity/combined \
+    --close {{CLOSE_RULE}} --out-root results/replication/reconciliation/table6_{{CLOSE_RULE}}
+python scripts/claims/table6_random_pairs.py --mode run --reps 200 --workers 1 \
+    --cache-root data/processed/replication/fidelity/combined \
+    --close {{CLOSE_RULE}} --out-root results/replication/reconciliation/table6_{{CLOSE_RULE}}
+python scripts/claims/table6_random_pairs.py --mode report --reps 200 \
+    --cache-root data/processed/replication/fidelity/combined \
+    --close {{CLOSE_RULE}} --out-root results/replication/reconciliation/table6_{{CLOSE_RULE}} \
+    --report-dir results/replication/reconciliation/table6_{{CLOSE_RULE}}/report
+```
 
-The report reads the control numbers from scratch/t6run/control.json; without it
-the control section says so instead of quoting a stale number. Unit tests:
-``python -m pytest tests/test_table6.py -q``.
+The control writes `control.json` directly into the output directory. The
+report checks the Table 6 targets against the attached paper PDF. Unit tests:
+`python -m pytest tests/test_table6.py -q`.

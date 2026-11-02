@@ -193,7 +193,7 @@ def _variant_panel(tmp_path, monkeypatch) -> None:
       400 closed-end fund FUND/CEF/NS -> vol_ns only
       500 sharetype SB throughout   -> eligible nowhere
       600 zero-volume day (else TR) -> price_common only
-      800 clean but zero return every day -> eligible nowhere
+      800 clean but zero return every day -> eligible unless the extra screen is enabled
     """
     rows = []
     for d in DATES:
@@ -221,10 +221,13 @@ def _variant_panel(tmp_path, monkeypatch) -> None:
 
 
 EXPECTED = {
-    "vol_common": [100, 200],
-    "volpos_common": [100],
-    "price_common": [100, 600],
-    "vol_ns": [100, 200, 400],
+    "informative_common": [100, 200, 800],
+    "activity_common": [100, 800],
+    "traded_common": [100, 800],
+    "vol_common": [100, 200, 800],
+    "volpos_common": [100, 800],
+    "price_common": [100, 600, 800],
+    "vol_ns": [100, 200, 400, 800],
 }
 
 
@@ -248,7 +251,7 @@ def test_a_preloaded_panel_gives_the_same_universe(tmp_path, monkeypatch, univer
     """Both paths ask ``formation_columns`` for their columns, so the driver's
     narrowed read cannot be missing one the eligibility rule needs."""
     _variant_panel(tmp_path, monkeypatch)
-    columns = [*pdata.formation_columns(universe, max_stale_share), "date"]
+    columns = list(dict.fromkeys([*pdata.formation_columns(universe, max_stale_share), "date"]))
     panel = pdata.load_daily(DATES[0], DATES[-1], columns)
     plain = pdata.formation_universe(DATES[0], DATES[-1], universe=universe,
                                      max_stale_share=max_stale_share)
@@ -461,3 +464,41 @@ def test_issuer_map_rejects_duplicate_permnos(tmp_path) -> None:
     pd.DataFrame({"permno": [10, 10], "permco": [5, 6]}).to_parquet(path)
     with pytest.raises(ValueError, match="more than one row per permno"):
         pdata.issuer_map(path)
+
+
+def test_constant_price_exclusion_is_an_explicit_sensitivity(tmp_path, monkeypatch):
+    _variant_panel(tmp_path, monkeypatch)
+    assert 800 in pdata.formation_universe(DATES[0], DATES[-1])
+    assert 800 not in pdata.formation_universe(DATES[0], DATES[-1], exclude_constant=True)
+
+
+def test_activity_screen_uses_volume_and_only_ignores_the_rebasing_return(tmp_path, monkeypatch):
+    rows = []
+    for i, d in enumerate(DATES):
+        for permno in (1, 2, 3, 4):
+            rows.append({"permno": permno, "dlycaldt": d, "dlyprcflg": "BA",
+                         "dlyvol": None if permno == 3 else (0 if permno == 4 else 100),
+                         "dlyret": None if (permno == 1 and i == 0) or
+                         (permno == 2 and i == 1) else .01})
+    panel = pdata._clean_year(_raw_frame(rows))
+    _write_index_file(tmp_path / "index.parquet", DATES)
+    monkeypatch.setattr(pdata, "DAILY_INDEX_FILE", tmp_path / "index.parquet")
+    got = pdata.formation_universe(DATES[0], DATES[-1], "activity_common", panel=panel)
+    assert got.tolist() == [1]
+    assert pdata.formation_universe(DATES[0], DATES[-1], "traded_common", panel=panel).empty
+
+
+def test_static_filter_preserves_observed_activity(tmp_path, monkeypatch):
+    _variant_panel(tmp_path, monkeypatch)
+    panel = pdata.load_daily(DATES[0], DATES[-1])
+    panel = panel[panel.permno.isin([100, 200, 800])].copy()
+    panel['ret'] = 0.
+    panel['tr'] = False
+    panel['vol_zero'] = False
+    panel['vol_pos'] = panel.permno.eq(800)
+    # One transaction-price observation is sufficient evidence for the diagnostic.
+    panel.loc[panel.permno.eq(100) & panel.date.eq(pd.Timestamp(DATES[0])), 'tr'] = True
+    got = pdata.formation_universe(DATES[0], DATES[-1], 'informative_common', panel=panel)
+    assert list(got) == [100, 800]
+    assert pdata.formation_universe(DATES[0], DATES[-1], 'vol_common', panel=panel,
+                                    exclude_constant=True).empty

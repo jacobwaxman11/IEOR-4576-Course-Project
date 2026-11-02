@@ -4,6 +4,8 @@ random_seed: 4576
 sample:
   acquisition_start: "1961-01-01"
   replication_start: "1963-07-01"
+  # Earlier warmup cohorts are an explicit sensitivity, not the baseline.
+  first_cohort_start: "1963-07-01"
   replication_end: "2002-12-31"
   extension_start: "2003-01-01"
   # Resolve against the downloaded dataset; record the actual last observation.
@@ -14,12 +16,13 @@ universe:
   exchanges: [NYSE, AMEX, NASDAQ]
   include_delisted: true
   membership: historical
+  formation_screen: vol_common
 
 parameters:
   formation_months: 12
   trading_months: 6
   overlapping_cohorts: 6
-  pair_counts: [5, 20, 100]
+  portfolios: [top5, top20, 101-120, all]
   entry_standard_deviations: 2.0
 
 extension:
@@ -28,3 +31,8 @@ extension:
   neural_methods: optional
   time_scales: [day, hour, minute]
   intraday_status: requires_separate_dataset_and_design
+
+# The executable profiles live in src/project/specification.py; CLI overrides
+# are recorded in each cohort cache. This YAML is a project summary, not a second
+# source of executable defaults.
+replication_specification: baseline

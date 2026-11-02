@@ -28,16 +28,13 @@ One replication (see ``report/replication/claims/TABLE6.md``)
 For every true-pair opening in a cohort (``w0_trades`` for Panel A,
 ``w1_trades`` for Panel B) draw two stocks from the cohort's formation universe,
 each from the decile of the previous calendar month's ``mthret`` that its true
-leg occupies, excluding the two true legs and each other.  Each drawn stock
-keeps its true leg's role (the long leg's stand-in is bought, the short leg's
-sold short).  The random position opens and closes with the true trade it
-replaces, the true pair's 2-sigma divergence and its next crossing (Table 6's
-caption: "opens a position in a random pair when the stocks in the true pair
-diverge by two historical standard deviations and closes the position after the
-next crossing of prices"), and exits early only on a delisting or a drawn leg's
-last available row (``--close true``, the default).  ``--close own`` closes on
-the drawn stocks' own next crossing instead, the alternative reading of the
-caption (REVIEW_NOTES section 54).  Position accounting, portfolio
+leg occupies, excluding the two true legs and each other. Each drawn stock
+keeps the true leg's long/short role. With ``--close own`` (the preserved PR #8
+default), close on the random pair's own first
+crossing of the normalized prices; exit early on a delisting, a leg's last
+available row, or the end of the trading period. ``--close true`` inherits
+the true trade’s close date, capped by earlier forced exits (Hao PR #10).
+Both interpretations of the caption remain explicit. Position accounting, portfolio
 construction and monthly compounding follow the shipped engine
 (``project.models``) and portfolio layer (``project.evaluation``); the vectorised
 re-implementation in ``scripts/claims/t6_engine.py`` is pinned against both.
@@ -80,15 +77,18 @@ import t6_engine as eng
 
 from project.data import formation_columns, formation_universe, load_daily, trading_calendar
 from project.evaluation import overlap_average, portfolio_monthly, summary_stats
+from project.specification import validate_paper_cache, stamp_experiment
 from project.features import normalized_prices
 from project.models import CohortResult
 
 SHARED_CACHE = Path(os.environ.get(
     "GGR_SHARED_REPLICATION", str(_ROOT / "data" / "processed" / "replication")
-)) / "vol_common"
+)) / "traded_common"
 SHARED_MONTHLY = Path(os.environ.get(
     "GGR_SHARED_DATA_RAW", str(_ROOT / "data" / "raw")
 )) / "wrds_api" / "monthly_stocks.parquet"
+if SHARED_MONTHLY.with_name("monthly_returns_bootstrap.parquet").exists():
+    SHARED_MONTHLY = SHARED_MONTHLY.with_name("monthly_returns_bootstrap.parquet")
 PAPER_TARGETS = Path(__file__).resolve().parent / "table6_paper.json"
 
 #: Portfolios of Table 6: ranks 1-5, 1-20, 101-120 and the top 120 pairs.
@@ -99,7 +99,7 @@ PORTFOLIOS: dict[str, tuple[int, int]] = {
     "top120": (1, 120),
 }
 #: The three portfolios the shipped cache also holds, for the control comparison.
-SHIPPED_PORTFOLIOS = ("top5", "top20", "101-120")
+SHIPPED_PORTFOLIOS = ("top5", "top20", "101-120", "all")
 #: Table 1's two capital definitions: fully invested = "employed", committed.
 CAPITALS = ("employed", "committed")
 WAITS = (0, 1)
@@ -109,13 +109,11 @@ SERIES_KEYS = [f"w{w}|{p}|{c}" for (w, p, c) in SERIES]
 #: Table 6 rows: two panels x two capital blocks x three statistics.
 STATS = ("mean", "std", "median")
 END = (2002, 12)
-UNIVERSE = "vol_common"
-MAX_STALE_SHARE = 0.95
-#: Table 6 close rules: with the true trade (primary) or the drawn stocks' own crossing.
-CLOSE_RULES = ("true", "own")
+UNIVERSE = "traded_common"
+MAX_STALE_SHARE = None
 DEFAULT_SEED = 20060101
 #: The pipeline's eq. (3) short weight (``--short-weights position``).
-SHORT_WEIGHTS = "position"
+SHORT_WEIGHTS = "value"
 #: Ranks drawn from each cohort's pair ranking: Table 6's widest column.
 N_RANKS = 120
 DECILES = 10
@@ -290,7 +288,7 @@ def control_cohort(cache_root: Path, year: int, month: int, wait: int) -> dict:
                 diff = float(np.abs(ours.reindex(common).to_numpy() - paper.to_numpy()).max())
                 out["max_diff_shipped"] = max(out["max_diff_shipped"], diff)
             sel = [int(r) for r in ranks if r <= n_ranks]
-            keys, employed, committed = eng.book_months(books_vec, sel, month_of_day)
+            keys, employed, committed = eng.portfolio_months(books_vec, sel, month_of_day)
             months = employed if capital == "employed" else committed
             vector = pd.Series(months[:, 0],
                                index=pd.DatetimeIndex([month_timestamp(int(k)) for k in keys]))
@@ -309,19 +307,24 @@ def control_cohort(cache_root: Path, year: int, month: int, wait: int) -> dict:
     return out
 
 
-def run_control(cache_root: Path, cohorts: list[tuple[int, int]], waits: tuple[int, ...]) -> int:
+def run_control(cache_root: Path, cohorts: list[tuple[int, int]], waits: tuple[int, ...],
+                output: Path | None = None) -> int:
     rows = [control_cohort(cache_root, y, m, w) for y, m in cohorts for w in waits]
     frame = pd.DataFrame(rows)
     print(frame.to_string(index=False), flush=True)
     summary = {
         "cohort_waits": len(frame),
-        "cells_compared": int(6 * len(frame)),
+        "cells_compared": int(len(SHIPPED_PORTFOLIOS) * len(CAPITALS) * len(frame)),
         "max_diff_shipped": float(frame["max_diff_shipped"].max()),
         "max_diff_vector_layer": float(frame["max_diff_vector"].max()),
         "max_diff_trade_payoff": float(frame["payoff_max_diff"].max()),
     }
     print("\ncontrol summary: " + json.dumps(summary), flush=True)
-    return 0 if summary["max_diff_shipped"] == 0.0 else 1
+    if output is not None:
+        output.mkdir(parents=True, exist_ok=True)
+        (output / "control.json").write_text(json.dumps(summary, indent=2) + "\n")
+    checks = ("max_diff_shipped", "max_diff_vector_layer", "max_diff_trade_payoff")
+    return 0 if all(np.isfinite(summary[k]) and summary[k] < 1e-12 for k in checks) else 1
 
 
 # ---------------------------------------------------------------------------
@@ -332,14 +335,15 @@ def run_control(cache_root: Path, cohorts: list[tuple[int, int]], waits: tuple[i
 def monthly_frame() -> pd.DataFrame:
     """CRSP monthly returns for the whole sample, one row per permno-month.
 
-    The vendor file carries up to two rows per permno-month (one with and one
-    without the security-header columns); the 3,289 duplicated groups agree, so
-    the first row is kept.
+    Identical analysis rows are collapsed; conflicting return observations for
+    the same security-month fail instead of silently choosing the first row.
     """
     global _MONTHLY
     if _MONTHLY is None:
         frame = pd.read_parquet(SHARED_MONTHLY, columns=["permno", "mthcaldt", "mthret"])
-        frame = frame.drop_duplicates(["permno", "mthcaldt"])
+        frame = frame.drop_duplicates()
+        if frame.duplicated(["permno", "mthcaldt"]).any():
+            raise ValueError("Conflicting monthly return observations")
         frame["month_code"] = [d.year * 12 + d.month for d in frame["mthcaldt"]]
         _MONTHLY = frame[["permno", "month_code", "mthret"]]
     return _MONTHLY
@@ -365,7 +369,7 @@ def cohort_panel(cache_root: Path, year: int, month: int) -> CohortPanel:
     """Formation universe, formation levels and trading-window data for a cohort.
 
     The universe is the cohort's own formation universe (the pipeline's
-    ``vol_common`` rule over its 12-month window); ``levels`` is the last row of
+    ``traded_common`` rule over its 12-month window); ``levels`` is the last row of
     the formation ``normalized_prices``, where the engine's continued
     normalization starts; the returns are the trading window's daily returns for
     every universe member, so any drawn security can be priced.  ``deciles`` maps
@@ -546,18 +550,12 @@ def true_pair_series(cache_root: Path, panel: CohortPanel, wait: int) -> tuple[n
 
 
 def run_cohort(cache_root: Path, year: int, month: int, reps: int, seed: int,
-               chunk: int = 25, close_rule: str = "true") -> dict:
-    """Bootstrap and true-pair series of one cohort, both panels.
-
-    ``close_rule`` "true" closes each random position with the true trade it
-    replaces (capped by the drawn legs' forced exits); "own" closes it on the drawn
-    stocks' own next crossing.
-    """
-    if close_rule not in CLOSE_RULES:
-        raise ValueError(f"close_rule must be one of {CLOSE_RULES}, got {close_rule!r}")
+               chunk: int = 25, close_rule: str = "own") -> dict:
+    """Bootstrap and true-pair series of one cohort, both panels."""
+    if close_rule not in ("true", "own"):
+        raise ValueError("close_rule must be true or own")
     panel = cohort_panel(cache_root, year, month)
     months = np.unique(panel.month_of_day)
-    month_index = pd.DatetimeIndex([month_timestamp(int(k)) for k in months])
     random = np.full((reps, months.size, len(SERIES)), np.nan)
     true = np.full((months.size, len(SERIES)), np.nan)
     stats: dict = {"cohort": f"{year:04d}-{month:02d}", "universe": int(panel.permnos.size),
@@ -602,46 +600,34 @@ def run_cohort(cache_root: Path, year: int, month: int, reps: int, seed: int,
                                         panel.levels[ids_l.ravel()])
             ps = eng.prices_from_returns(panel.returns[:, ids_s.ravel()],
                                         panel.levels[ids_s.ravel()])
-            if close_rule == "own":
-                close, reason = eng.resolve_closes(
-                    opens, pl, ps, panel.terminal[:, ids_l.ravel()],
-                    panel.terminal[:, ids_s.ravel()], panel.last_valid[ids_l.ravel()],
-                    panel.last_valid[ids_s.ravel()], wait=wait)
-            else:
-                forced, forced_reason = eng.forced_closes(
+            if close_rule == "true":
+                forced, _ = eng.forced_closes(
                     opens, panel.terminal[:, ids_l.ravel()], panel.terminal[:, ids_s.ravel()],
                     panel.last_valid[ids_l.ravel()], panel.last_valid[ids_s.ravel()])
                 true_close = np.repeat(trades["close_day"].to_numpy(np.int64), c)
                 close = np.minimum(forced, true_close)
-                reason = np.where(forced < true_close, forced_reason, eng.CONVERGED)
-                cut = int((live & (forced < true_close)).sum())
-                stats["waits"][str(wait)]["forced_before_true_close"] = (
-                    stats["waits"][str(wait)].get("forced_before_true_close", 0) + cut)
+                stats["waits"][str(wait)].setdefault("forced_before_true_close", 0)
+                stats["waits"][str(wait)]["forced_before_true_close"] += int(
+                    (live & (forced < true_close)).sum())
+            else:
+                close, _ = eng.resolve_closes(
+                    opens, pl, ps, panel.terminal[:, ids_l.ravel()], panel.terminal[:, ids_s.ravel()],
+                    panel.last_valid[ids_l.ravel()], panel.last_valid[ids_s.ravel()], wait=wait)
             close = np.where(live, close, opens)
             vals = eng.account(opens, close, ids_l.ravel(), ids_s.ravel(), panel.returns)
             books = eng.rank_books(vals, events["rank"].to_numpy(np.int64), N_RANKS, c)
-            for rep in range(c):
-                sl = np.arange(rep, len(events) * c, c)
-                log = pd.DataFrame({
-                    "rank": events["rank"].to_numpy(),
-                    "open_day": opens[sl],
-                    "close_day": close[sl],
-                    "reason": reason[sl],
-                    "long_permno": panel.permnos[ids_l.ravel()[sl]],
-                    "short_permno": panel.permnos[ids_s.ravel()[sl]],
-                    "payoff": np.nan,
-                })
-                log["open_date"] = panel.dates.to_numpy()[log["open_day"].to_numpy()]
-                log["close_date"] = panel.dates.to_numpy()[log["close_day"].to_numpy()]
-                result = result_from_books({k: v[:, :, rep] for k, v in books.items()}, log,
-                                           N_RANKS, panel.dates)
-                for j, (w, portfolio, capital) in enumerate(SERIES):
-                    if w != wait:
-                        continue
-                    lo, hi = PORTFOLIOS[portfolio]
-                    monthly = portfolio_monthly(result, list(range(lo, hi + 1)), capital,
-                                                SHORT_WEIGHTS)
-                    random[start + rep, :, j] = monthly.reindex(month_index).to_numpy()
+            # The full true-pair control pins this vectorized aggregation to
+            # portfolio_monthly for every cohort and both capital definitions.
+            for j, (w, portfolio, capital) in enumerate(SERIES):
+                if w != wait:
+                    continue
+                lo, hi = PORTFOLIOS[portfolio]
+                keys, employed, committed = eng.portfolio_months(
+                    books, list(range(lo, hi + 1)), np.array([month_of(d) for d in panel.dates]))
+                if not np.array_equal(keys, months):
+                    raise ValueError("Bootstrap aggregation changed the month calendar")
+                values = employed if capital == "employed" else committed
+                random[start:stop, :, j] = values.T
     return {"months": months, "random": random, "true": true,
             "stats": np.array(json.dumps(stats))}
 
@@ -654,6 +640,8 @@ def run_shard(args, cohorts: list[tuple[int, int]], shard: int, shards: int) -> 
     out_root = Path(args.out_root).resolve()
     (out_root / "cohorts").mkdir(parents=True, exist_ok=True)
     cache_root = Path(args.cache_root).resolve()
+    if args.mode != "report":
+        validate_paper_cache(json.loads((cache_root / "cohorts/cache_meta.json").read_text()))
     mine = [c for i, c in enumerate(cohorts) if i % shards == shard]
     done = 0
     for year, month in mine:
@@ -662,8 +650,7 @@ def run_shard(args, cohorts: list[tuple[int, int]], shard: int, shards: int) -> 
             done += 1
             continue
         started = time.time()
-        payload = run_cohort(cache_root, year, month, args.reps, args.seed,
-                             close_rule=args.close)
+        payload = run_cohort(cache_root, year, month, args.reps, args.seed, close_rule=args.close)
         tmp = path.with_suffix(".npz.tmp")
         with open(tmp, "wb") as handle:
             np.savez_compressed(handle, **payload)
@@ -685,6 +672,7 @@ def run_all(args, cohorts: list[tuple[int, int]]) -> int:
         cmd = [sys.executable, script, "--mode", "shard",
                "--cache-root", str(Path(args.cache_root).resolve()), "--out-root", str(out_root),
                "--reps", str(args.reps), "--seed", str(args.seed), "--close", args.close,
+               "--wait", args.wait,
                "--shard", str(shard), "--shards", str(workers)]
         if args.force:
             cmd.append("--force")
@@ -740,8 +728,8 @@ def strategy_series(frames: list[dict], reps: int) -> dict:
                 good = np.isfinite(values)
                 if good.any():
                     rep_by_cohort[rep][stamp] = pd.Series(values[good], index=stamps[good])
-        out[key] = {"true": overlap_average(true_by_cohort),
-                    "reps": [overlap_average(m) for m in rep_by_cohort]}
+        out[key] = {"true": overlap_average(true_by_cohort).loc["1963-07-01":],
+                    "reps": [overlap_average(m).loc["1963-07-01":] for m in rep_by_cohort]}
     return out
 
 
@@ -789,9 +777,12 @@ def main() -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--mode", choices=("control", "run", "shard", "report"), default="control")
     parser.add_argument("--cache-root", default=str(SHARED_CACHE),
-                        help="vol_common cache directory holding cohorts/ (read read-only)")
-    parser.add_argument("--out-root", default=str(_ROOT / "scratch" / "t6"),
+                        help="paper-profile cache directory holding cohorts/ (read only)")
+    parser.add_argument("--out-root", default=str(_ROOT / "results" / "replication" / "table6"),
                         help="private output directory")
+    parser.add_argument("--close", choices=("true", "own"), default="own",
+                        help="true-trade close schedule (Hao PR #10), or own crossing "
+                             "(existing PR #8 experiment; default)")
     parser.add_argument("--wait", default="0,1")
     parser.add_argument("--limit-cohorts", type=int, default=None)
     parser.add_argument("--reps", type=int, default=200)
@@ -800,24 +791,37 @@ def main() -> int:
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--shards", type=int, default=1)
     parser.add_argument("--force", action="store_true")
-    parser.add_argument("--close", choices=CLOSE_RULES, default="true",
-                        help="close each random position with its true trade (default) or on the "
-                             "drawn stocks' own next crossing")
+    parser.add_argument("--report-dir", type=Path,
+                        help="write generated report here instead of the historical claims directory")
     args = parser.parse_args()
 
     cache_root = Path(args.cache_root).resolve()
+    source_meta = json.loads((cache_root / "cohorts/cache_meta.json").read_text())
+    validate_paper_cache(source_meta)
+    parameters = {"reps": args.reps, "seed": args.seed, "wait": args.wait}
+    # Historical PR #8 outputs omitted this key and mean own crossings.
+    # A true-schedule run must never reuse them, even with --force.
+    if args.close != "own":
+        parameters["close_rule"] = args.close
+    stamp_experiment(args.out_root, source_meta,
+                     parameters,
+                     read_only=args.mode == "report")
     waits = tuple(int(w) for w in args.wait.split(",") if w.strip())
     cohorts = cohort_list(cache_root)
     if args.limit_cohorts is not None:
         cohorts = cohorts[: args.limit_cohorts]
     if args.mode == "control":
-        return run_control(cache_root, cohorts, waits)
+        return run_control(cache_root, cohorts, waits, Path(args.out_root))
     if args.mode == "shard":
         return run_shard(args, cohorts, args.shard, args.shards)
     if args.mode == "run":
         return run_all(args, cohorts)
     if args.mode == "report":
         import table6_report as report
+        if args.report_dir:
+            report.REPORT_DIR = args.report_dir
+            report.REPORT_MD = args.report_dir / "TABLE6.md"
+            report.REPORT_CSV = args.report_dir / "TABLE6.csv"
         return report.main(Path(args.out_root).resolve(), args.reps)
     raise SystemExit(f"unknown mode {args.mode}")
 

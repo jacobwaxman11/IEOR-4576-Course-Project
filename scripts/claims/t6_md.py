@@ -31,7 +31,13 @@ def render(out_root, reps):
     diff_lines = rep.difference_block(diffs)
     result = rep.verdict(stats, diffs, count, effect_frame)
     rep.write_csv(stats, diffs, effect_frame, meta, targets)
-    text = template
+    stamp = json.loads((out_root / "accounting_meta.json").read_text())
+    close_rule = stamp["parameters"].get("close_rule", "own")
+    if close_rule not in ("own", "true"):
+        raise ValueError(f"Unknown close rule: {close_rule}")
+    close_text = ("the true trade’s close date, capped by earlier delisting or data-end exits"
+                  if close_rule == "true" else "the drawn pair’s own next crossing, capped by forced exits")
+    text = template.replace("{{CLOSE_RULE}}", close_rule).replace("{{CLOSE_METHOD}}", close_text)
     text = text.replace("{{TABLE6}}", "\n".join(blocks))
     text = text.replace("{{EFFECT}}", "\n".join(effects))
     text = text.replace("{{SPREAD}}", "\n".join(spreads))
@@ -72,13 +78,8 @@ def verdict_text(result):
                  % (round(result["within10"] * result["cells"]), result["cells"],
                     100 * result["within10"], 100 * result["within25"]))
     lines.append("")
-    lines.append(
-        "The standard-deviation criterion is the one that does not hold in every "
-        "column: in the top-120 column the random pairs are quieter than the true "
-        "pairs, while in the top-5, top-20 and top-100-120 columns they are "
-        "noisier, as the paper describes. The mean, the negative random-pair "
-        "level and the true-minus-random difference behave as the paper says "
-        "in all sixteen series.")
+    failed = [key for key, value in result["checks"].items() if not value]
+    lines.append("Criteria not met: " + (", ".join(failed) if failed else "none") + ".")
     return "\n".join(lines)
 
 

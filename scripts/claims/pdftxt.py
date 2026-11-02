@@ -21,8 +21,8 @@ def paper_lines(pdf: str) -> list[str]:
 
 def block(lines: list[str], first: str, last: str) -> list[str]:
     """The lines from the one holding `first` through the one holding `last`."""
-    start = next(i for i, line in enumerate(lines) if first in line)
-    stop = next(i for i, line in enumerate(lines) if i > start and last in line)
+    start = next(i for i, line in enumerate(lines) if first.lower() in line.lower())
+    stop = next(i for i, line in enumerate(lines) if i > start and last.lower() in line.lower())
     return [lines[i].strip() for i in range(start, stop + 1) if lines[i].strip()]
 
 
@@ -33,7 +33,7 @@ def quote(lines: list[str], first: str, last: str) -> str:
 
 def table9_panel_b(lines: list[str]) -> str:
     """The paper's Panel B rows, verbatim, as a fenced block."""
-    rows = block(lines, "B. Short recalls on high volume", "committed capital")
+    rows = block(lines, "Short recalls on high volume", "committed capital")
     return "```\n" + "\n".join(rows) + "\n```"
 
 
@@ -65,14 +65,16 @@ def _number(text: str) -> float:
 
 def panel_b_values(lines: list[str]) -> dict[str, dict[str, float]]:
     """Table 9 Panel B as {portfolio: {statistic: value}}, read off the PDF's columns."""
-    rows = block(lines, "B. Short recalls on high volume", "committed capital")
+    rows = block(lines, "Short recalls on high volume", "committed capital")
     values: dict[str, dict[str, float]] = {p: {} for p in PORTFOLIO_ORDER}
     for line in rows:
         for label, key in PANEL_B_ROWS:
-            if not line.startswith(label):
+            if not line.lower().startswith(label.lower()):
                 continue
             cells = [c for c in re.split(r"\s{2,}", line.strip()) if c]
             for portfolio, cell in zip(PORTFOLIO_ORDER, cells[1:]):
                 values[portfolio][key] = _number(cell)
             break
+    if any(len(stats) != len(PANEL_B_ROWS) for stats in values.values()):
+        raise ValueError("Incomplete Table 9B extraction; expected all 44 target cells")
     return values

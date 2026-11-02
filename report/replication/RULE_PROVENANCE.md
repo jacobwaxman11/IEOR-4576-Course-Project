@@ -1,5 +1,12 @@
 # Rule provenance: what the final paper says, what the engine does
 
+> **Historical snapshot, superseded by the accounting audit.** This document describes
+> the legacy run retained at `6644cbf`. Current defaults, corrected rules, and measured
+> validation are in [FIDELITY_VALIDATION.md](FIDELITY_VALIDATION.md). The old 267.5 is weighted
+> points across 481 comparisons: 214 cells within 10%, 321 within 25%, 160 outside.
+> It is not a count of 267.5 matching cells or evidence for the corrected run.
+
+
 Compiled 2026-10-26 against `replication/round-nine-evidence` (`708fa9ed`). Corrected the
 same day: rows 5, 13, 16 (split into 16 and 16b), 17 and 18, the tally, and the
 references to "R" nodes, which belonged to an untracked local file rather than to the

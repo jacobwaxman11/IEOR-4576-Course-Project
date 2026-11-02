@@ -1,4 +1,4 @@
-"""SCORE_LOG.md is the one record of the replication score; keep it equal to what is shipped.
+"""SCORE_LOG.md preserves the legacy snapshot; validate its arithmetic without promoting it.
 
 Text only: compares the log with the committed REPLICATION_CHECK.md and the conformance
 threshold. No data and no network.
@@ -21,9 +21,9 @@ _spec.loader.exec_module(conformance)
 
 
 def _logged() -> tuple[float, int]:
-    match = re.search(r"^Current shipped score: ([0-9.]+) of (\d+) cells$",
+    match = re.search(r"^Legacy shipped score: ([0-9.]+) weighted points across (\d+) cells$",
                       LOG.read_text(encoding="utf-8"), re.MULTILINE)
-    assert match, "SCORE_LOG.md has no 'Current shipped score: X of N cells' line"
+    assert match, "SCORE_LOG.md has no 'Legacy shipped score: X weighted points across N cells' line"
     return float(match.group(1)), int(match.group(2))
 
 

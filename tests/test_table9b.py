@@ -17,7 +17,8 @@ import pandas as pd
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-PDF = ROOT / "pairs-trading-performance-of-a-relative-value-arbitrage-rule_final.pdf"
+PDF = ROOT / "Pairs_Trading_RV_Arbitrage_Rule.pdf"
+sys.path.insert(0, str(ROOT / "scripts" / "claims"))
 _spec = importlib.util.spec_from_file_location("pdftxt", ROOT / "scripts" / "claims" / "pdftxt.py")
 pdftxt = importlib.util.module_from_spec(_spec)
 sys.modules["pdftxt"] = pdftxt
@@ -27,6 +28,12 @@ from project.models import simulate_cohort
 from project.recalls import adjusted_volume, high_volume_days, volume_thresholds
 
 DATES = pd.date_range("2020-01-01", periods=12, freq="B")
+
+
+def test_missing_volume_inputs_cannot_report_zero_recalls(tmp_path):
+    from table9b_recalls import VolumeSource
+    with pytest.raises(FileNotFoundError, match="split-adjusted volume"):
+        VolumeSource(tmp_path).window([1], DATES[0].date(), DATES[-1].date())
 
 
 def one_pair(sigma: float = 0.01) -> pd.DataFrame:
@@ -61,11 +68,14 @@ DIVERGING = [1.0, 1.0, 1.0, 1.03, 1.03, 1.03, 1.03, 1.03, 1.03, 1.03, 1.03, 1.03
 
 def test_adjusted_volume_scales_and_keeps_nan():
     vol = pd.Series([100.0, np.nan, 300.0])
-    fac = pd.Series([2.0, 2.0, 1.0])
+    fac = pd.Series([2.0, np.nan, 1.0])
     got = adjusted_volume(vol, fac)
     assert got.iloc[0] == 200.0
     assert np.isnan(got.iloc[1])
     assert got.iloc[2] == 300.0
+    for bad in (np.nan, 0.0, np.inf, -1.0):
+        with pytest.raises(ValueError, match="share-adjustment factor"):
+            adjusted_volume(pd.Series([300.0]), pd.Series([bad]))
 
 
 def test_threshold_is_mean_plus_population_sd():
@@ -150,3 +160,12 @@ def test_recall_lock_stops_the_pair_for_good():
                           recall=flags([6]), recall_lock=True)
     assert len(got.trades) == 1
     assert got.trades.iloc[0]["reason"] == "recalled"
+
+
+def test_conflicting_volume_rows_are_rejected():
+    from table9b_recalls import volume_wide
+    x = pd.DataFrame({"permno": [1, 1], "date": [DATES[0]] * 2, "adjvol": [10., 20.]})
+    with pytest.raises(ValueError, match="Conflicting adjusted volume"):
+        volume_wide(x, [1])
+    x.adjvol = 10.
+    assert volume_wide(x, [1]).iloc[0, 0] == 10.

@@ -1,10 +1,12 @@
 # Replication score log
 
-This is the one place that records the replication score: the current total, how it is
-counted, and every shipped change to it. Other documents point here instead of quoting the
-number, so there is one thing to update.
+> **Historical main-branch evidence, through Hao’s PRs #9–10 (`bc528c0`).**
+> These 481-cell scores describe the legacy `vol_common` specification, not PR #8’s
+> corrected profile or its 492-cell validation. See [PR_RECONCILIATION.md](PR_RECONCILIATION.md)
+> for the integration and [ACCOUNTING_CORRECTIONS.md](ACCOUNTING_CORRECTIONS.md) for the audit.
+> New runs write to ignored `results/`; this history is preserved rather than overwritten.
 
-Current shipped score: 261.0 of 481 cells
+Legacy shipped score: 261.0 weighted points across 481 cells
 
 Cells outside 25% of the paper (✗): 166 = Table 1 24, Table 2 Panel A 0, Table 2 Panel B 11,
 Table 3 37, Table 7 2, Table 4 33, Table 5 Panel A 7, Table 8 48, Figure 4 4. By mark: ✓ 207,

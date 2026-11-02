@@ -149,3 +149,33 @@ def test_paper_targets_match_the_json_and_the_driver():
             continue
         for key, value in values.items():
             assert stored[portfolio][key] == pytest.approx(value, abs=1e-12)
+
+
+def test_current_report_uses_run_values_and_preserves_alpha_identity():
+    factors = toy_factors()
+    books = {}
+    portfolios = {}
+    for i, p in enumerate(table7.PAPER_PORTFOLIOS):
+        long = toy_book(factors, seed=100 + i)
+        short = toy_book(factors, intercept=-.002, beta=.15, seed=200 + i)
+        books[f'{p}|long_book'] = long
+        books[f'{p}|short_book'] = short
+        portfolios[p] = long - short
+    table = table7.book_table(books, factors)
+    control = pd.DataFrame({p: table7.regression_rows(s, factors[table7.FACTORS])
+                            for p, s in portfolios.items()})
+    decomposition = table7.decomposition(table, control)
+    np.testing.assert_allclose(decomposition.ours_pair_alpha,
+                               decomposition.ours_long_alpha + decomposition.ours_short_contribution,
+                               atol=1e-12)
+    marks = table7.paper_module.compare(table, table7.paper7)
+    claim = table7.claim_test(table)
+    payload = dict(n_cohorts=240, n_months=240, cache_meta={'format': 6}, table=table,
+                   marks=marks, control=control, identity=table7.identity_check(books, portfolios),
+                   decomposition=decomposition, claim=claim, table_losers=table,
+                   marks_losers=marks, claim_losers=claim)
+    report = table7.report_module.report(payload, 'python scripts/claims/table7.py')
+    assert 'proxy-factor check' in report and 'not an authenticated reconstruction' in report
+    assert '/ check 0.879' not in report and '1-3 bp' not in report
+    csv = table7.report_module.csv_frame(payload)
+    assert csv.loc[csv.variant == 'control', 'paper'].isna().all()

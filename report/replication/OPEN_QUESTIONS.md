@@ -1,5 +1,10 @@
 # Open questions: what is still off in the scored cells
 
+> **Historical stage:** numerical results below precede the liquidity, execution, idle-cash,
+> and warmup validation. See [FIDELITY_VALIDATION.md](FIDELITY_VALIDATION.md) for current
+> results and remaining gaps. Earlier cache formats and commands are historical; the
+> stage-one accounting experiment is retained at commit `846a777`.
+
 The scored set is Tables 1-3, 4, 5 Panel A, 7 and 8 and Figure 4's printed correlations (481
 cells; SCORE_LOG row 15), with Figure 1 as a pass/fail check. Figures 2 and 3 are printed through
 readings of their images, unscored; Tables 5 Panel B, 6 and 9 are measurements recorded in

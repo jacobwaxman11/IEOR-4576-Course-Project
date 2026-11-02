@@ -3,8 +3,8 @@
 #   make test       - the test suite, including the paper-conformance
 #                     checks (the sample rebuild needs the CRSP daily panel
 #                     and is skipped when it is absent)
-#   make conformance-full - rebuild all 474 cohorts and require the shipped
-#                     full-sample check to be reproduced (a few minutes)
+#   make conformance-full - rebuild all 474 cohorts and check accounting and
+#                     daily-risk coverage; target closeness is reported, not tuned
 #   make build      - raw WRDS-API parquet -> processed yearly panels
 #   make build-data - pull the licensed CRSP source data (once; credentials
 #                     stay in ~/.pgpass via scripts/wrds_setup.py)
@@ -17,13 +17,21 @@
 
 export PATH := $(CURDIR)/.venv/bin:$(PATH)
 
-.PHONY: test conformance-full build build-data benchmark edition-1999 verify-targets
+.PHONY: all replicate test conformance-full validate-fidelity build build-data benchmark edition-1999 verify-targets
+
+all: build-data replicate
+
+replicate:
+	python scripts/03_replicate.py --specification baseline
 
 test:
 	python -m pytest tests/ -q
 
 conformance-full:
 	REPLICATION_FULL=1 REPLICATION_WORKERS=$${REPLICATION_WORKERS:-4} python -m pytest -q -m conformance_full tests/test_replication_conformance.py
+
+validate-fidelity:
+	python scripts/validate_fidelity.py --workers $${REPLICATION_WORKERS:-1}
 
 build:
 	python scripts/02_build_dataset.py
@@ -33,7 +41,7 @@ build-data:
 	python scripts/02_build_dataset.py
 
 benchmark:
-	python scripts/03_replicate.py --universe vol_common --aggregate-only --steps tables,table3,check
+	python scripts/03_replicate.py --specification baseline --aggregate-only --steps tables,table3,check
 	python scripts/replication_score.py
 
 edition-1999:

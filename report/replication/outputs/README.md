@@ -1,5 +1,12 @@
 # Replication outputs
 
+> **Historical main-branch snapshot through PRs #9–10 (`bc528c0`).**
+> The 261.0 weighted points across 481 comparisons are 207 cells within 10%,
+> 108 additional cells within 25%, and 166 outside 25%. These are the legacy
+> `vol_common` conventions, not the reconciled `baseline` profile. The original
+> 267.5-point snapshot remains in Git history (`6644cbf`). See
+> [PR_RECONCILIATION.md](../PR_RECONCILIATION.md) for the new run.
+
 Generated files, committed so they can be read without the licensed CRSP data. `results/` is
 git-ignored, so these are copies of one run over the full 474-cohort cache (score 261.0).
 
@@ -19,11 +26,14 @@ git-ignored, so these are copies of one run over the full 474-cohort cache (scor
 | `figures/figure1.png`, `figure1.json` | Figure 1, the Kennecott-Uniroyal trading period | `scripts/03_replicate.py --steps figure1` |
 | `figures/figure2.png`, `figure3.png`, `figure4.png`, `figure4_rolling.csv` | Figures 2-4 against the paper's | `scripts/replication_figures.py` |
 
-The cell-by-cell comparison is [`../REPLICATION_CHECK.md`](../REPLICATION_CHECK.md); the summary is
+The archived cell check [`../REPLICATION_CHECK.md`](../REPLICATION_CHECK.md) also includes
+PR #12’s five printed Newey–West t-statistic row updates (`5499701`); these CSVs
+remain the `bc528c0` snapshot. Its score is unchanged. The current summary is
 [`../REPLICATION_SUMMARY.md`](../REPLICATION_SUMMARY.md). Tables 6 and 9 and the Table 7
 regressions have their own reports in [`../claims/`](../claims/).
 
-To regenerate, from a checkout with the cohort cache:
+To reproduce this archived snapshot, check out `bc528c0` separately with its original
+inputs and cache. Its commands were:
 
     python scripts/03_replicate.py --universe vol_common --aggregate-only --steps tables,table3,figure1,check
     python scripts/replication_figures.py

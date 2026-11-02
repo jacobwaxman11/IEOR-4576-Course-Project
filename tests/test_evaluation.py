@@ -377,11 +377,10 @@ class TestCompositionStats:
         assert np.isclose(stats["weight_top3_deciles_allpanel"], 0.4)
         assert np.isclose(stats["weight_top5_deciles_allpanel"], 0.6)
         assert np.isclose(stats["share_mixed_decile_pairs"], 0.5)
-        # "Average decile difference for mixed pairs" (Table 2 Panel B, p. 809) is
-        # the mean over the pairs whose stocks sit in different deciles; half the
-        # pairs are mixed, so it is twice the all-pairs mean (REVIEW_NOTES section 54).
+        # One of two valid pairs is mixed; its gap is two deciles.
         assert np.isclose(stats["avg_decile_diff_mixed_pairs"], 2.0)
         assert np.isclose(stats["avg_decile_diff_all_pairs"], 1.0)
+        # Half the pairs are mixed, so the mixed-only mean is twice the all-pairs one.
         assert np.isclose(stats["avg_decile_diff_mixed_only"], 2.0)
         assert np.isclose(stats["weight_utilities"], 1 / 6)
         assert np.isclose(stats["weight_transportation"], 1 / 6)
@@ -408,7 +407,7 @@ class TestCompositionStats:
         stats = composition_stats(info, None)
         assert stats.isna().all()
 
-    def test_no_mixed_pairs_has_no_mixed_mean(self):
+    def test_no_mixed_pairs_zero_diff(self):
         info = _info_cohort1()
         info["pairs"] = _pairs([(1, 5, 6)])
         stats = composition_stats(info, None)
@@ -466,42 +465,12 @@ def test_value_weighted_books_hand_calc():
     res = _legs_stub(long_pay, long_val, short_pay, short_val, idx)
     employed = portfolio_daily(res, [1, 2], "employed")
     committed = portfolio_daily(res, [1, 2], "committed")
-    assert np.isnan(employed.iloc[0])
+    assert employed.iloc[0] == 0.0
     assert np.isclose(employed.iloc[1], 0.05 / 2.0 - 0.02 / 2.0)
     assert np.isclose(employed.iloc[2], 0.11 / 1.1 - 0.3 / 3.0)
     assert np.isclose(committed.iloc[0], 0.0)
     assert np.isclose(committed.iloc[1], employed.iloc[1])
     assert np.isclose(committed.iloc[2], employed.iloc[2] / 2.0)
-
-
-def test_monthly_returns_compound_each_book_before_subtracting():
-    # GGR's Table 1 Panel B equals Table 7's long minus short book means (pp. 807,
-    # 821), which holds only if each book is compounded first (REVIEW_NOTES 54).
-    from project.evaluation import portfolio_legs, portfolio_monthly
-
-    idx = pd.bdate_range("2020-01-06", periods=3)
-    long_val = [[0.0, 0.0], [1.0, 1.0], [1.1, 0.0]]
-    long_pay = [[0.0, 0.0], [0.1, -0.05], [0.11, 0.0]]
-    short_val = [[0.0, 0.0], [1.0, 1.0], [3.0, 0.0]]
-    short_pay = [[0.0, 0.0], [0.02, 0.0], [0.3, 0.0]]
-    res = _legs_stub(long_pay, long_val, short_pay, short_val, idx)
-    long_d, short_d = portfolio_legs(res, [1, 2])
-    employed = portfolio_monthly(res, [1, 2], "employed")
-    want = cohort_monthly(long_d) - cohort_monthly(short_d)
-    assert np.isclose(employed.iloc[0], want.iloc[0])
-    # the daily-difference reading compounds a different number
-    assert not np.isclose(employed.iloc[0], cohort_monthly(portfolio_daily(res, [1, 2], "employed")).iloc[0])
-    lm = (1 + 0.05 / 2.0) * (1 + 0.11 / 1.1) - 1
-    sm = (1 + 0.02 / 2.0) * (1 + 0.3 / 3.0) - 1
-    assert np.isclose(employed.iloc[0], lm - sm)
-    # committed scales each book's day by n_t / N before compounding (day 3: one of two open)
-    committed = portfolio_monthly(res, [1, 2], "committed")
-    lc = (1 + 0.05 / 2.0) * (1 + 0.11 / 1.1 / 2.0) - 1
-    sc = (1 + 0.02 / 2.0) * (1 + 0.3 / 3.0 / 2.0) - 1
-    assert np.isclose(committed.iloc[0], lc - sc)
-    # count-based capitals are unchanged
-    assert np.allclose(portfolio_monthly(res, [1, 2], "committed_count"),
-                       cohort_monthly(portfolio_daily(res, [1, 2], "committed_count")))
 
 
 def test_value_weighting_caps_a_runaway_short_leg():
@@ -695,3 +664,25 @@ class TestCompletedComponents:
         out = evaluation._completed_components(parts, ["2002-02", "2002-09"])
         assert out == parts  # unfiltered fallback
         assert "completion flags unavailable" in capsys.readouterr().err
+
+
+def test_opened_idle_policy_drops_never_opened_cohort_but_keeps_idle_months():
+    from project.models import simulate_cohort
+    from project.evaluation import portfolio_legs, portfolio_monthly
+    dates = pd.to_datetime(['2000-01-28', '2000-01-31', '2000-02-01', '2000-03-01'])
+    pairs = pd.DataFrame({'rank': [1], 'permno_1': [1], 'permno_2': [2],
+                          'distance': [0.0], 'sigma': [0.01]})
+    returns = pd.DataFrame(0.0, index=dates, columns=[1, 2])
+    terminal = returns.astype(bool)
+    idle = simulate_cohort(pairs, returns, terminal)
+    assert portfolio_monthly(idle, [1], 'employed', idle_policy='opened').empty
+    assert portfolio_daily(idle, [1], 'employed', idle_policy='opened').isna().all()
+    assert portfolio_legs(idle, [1], idle_policy='opened')[0].isna().all()
+    assert (portfolio_monthly(idle, [1], 'committed', idle_policy='opened') == 0).all()
+    returns.iloc[1, 1] = .03
+    returns.iloc[2, 1] = 1 / 1.03 - 1
+    active = simulate_cohort(pairs, returns, terminal)
+    employed = portfolio_monthly(active, [1], 'employed', idle_policy='opened')
+    assert len(employed) == 3 and employed.iloc[-1] == 0.0
+    long, short = portfolio_legs(active, [1], idle_policy='opened')
+    pd.testing.assert_series_equal(employed, cohort_monthly(long) - cohort_monthly(short))

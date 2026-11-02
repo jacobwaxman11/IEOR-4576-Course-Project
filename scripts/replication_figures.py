@@ -8,8 +8,8 @@ other three from the aggregated monthly series the driver writes
 - Figure 2: monthly excess return of the top 20 pairs. The paper's bars match its no-wait
   row (REPLICATION_CHECK, "Figures 2 and 3"), so ours is the no-wait series.
 - Figure 3: cumulative excess return of the top 20 pairs, one-day wait, fully invested
-  and committed capital, log scale. Ours starts at the paper's level in 1964-07, the
-  first month the digitised curves separate.
+  and committed capital, log scale. Ours compounds from $1 before the first
+  reported month; no rescaling to a digitised paper point is applied.
 - Figure 4: rolling 24-month correlation of the five-factor residuals of the top 20 and
   the 20 pairs after the top 100 (one-day wait, fully invested).
 
@@ -79,9 +79,8 @@ def figure3(frame: pd.DataFrame, out: Path, plt) -> Path:
     for capital, column, color in (("employed", "fully_invested", "#2b6cb0"),
                                    ("committed", "committed", "#2f855a")):
         ref = paper[column].dropna()
-        start = ref.index[0]
-        growth = (1 + pick(frame, 1, "top20", capital)).cumprod()
-        ours = growth[growth.index >= start] / growth.loc[start] * ref.iloc[0]
+        ours = (1 + pick(frame, 1, "top20", capital)).cumprod()
+        ours.rename("wealth").to_csv(out / f"figure3_{capital}.csv")
         label = "fully invested" if capital == "employed" else "committed capital"
         ax.plot(ours.index, ours.to_numpy(), color=color, linewidth=1.4, label=f"ours, {label}")
         ax.plot(ref.index, ref.to_numpy(), color=color, linewidth=1.0, linestyle="--",

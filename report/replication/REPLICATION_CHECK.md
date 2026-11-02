@@ -1,3 +1,10 @@
+> **Archived main-branch check (`5499701`, PRs #9–10 and #12), 261.0 / 481 weighted points.**
+> This is not the new baseline. The regenerated current check is produced at
+> `results/replication/reconciliation/baseline/tables/replication_check.md` by the
+> commands in [PR_RECONCILIATION.md](PR_RECONCILIATION.md). Generated results stay
+> local under the project’s repository policy; the comparison and current limits
+> are recorded in [REPLICATION_SUMMARY.md](REPLICATION_SUMMARY.md).
+
 # Replication check: GGR (2006) Figures 1 and 4, Tables 1-4, 5 Panel A, 7 and 8 (vol_common)
 
 Cells show ours / paper. ✓ within 10% of the paper, ~ within 25%, ✗ further.

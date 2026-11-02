@@ -86,7 +86,7 @@ def test_select_pairs_three_stocks_two_far_one_close():
     assert top["distance"] == pytest.approx(0.0 + 1e-8 + 4e-8 + 1e-8)
     spread = P[1].to_numpy() - P[2].to_numpy()
     assert top["sigma"] == pytest.approx(np.sqrt(top["distance"] / len(P)))
-    assert top["sigma"] == pytest.approx(np.sqrt(np.mean(spread**2)))
+    assert top["sigma"] == pytest.approx(np.std(spread, ddof=0))
     assert select_pairs(P, sigma="std").iloc[0]["sigma"] == pytest.approx(np.std(spread, ddof=0))
     second = pairs.iloc[1]
     assert (second["permno_1"], second["permno_2"]) == (1, 3)
@@ -126,7 +126,7 @@ def test_within_groups_never_crosses_groups():
     assert list(pairs["rank"]) == [1, 1]
     spread = P[3].to_numpy() - P[4].to_numpy()
     assert pairs.loc[pairs["group"] == "B", "sigma"].iloc[0] == pytest.approx(
-        np.sqrt(np.mean(spread**2))
+        np.std(spread, ddof=0)
     )
     std = select_pairs_within_groups(P, groups, sigma="std")
     assert std.loc[std["group"] == "B", "sigma"].iloc[0] == pytest.approx(np.std(spread))

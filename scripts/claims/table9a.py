@@ -248,9 +248,11 @@ def check_cohort(cache_root: Path, cohort: str, top: int = 3) -> str:
     cal = trading_calendar(form_start, form_end)
     end_day = cal[-1].date()
     row = load_daily(end_day, end_day, ["permno", "cap", "exch", "common"]).set_index("permno")
-    # the driver's defaults: vol_common with the 0.95 stale-share screen
-    universe = formation_universe(form_start, form_end, universe="vol_common",
-                                  max_stale_share=0.95)
+    # Read the actual stamped formation settings of the restricted build.
+    meta = json.loads((Path(cache_root) / "cohorts/cache_meta.json").read_text())
+    universe = formation_universe(form_start, form_end, universe=meta["universe"],
+                                  max_stale_share=meta.get("max_stale_share"),
+                                  exclude_constant=meta.get("exclude_constant", False))
     caps = row["cap"].astype(float)
     brk = caps[row["exch"].isin(("N", "A")) & row["common"].eq(True)]
     deciles = size_deciles(caps, brk)
@@ -258,6 +260,8 @@ def check_cohort(cache_root: Path, cohort: str, top: int = 3) -> str:
     pairs = pd.read_parquet(Path(cache_root) / "cohorts" / cohort / "pairs.parquet")
     legs = pd.Index(sorted(set(pairs["permno_1"]) | set(pairs["permno_2"])))
     outside = legs[deciles.reindex(legs).gt(top).fillna(True).to_numpy()]
+    if len(outside) or not legs.isin(kept).all():
+        raise AssertionError("Cached pair legs violate the stamped formation/size screen")
     return "\n".join([
         f"cohort {cohort}: formation {form_start}..{end_day}",
         f"  eligible stocks            {len(universe)}",
@@ -299,6 +303,10 @@ def main(argv: list[str] | None = None) -> int:
                            args.check_cohort))
 
     if args.screened and args.baseline:
+        from project.specification import validate_paper_cache
+        for cache, top in ((args.baseline_cache, None), (args.screened_cache, 3)):
+            meta = json.loads((Path(cache) / "cohorts/cache_meta.json").read_text())
+            validate_paper_cache(meta, size_deciles_top=top)
         paper = paper_targets()
         screened = panel_b(aggregate_table1(Path(args.screened)))
         baseline = panel_b(aggregate_table1(Path(args.baseline)))
