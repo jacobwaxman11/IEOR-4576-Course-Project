@@ -106,6 +106,17 @@ The Table 9A reporter retains both the printed skewness/kurtosis targets and its
 
 **Table 9B remains unexecuted:** the available UI export has daily volume but lacks `DlyCumFacShr`, required for split-adjusted volume. WRDS authentication had not completed at audit time. The driver now rejects missing yearly files or missing/nonpositive adjustment factors for observed volume instead of treating them as no recalls or no split. The exact missing inputs are `permno`, `dlycaldt`, `dlyvol`, and `dlycumfacshr` for 1962–2002; these observations must remain local.
 
+### Opt-in sensitivities (implemented, not yet run)
+
+Each is off by default and recorded in `cache_meta.json` only when on, so a default cache and its outputs are unchanged. No full-sample results exist for them yet.
+
+| Flag (default) | What changes | Paper basis |
+|---|---|---|
+| `--long-delisting-loss` (off) | An open position's long leg returns -100% on its delisting row; the short leg keeps its actual return. | Footnote 5 reports top 20 at 1.32% per month (s.d. 1.9%) under this assumption. It does not say which panel or wait that figure refers to. |
+| `--waste-sic {industrials,utilities}` (`industrials`) | `utilities` puts SIC 4950-4959 back in Utilities with the rest of SIC 49. | The paper names the S&P groups but gives no SIC ranges. |
+
+Table 1 also prints the paper-definition fully invested mean, unscored: a period's summed payoffs divided by the pairs that opened in it (`period_cash`; `mean_fully_invested_paper_definition` in `table1.csv`). It is computed from series that default caches already store. It is a comparison, not a replacement for the scored headline.
+
 
 ## Remaining limits
 
