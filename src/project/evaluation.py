@@ -639,9 +639,10 @@ def summary_stats(monthly: pd.Series, nw_lags: int = 6) -> pd.Series:
     Rows (in Table 1 order): ``mean``; ``nw_se``, the Newey-West standard error
     of the mean with a Bartlett kernel truncated at ``nw_lags``, computed as
     the HAC standard error of the constant in a constant-only OLS regression
-    (statsmodels ``cov_type="HAC"`` with ``use_correction=True``, i.e. an
-    n/(n-1) small-sample factor).  With ``nw_lags=0`` this equals the usual
-    SE ``std(ddof=1)/sqrt(n)``.
+    (statsmodels ``cov_type="HAC"`` with ``use_correction=False``: no
+    small-sample degrees-of-freedom factor, since the paper states none; the
+    same estimator as ``factors.factor_tstats``).  With ``nw_lags=0`` this is
+    ``std(ddof=0)/sqrt(n)``.
     ``t_stat`` is mean / nw_se.  ``median``; ``std`` (ddof=1); ``skew`` and
     ``kurtosis`` are raw Pearson central moments (normal kurtosis = 3);
     ``min``; ``max``; ``share_negative`` is the fraction of months < 0.
@@ -653,7 +654,7 @@ def summary_stats(monthly: pd.Series, nw_lags: int = 6) -> pd.Series:
     n = x.size
     mean = float(x.mean())
     res = sm.OLS(x, np.ones(n)).fit(
-        cov_type="HAC", cov_kwds={"maxlags": int(nw_lags), "use_correction": True}
+        cov_type="HAC", cov_kwds={"maxlags": int(nw_lags), "use_correction": False}
     )
     se = float(res.bse[0])
     u = x - mean

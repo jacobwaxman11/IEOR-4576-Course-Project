@@ -172,7 +172,7 @@ class TestSummaryStats:
         x = pd.Series(rng.normal(0.01, 0.02, 500))
         stats = summary_stats(x, nw_lags=6)
         res = sm.OLS(x.to_numpy(), np.ones(500)).fit(
-            cov_type="HAC", cov_kwds={"maxlags": 6, "use_correction": True}
+            cov_type="HAC", cov_kwds={"maxlags": 6, "use_correction": False}
         )
         assert np.isclose(stats["nw_se"], res.bse[0])
         assert np.isclose(stats["t_stat"], x.mean() / res.bse[0])
@@ -182,7 +182,18 @@ class TestSummaryStats:
         rng = np.random.default_rng(1)
         x = pd.Series(rng.normal(0.0, 0.03, 200))
         stats = summary_stats(x, nw_lags=0)
-        assert np.isclose(stats["nw_se"], x.std(ddof=1) / np.sqrt(len(x)))
+        assert np.isclose(stats["nw_se"], x.std(ddof=0) / np.sqrt(len(x)))
+
+    def test_nw_se_matches_the_factor_regression_estimator(self):
+        """Table 1's standard error and Table 4's t-statistics use one estimator."""
+        from project.factors import factor_tstats
+
+        rng = np.random.default_rng(5)
+        months = pd.date_range("1963-07-31", periods=474, freq="ME")
+        x = pd.Series(rng.normal(0.01, 0.02, 474), index=months)
+        no_factors = pd.DataFrame(index=months)
+        stats = summary_stats(x)
+        assert np.isclose(stats["t_stat"], factor_tstats(x, no_factors)["intercept"])
 
     def test_moments_hand_calc(self):
         x = pd.Series([1.0, 2.0, 3.0])
