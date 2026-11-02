@@ -204,4 +204,3 @@ def main(argv=None):
         parser.error("Comparison requires completed outputs for all five variants")
     if complete:
         compare_all(args.out_root, args.cache_root)
-

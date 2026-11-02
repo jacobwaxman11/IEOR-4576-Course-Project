@@ -104,7 +104,7 @@ The Table 9A reporter retains both the printed skewness/kurtosis targets and its
 
 **Figures and factor checks:** Figures 1–4 were rebuilt. Figure 3's independent $1 top-20 paths end at approximately $181.2 employed / $22.7 committed, versus $39.7 / $11.5 in the digitized paper figure. Log-path correlations of .998/.999 indicate similar shape, not matching wealth. Table 7's proxy-factor claim fails, as described below. All available Tables 4/7/8 and Figure 4 numeric cells are finite.
 
-**Table 9B remains unexecuted:** the available UI export has daily volume but lacks `DlyCumFacShr`, required for split-adjusted volume. WRDS authentication has reached Duo and is awaiting completion. The driver now rejects missing yearly files or missing/nonpositive adjustment factors for observed volume instead of treating them as no recalls or no split. The exact missing inputs are `permno`, `dlycaldt`, `dlyvol`, and `dlycumfacshr` for 1962–2002; these observations must remain local.
+**Table 9B remains unexecuted:** the available UI export has daily volume but lacks `DlyCumFacShr`, required for split-adjusted volume. WRDS authentication had not completed at audit time. The driver now rejects missing yearly files or missing/nonpositive adjustment factors for observed volume instead of treating them as no recalls or no split. The exact missing inputs are `permno`, `dlycaldt`, `dlyvol`, and `dlycumfacshr` for 1962–2002; these observations must remain local.
 
 
 ## Remaining limits
@@ -172,4 +172,3 @@ python -m pytest -q
 ```
 
 Local evidence is under `results/replication/fidelity/`: `evidence.json`, `comparison.md`, each variant's tables and run metadata, `formation_audit.json`, `table6/control.json`, `table6/sample_validation.json`, the 48-cell Table 6 report, the Table 9A comparison, and the regenerated figures. Caches are isolated by variant under `data/processed/replication/fidelity/`. The tracked Markdown is a written audit; restricted observations, generated results, and credentials remain outside Git.
-
