@@ -361,7 +361,7 @@ def resolve_cache(cache_root: str | None, universe: str) -> Path:
     """
     if cache_root:
         rep.CACHE_ROOT_OVERRIDE = Path(cache_root).resolve()
-        return rep.cohort_dir(universe)
+        return rep.CACHE_ROOT_OVERRIDE
     local = rep.cohort_dir(universe)
     if cohort_list(local / "cohorts"):
         return local

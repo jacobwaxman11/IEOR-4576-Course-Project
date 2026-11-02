@@ -38,15 +38,15 @@ Every number comes from the shipped cohort cache. `build_cohort` already writes 
 
 `scripts/claims/table7.py` overlap-averages those books exactly as the driver overlap-averages the portfolio (Jegadeesh-Titman: equal-weighted mean over the cohorts whose six-month window covers the month), subtracts French's one-month T-bill from each book, and runs `factor_regression` / `factor_tstats` - OLS with Newey-West standard errors at six lags - on Table 4's five factors: Mkt-RF, SMB, HML, UMD and the reversal factor. No cohort is rebuilt and no cache is written.
 
-Run: 474 cohorts, 474 months, cache `data/processed/replication/vol_common/cohorts`, meta `{'normalization': 'continued', 'format': 5, 'exclude_same_issuer': True, 'max_stale_share': 0.95, 'telephone_sic': '4811', 'trigger_sigma': 'rms', 'short_weights': 'position'}`.
+Run: 474 cohorts, 474 months, cache `data/processed/replication/vol_common/cohorts (a full private rebuild, cache format 6)`, meta `{'normalization': 'continued', 'format': 6, 'monthly_aggregation': 'books', 'exclude_same_issuer': True, 'max_stale_share': 0.95, 'telephone_sic': '4811', 'trigger_sigma': 'rms', 'short_weights': 'position'}`.
 
-Factors: `data/raw/public/french` (the pulled copies; `data/raw/french` in a checkout without `git-lfs` holds pointers only).
+Factors: `data/raw/french` (the pulled copies; `data/raw/french` in a checkout without `git-lfs` holds pointers only).
 
 ### Ambiguities, and the reading chosen
 
 1. **The reversal factor.** The paper builds its own and never publishes it. Primary: French's ST_Rev, the factor the scored Tables 4 and 8 use. Alternative: the losers-only long book that REVIEW_NOTES section 51 identifies as the paper's factor's fingerprint. Both reported; ST_Rev is primary because it is the construction the paper describes.
 2. **Excess or raw.** The note puts the bottom half in excess of the 30-day bill, so the regression's dependent variable is the book less French's RF; the four performance rows are raw.
-3. **Which compounding.** The paper compounds each leg to a monthly return and subtracts; our shipped portfolio series compounds the daily difference instead. The books do not depend on the choice - only the pair mean does, by 1-3 bp (largest gap here 3.2 bp).
+3. **Which compounding.** The paper compounds each leg to a monthly return and subtracts, and so does our portfolio series since SCORE_LOG row 17, so the pair mean equals long minus short (largest gap here 0.0 bp; REVIEW_NOTES section 54).
 4. **Overlap weighting.** Equal weight over the cohorts covering the month, the driver's convention, so Table 7 and our Table 1/Table 8 are like for like.
 5. **Significance.** “Insignificantly different from zero” read as |t| < 1.96 (two-sided 5%); “much of the ... return comes from the short portfolio” read as a short-book contribution of more than half the pair alpha.
 6. **T-statistics.** Newey-West, six lags, no small-sample correction, as in the scored Tables 4 and 8 (REVIEW_NOTES section 50).
@@ -57,14 +57,14 @@ With the effect switched off - regressing the portfolio's own fully-invested ser
 
 | statistic | top5 | top20 | 101-120 | all |
 |---|---|---|---|---|
-| intercept | 0.00708 / check 0.708 | 0.00879 / check 0.879 | 0.00813 / check 0.813 | 0.00641 / check 0.641 |
-| t_intercept | 5.93 / check 5.93 | 8.61 / check 8.61 | 10.78 / check 10.78 | 9.77 / check 9.77 |
-| market | -0.02258 | 0.00000 | 0.00669 | 0.05344 |
-| smb | 0.01476 | 0.01695 | 0.04881 | 0.07092 |
-| hml | -0.00576 | 0.02032 | 0.00933 | 0.01276 |
-| momentum | -0.03501 | -0.04161 | -0.13618 | -0.18851 |
-| reversal | 0.03887 | 0.04037 | 0.06821 | 0.14541 |
-| r2 | 0.01217 | 0.03118 | 0.23223 | 0.58642 |
+| intercept | 0.00739 / check 0.739 | 0.00886 / check 0.886 | 0.00824 / check 0.824 | 0.00660 / check 0.660 |
+| t_intercept | 6.19 / check 6.19 | 8.71 / check 8.71 | 11.04 / check 11.04 | 10.04 / check 10.04 |
+| market | -0.01756 | 0.00710 | 0.01553 | 0.06469 |
+| smb | 0.01442 | 0.01894 | 0.05190 | 0.07992 |
+| hml | 0.00022 | 0.02771 | 0.01483 | 0.02265 |
+| momentum | -0.03824 | -0.04325 | -0.13883 | -0.19517 |
+| reversal | 0.03734 | 0.03980 | 0.06831 | 0.14839 |
+| r2 | 0.01302 | 0.03548 | 0.24283 | 0.59811 |
 
 The intercepts, their Newey-West t-statistics and every loading reproduce the check's printed values, so the cache read, the overlap average, the factor join and the Newey-West estimate are the shipped ones.
 
@@ -72,10 +72,10 @@ Our own books satisfy the same identity, up to the compounding convention:
 
 | portfolio | long book | short book | difference | portfolio mean | gap |
 |---|---|---|---|---|---|
-| top5 | 0.01245 | 0.00522 | 0.00723 | 0.00691 | +0.00032 |
-| top20 | 0.01359 | 0.00467 | 0.00891 | 0.00879 | +0.00013 |
-| 101-120 | 0.01482 | 0.00717 | 0.00764 | 0.00749 | +0.00016 |
-| all | 0.01507 | 0.00878 | 0.00629 | 0.00603 | +0.00026 |
+| top5 | 0.01245 | 0.00522 | 0.00723 | 0.00723 | -0.00000 |
+| top20 | 0.01359 | 0.00467 | 0.00891 | 0.00891 | +0.00000 |
+| 101-120 | 0.01482 | 0.00717 | 0.00764 | 0.00764 | +0.00000 |
+| all | 0.01507 | 0.00878 | 0.00629 | 0.00629 | +0.00000 |
 
 ## 4. Our Table 7 beside the paper's
 
@@ -133,10 +133,10 @@ Our levels sit above the paper's for reasons already documented (the era split i
 
 | portfolio | pair alpha (ours / paper) | long alpha (ours / paper) | short contribution (ours / paper) | long share (ours / paper) | t(long) ours / paper | t(short) ours / paper |
 |---|---|---|---|---|---|---|
-| Top 5 | 0.0071 / 0.0054 | 0.0027 / 0.0010 | 0.0047 / 0.0044 | 0.39 / 0.19 | 1.51 / 0.47 | -2.78 / -2.74 |
-| Top 20 | 0.0088 / 0.0076 | 0.0036 / 0.0024 | 0.0053 / 0.0052 | 0.41 / 0.32 | 2.17 / 1.27 | -3.60 / -3.35 |
-| 20 after top 100 | 0.0081 / 0.0071 | 0.0051 / 0.0029 | 0.0032 / 0.0043 | 0.63 / 0.40 | 5.03 / 2.85 | -3.24 / -4.26 |
-| All | 0.0064 / 0.0051 | 0.0044 / -0.0010 | 0.0022 / 0.0061 | 0.69 / -0.20 | 6.53 / -1.32 | -3.51 / -5.22 |
+| Top 5 | 0.0074 / 0.0054 | 0.0027 / 0.0010 | 0.0047 / 0.0044 | 0.37 / 0.19 | 1.51 / 0.47 | -2.78 / -2.74 |
+| Top 20 | 0.0089 / 0.0076 | 0.0036 / 0.0024 | 0.0053 / 0.0052 | 0.40 / 0.32 | 2.17 / 1.27 | -3.60 / -3.35 |
+| 20 after top 100 | 0.0082 / 0.0071 | 0.0051 / 0.0029 | 0.0032 / 0.0043 | 0.62 / 0.40 | 5.03 / 2.85 | -3.24 / -4.26 |
+| All | 0.0066 / 0.0051 | 0.0044 / -0.0010 | 0.0022 / 0.0061 | 0.67 / -0.20 | 6.53 / -1.32 | -3.51 / -5.22 |
 
 ## 6. The claim test
 
@@ -159,7 +159,7 @@ Long-book alpha: top 5 0.0027 (t = 1.51), top 20 0.0036 (t = 2.17); the paper pr
 - Its alpha is significant in every column: t = -2.78, -3.60, -3.24, -3.51 against the paper's -2.74, -3.35, -4.26, -5.22. All four are significant wherever the paper's are.
 - The long book's alpha is smaller than the short book's for the top 5 and the top 20, as the paper says, and insignificant for the top 5 (t = 1.51 against the paper's 0.47).
 - It is *not* insignificant for the top 20: t = 2.17 against the paper's 1.27, and 2.73 under the losers-only factor. The claim's own wording fails on one of its two named portfolios.
-- For the two broad portfolios our attribution is inverted: the long book carries 63% of the pair alpha for the 20 after top 100 and 69% for all, where the paper's long book carries 40% and -20%.
+- For the two broad portfolios our attribution is inverted: the long book carries 62% of the pair alpha for the 20 after top 100 and 67% for all, where the paper's long book carries 40% and -20%.
 
 Against the numeric standard the table fails: ST_Rev ✓ 39 / ~ 22 / ✗ 75 of 136, losers-only ✓ 36 / ~ 18 / ✗ 82 of 136. The binding constraint is the loadings, not the books: the books' means reproduce the paper's closely, while our market and SMB loadings differ and the intercept absorbs the difference - the Table 4 story, not a bug in this table.
 

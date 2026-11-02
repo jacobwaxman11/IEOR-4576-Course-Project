@@ -73,7 +73,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import t6_engine as eng
 
 from project.data import formation_columns, formation_universe, load_daily, trading_calendar
-from project.evaluation import cohort_monthly, overlap_average, portfolio_daily, summary_stats
+from project.evaluation import overlap_average, portfolio_monthly, summary_stats
 from project.features import normalized_prices
 from project.models import CohortResult
 
@@ -271,7 +271,7 @@ def control_cohort(cache_root: Path, year: int, month: int, wait: int) -> dict:
 
     for portfolio, ranks in rank_sel.items():
         for capital in CAPITALS:
-            ours = cohort_monthly(portfolio_daily(result, list(ranks), capital, SHORT_WEIGHTS))
+            ours = portfolio_monthly(result, list(ranks), capital, SHORT_WEIGHTS)
             if portfolio in SHIPPED_PORTFOLIOS:
                 paper = shipped_series(portfolio, capital)
                 common = ours.index.intersection(paper.index)
@@ -282,8 +282,8 @@ def control_cohort(cache_root: Path, year: int, month: int, wait: int) -> dict:
                 diff = float(np.abs(ours.reindex(common).to_numpy() - paper.to_numpy()).max())
                 out["max_diff_shipped"] = max(out["max_diff_shipped"], diff)
             sel = [int(r) for r in ranks if r <= n_ranks]
-            daily_v = eng.vw_returns(books_vec, sel)[0 if capital == "employed" else 1][:, 0]
-            keys, months = eng.monthly_returns(daily_v, month_of_day)
+            keys, employed, committed = eng.book_months(books_vec, sel, month_of_day)
+            months = employed if capital == "employed" else committed
             vector = pd.Series(months[:, 0],
                                index=pd.DatetimeIndex([month_timestamp(int(k)) for k in keys]))
             common = ours.index.intersection(vector.dropna().index)
@@ -532,8 +532,8 @@ def true_pair_series(cache_root: Path, panel: CohortPanel, wait: int) -> tuple[n
         if w != wait:
             continue
         lo, hi = PORTFOLIOS[portfolio]
-        daily = portfolio_daily(result, list(range(lo, hi + 1)), capital, SHORT_WEIGHTS)
-        block[:, j] = cohort_monthly(daily).reindex(index).to_numpy()
+        monthly = portfolio_monthly(result, list(range(lo, hi + 1)), capital, SHORT_WEIGHTS)
+        block[:, j] = monthly.reindex(index).to_numpy()
     return block, len(keep)
 
 
@@ -612,9 +612,9 @@ def run_cohort(cache_root: Path, year: int, month: int, reps: int, seed: int,
                     if w != wait:
                         continue
                     lo, hi = PORTFOLIOS[portfolio]
-                    daily = portfolio_daily(result, list(range(lo, hi + 1)), capital,
-                                            SHORT_WEIGHTS)
-                    random[start + rep, :, j] = cohort_monthly(daily).reindex(month_index).to_numpy()
+                    monthly = portfolio_monthly(result, list(range(lo, hi + 1)), capital,
+                                                SHORT_WEIGHTS)
+                    random[start + rep, :, j] = monthly.reindex(month_index).to_numpy()
     return {"months": months, "random": random, "true": true,
             "stats": np.array(json.dumps(stats))}
 

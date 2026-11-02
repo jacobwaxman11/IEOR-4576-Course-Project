@@ -69,9 +69,8 @@ from project.data import (
 )
 from project.evaluation import (
     PORTFOLIOS,
-    cohort_monthly,
     overlap_average,
-    portfolio_daily,
+    portfolio_monthly,
     summary_stats,
 )
 from project.features import normalized_prices
@@ -330,7 +329,7 @@ def control_check(result, cfg: Config, year: int, month: int) -> dict:
     miss = 0
     for pname, ranks in PORTFOLIOS.items():
         for capital in ("employed", "committed"):
-            monthly = cohort_monthly(portfolio_daily(result, ranks, capital, SHORT_WEIGHTS))
+            monthly = portfolio_monthly(result, ranks, capital, SHORT_WEIGHTS)
             got = pd.Series(monthly.to_numpy(), index=pd.DatetimeIndex(monthly.index))
             part = want[(want["portfolio"] == pname) & (want["capital"] == capital)]
             ref = pd.Series(part["ret"].to_numpy(), index=pd.DatetimeIndex(part["month_end"]))
@@ -377,7 +376,7 @@ def build_cohort(cfg: Config, year: int, month: int) -> dict:
         )
         for pname, ranks in PORTFOLIOS.items():
             for capital in ("employed", "committed"):
-                monthly = cohort_monthly(portfolio_daily(result, ranks, capital, SHORT_WEIGHTS))
+                monthly = portfolio_monthly(result, ranks, capital, SHORT_WEIGHTS)
                 rows += monthly_rows(run, pname, capital, monthly)
         counts[run] = trade_counts(result, no_volume)
         if run == RUN_OFF:

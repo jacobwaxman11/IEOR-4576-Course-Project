@@ -214,24 +214,18 @@ def rank_books(
     return out
 
 
-def vw_returns(
+def book_returns(
     books: dict[str, np.ndarray],
     ranks: np.ndarray | list,
-    n_selected: int | None = None,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Daily "employed" and "committed" portfolio returns, ``(T, n_reps)`` each.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Daily value-weighted long-book and short-book returns and the open count, ``(T, n_reps)``.
 
-    Mirrors ``evaluation._leg_arrays`` + ``evaluation.portfolio_daily`` for the
-    pipeline's ``short_weights="position"``: the long book's value-weighted
-    return minus the short book's, ``n_t`` positions counted open while either
-    leg still has value, and the committed return equal to the employed return
-    scaled by ``n_t / N`` with ``N`` the pairs selected (``len(ranks)``).
-    Days with no open position are NaN in the employed series and 0 in the
-    committed one, exactly as ``portfolio_daily`` returns them.
+    Mirrors ``evaluation._leg_arrays`` for the pipeline's ``short_weights="position"``:
+    the short book weights each position by its own value ``prod (1 - r)``; a
+    book whose value is zero contributes no return, and ``n_t`` counts positions
+    open while either leg still has value.
     """
     idx = np.asarray(list(ranks), dtype=np.int64) - 1
-    if n_selected is None:
-        n_selected = len(idx)
     if idx.size and (idx.min() < 0 or idx.max() >= books["pay"].shape[1]):
         raise ValueError("rank out of range for the books")
     lpay = books["lpay"][:, idx, :].sum(axis=1)
@@ -248,9 +242,51 @@ def vw_returns(
     with np.errstate(invalid="ignore", divide="ignore"):
         long_ret = np.where(long_val > 0, lpay / long_val, 0.0)
         short_ret = np.where(short_val > 0, short_pay / short_val, 0.0)
+    return long_ret, short_ret, n_open
+
+
+def vw_returns(
+    books: dict[str, np.ndarray],
+    ranks: np.ndarray | list,
+    n_selected: int | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Daily "employed" and "committed" portfolio returns, ``(T, n_reps)`` each.
+
+    Mirrors ``evaluation.portfolio_daily``: the long book's value-weighted return
+    minus the short book's, NaN on a day with no position in the employed series
+    and 0 in the committed one, which scales it by ``n_t / N`` with ``N`` the
+    pairs selected (``len(ranks)``).
+    """
+    if n_selected is None:
+        n_selected = len(list(ranks))
+    long_ret, short_ret, n_open = book_returns(books, ranks)
     excess = np.where(n_open > 0, long_ret - short_ret, np.nan)
     committed = np.nan_to_num(excess) * n_open / n_selected
     return excess, committed
+
+
+def book_months(
+    books: dict[str, np.ndarray],
+    ranks: np.ndarray | list,
+    month_of_day: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Monthly "employed" and "committed" returns, each book compounded first.
+
+    Mirrors ``evaluation.portfolio_monthly``: the long and the short book are
+    compounded to monthly returns and then differenced (GGR §2.3; the Table 1 =
+    Table 7 identity). Employed books are NaN on days with no position;
+    committed books are scaled by ``n_t / N`` before compounding. Returns the
+    month keys and two ``(n_months, n_reps)`` arrays.
+    """
+    n_selected = len(list(ranks))
+    long_ret, short_ret, n_open = book_returns(books, ranks)
+    live = n_open > 0
+    keys, lm = monthly_returns(np.where(live, long_ret, np.nan), month_of_day)
+    _, sm = monthly_returns(np.where(live, short_ret, np.nan), month_of_day)
+    scale = n_open / n_selected
+    _, lc = monthly_returns(long_ret * scale, month_of_day)
+    _, sc = monthly_returns(short_ret * scale, month_of_day)
+    return keys, lm - sm, lc - sc
 
 
 def monthly_returns(daily: np.ndarray, month_of_day: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

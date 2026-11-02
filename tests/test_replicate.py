@@ -34,7 +34,8 @@ def test_cache_stamp_and_verify(tmp_path, monkeypatch):
         rep.verify_cache("u", continued=True)
     assert not meta.exists()
     rep.stamp_cache("u", continued=True, force=False)
-    assert json.loads(meta.read_text()) == {"normalization": "continued", "format": rep.CACHE_FORMAT}
+    assert json.loads(meta.read_text()) == {"normalization": "continued", "format": rep.CACHE_FORMAT,
+                                             "monthly_aggregation": "books"}
     rep.verify_cache("u", continued=True)
     with pytest.raises(SystemExit, match="continued normalization"):
         rep.verify_cache("u", continued=False)
@@ -50,7 +51,7 @@ def test_cache_stamp_records_and_checks_formation_options(tmp_path, monkeypatch)
     meta = tmp_path / "u" / "cohorts" / "cache_meta.json"
     rep.stamp_cache("u", continued=True, force=False)
     assert json.loads(meta.read_text()) == {
-        "normalization": "continued", "format": rep.CACHE_FORMAT,
+        "normalization": "continued", "format": rep.CACHE_FORMAT, "monthly_aggregation": "books",
         "exclude_same_issuer": True, "max_stale_share": 0.95,
     }
     rep.verify_cache("u", continued=True)

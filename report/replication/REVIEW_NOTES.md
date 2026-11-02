@@ -2659,3 +2659,95 @@ exposure is small. Cell-level agreement is poor, because Panel A's reversal fact
 (section 51) and Panel B's coefficients are mostly indistinguishable from zero, with our post-1988
 "all" portfolio off by the Q8 era split.
 
+
+## 54. Two readings the paper's text requires: book compounding and the mixed-pairs decile row (2026-11-02): 267.5 -> 261.0
+
+Origin: a teammate's rule audit (public PR #8) bundled about a dozen convention changes. Two of them
+are required by the paper's own text and tables; this section adopts those two, measures both, and
+records what was measured of the rest. Both lower the score; they are adopted because the paper
+requires them, not for fit.
+
+**1. Compound each book, then subtract (Tables 1 and 3).** §2.3, p. 805: "The daily returns on the
+long and short positions are calculated as value-weighted returns ... and the daily returns are
+compounded to obtain monthly returns. This has the simple interpretation of a buy-and-hold
+strategy." The tables pin the order: Table 7's long minus short book means (p. 821) equal Table 1
+Panel B (p. 807) in all four portfolios, 0.01245 - 0.00501 = 0.00744 against 0.00745 and exactly
+0.00895 / 0.00795 / 0.00715. That holds only if each book is compounded to a monthly return before
+the two are differenced. Section 33 measured this reading and kept the daily difference because it
+scored three points more on Tables 1-3; this section reverses that choice.
+`evaluation.portfolio_monthly` compounds the long and the short book separately (committed capital
+scales each book's day by n_t / N first); the driver uses it for Tables 1 and 3, and the Table 6
+and Table 9B claim scripts use it too, so every portfolio series in the repository follows one
+accounting. Table 7's books were already compounded separately and do not move. CACHE_FORMAT 6, and
+the cache stamp records `monthly_aggregation: books`, so a format-5 cache is refused.
+
+**2. "Average decile difference for mixed pairs" averages the mixed pairs (Table 2 Panel B).** §3.2,
+p. 809: "About two-thirds of the pairs combine stocks from different size deciles (i.e., 'size mixed
+pairs'), and the stocks in mixed pairs differ on average by a single decile." Section 34 found that
+the scored key carried the all-pairs mean under the mixed-pairs name. It now carries the mean over
+mixed pairs (1.67 / 1.74 / 2.17 / 2.64 against 0.97 / 0.97 / 0.97 / 0.98); the all-pairs mean is
+`avg_decile_diff_all_pairs`. A mean over mixed pairs cannot be below 1, so the printed row is a
+reported gap, and the second half of claim 10 is recorded as not replicated (`CLAIMS.md`).
+
+**Measured on a full 474-cohort rebuild** (private cache; the shared cache is untouched):
+
+| | Table 1 | 2A | 2B | 3 | 7 | 4 | 5A | 8 | Fig. 4 | total |
+|---|---|---|---|---|---|---|---|---|---|---|
+| before (row 16) | 54.0 | 20.5 | 29.0 | 83.5 | 26.5 | 24.0 | 9.5 | 19.5 | 1.0 | 267.5 |
+| after (row 17) | 55.5 | 20.5 | 28.5 | 80.0 | 26.5 | 21.5 | 10.0 | 17.5 | 1.0 | 261.0 |
+
+Table 1 Panel B means move toward the paper (0.691 / 0.879 / 0.749 / 0.603% -> 0.723 / 0.891 /
+0.764 / 0.629%, paper 0.745 / 0.895 / 0.795 / 0.715%) and the top-5 worst month improves (-15.3% ->
+-13.6%, paper -12.6%); Table 3's sector means, already at or above the paper's, rise further. The
+decile row costs 0.5 (top 5 from ~ to ✗).
+
+**Checks.**
+
+- *Data and cache.* Before the change, a from-scratch rebuild of `personal/main` on the current shared
+  panel reproduced the committed check line for line (only the Figure 1 file path differs), so the
+  data and SIC mapping are the ones behind 267.5.
+- *An independent implementation.* The same two changes in the teammate's code (PR #8 at 5d137c3,
+  `--specification legacy --monthly-aggregation books --start 1963-07`) give identical marks on all
+  484 cells both checks mark. Its `legacy` profile alone reproduces our 267.5 except the decile row.
+- *Controls.* Table 6's control rebuilds the true-pair series from the trade logs with the new
+  accounting and matches the cache exactly (maximum difference 0; the vectorised layer to 1.3e-15).
+  Table 9B's no-recall control matches all 474 cohorts.
+- *The paper's identity.* With book compounding, Table 1 Panel B equals Table 7 long minus short in
+  every portfolio (gap below 0.00001; `claims/TABLE7_REGRESSIONS.md`).
+
+**The rest of PR #8, measured one change at a time on top of these two fixes (261.0), not adopted:**
+
+| change | score change | why not adopted |
+|---|---|---|
+| drop the 95% stale-quote screen | -17.5 | our disclosed convention (section 18); the paper is silent |
+| value short weights | -11.5 | our disclosed reading of eq. (3) (section 29, with its objections) |
+| allow same-issuer pairs | -9.5 | our disclosed convention (section 18) |
+| formation-end SIC only | -1.0 | a separate decision; the paper is silent |
+| next-day entry without the crossing check | -1.0 | a separate decision; the paper's wording supports it (p. 808) |
+| zero return for a whole idle month | 0.0 | a separate decision |
+| all six together | -25.0 | |
+| strict trade-flag universe (`traded_common`) | | 1,799 stocks and 1,561 pairs per cohort against the paper's 2,317 and 2,057 (pp. 807, 812); it drops all pre-November-1982 Nasdaq stocks |
+| sigma as the demeaned standard deviation | -6.0 | the paper's only direct measurement of sigma, Table 2A's trigger (p. 809), is closer under RMS in three columns and tied in the fourth (section 21) |
+| warm-up cohorts from 1963-02 | | contradicts p. 806: "with the exception of the first 12 months, which are needed to estimate pairs" |
+
+**Table 6's design, re-examined.** The bootstrap draws each random leg from its true leg's decile of the
+previous calendar month's return and closes the random pair on its own next crossing. Two other
+readings of the caption were measured in scratch runs (each with the engine's control matching the
+cache exactly). Ranking stocks on the trailing month that ends on the open day makes random pairs
+earn +0.09 to +0.16% a month (on PR #8's other conventions), the short-term reversal profit, against
+the paper's "slightly negative"; the calendar-month reading, which is also §3.6's "previous month's
+performance" (p. 818), stays primary. Closing each random pair when its true pair closes (the
+caption's "closes the position after the next crossing of prices", p. 819, read as the true pair's
+crossing) raises the random standard deviations about 15% toward the paper's and deepens the
+losses (no wait: -0.20 / -0.31 / -0.31 / -0.34% against -0.16 / -0.23 / -0.23 / -0.24%; paper
+-0.14 / -0.11 / -0.11 / -0.11%); it is the documented alternative, not adopted on fit. Under every
+design the claim holds: true minus random is positive with t > 2 in all 16 series. The sign of the
+random-pair mean is set by the short-weight convention, not by the bootstrap: under PR #8's value
+weights the random means are near zero, under this repository's position weights they are
+negative, as in the paper.
+
+**Legacy SIZ, for the data question.** A run of the shipped code on CRSP's legacy SIZ daily file
+(final December 2024 release; `data/raw/wrds_api/legacy/dsf/`) scores 249.5 with the usual share
+codes 10/11/12 and 263.5 with REITs (code 18) added. The two releases agree on 56.6 million matched
+rows except the share code of corporate REITs, which CIZ classes as ordinary common stock; the data
+are not closer to the paper in either format.

@@ -373,6 +373,43 @@ def cohort_monthly(daily: pd.Series) -> pd.Series:
     return monthly
 
 
+def portfolio_monthly(result, ranks, capital: str, short_weights: str = "value") -> pd.Series:
+    """Monthly portfolio excess return: compound each book, then subtract.
+
+    GGR (2006) §2.3 (p. 805) computes "the daily returns on the long and short
+    positions ... as value-weighted returns" and compounds "the daily returns ...
+    to obtain monthly returns". The paper's own tables pin the order: Table 7's
+    long minus short book means (p. 821) equal Table 1 Panel B (p. 807) in all
+    four portfolios (0.01245 - 0.00501 = 0.00744 against 0.00745, and exactly
+    0.00895 / 0.00795 / 0.00715), which holds only if each book is compounded
+    to a monthly return before the two are differenced (REVIEW_NOTES section 33).
+
+    For "employed" the two books are the series ``portfolio_legs`` returns (NaN
+    on a day with no position, so a month with none has no row); their monthly
+    difference is identically Table 7's long minus short. For "committed" each
+    book's daily return is scaled by ``n_t / N`` before compounding, as
+    ``portfolio_daily`` scales the difference. The count-based capitals keep the
+    compounded daily series of ``portfolio_daily``.
+    """
+    if capital not in VW_CAPITALS:
+        return cohort_monthly(portfolio_daily(result, ranks, capital, short_weights))
+    index = result.pair_returns.index
+    sel = _resolve_ranks(result.pair_returns, ranks)
+    if not sel:
+        return pd.Series(dtype=float)
+    long_ret, short_ret, n_open = _leg_arrays(result, sel, short_weights)
+    if capital == "committed":
+        scale = n_open / len(sel)
+        long_ret, short_ret = long_ret * scale, short_ret * scale
+    else:
+        live = n_open > 0
+        long_ret = np.where(live, long_ret, np.nan)
+        short_ret = np.where(live, short_ret, np.nan)
+    long_month = cohort_monthly(pd.Series(long_ret, index=index))
+    short_month = cohort_monthly(pd.Series(short_ret, index=index))
+    return long_month - short_month
+
+
 def overlap_average(cohort_months: dict[pd.Timestamp, pd.Series]) -> pd.Series:
     """Average monthly returns across overlapping cohorts (Jegadeesh-Titman).
 
@@ -496,12 +533,15 @@ def composition_stats(pairs_info: dict, ranks) -> pd.Series:
     Each pair contributes both of its stocks (a stock in several pairs counts
     once per pair).  Stocks with a NaN cap are excluded from the size-decile
     rows; sector rows use ``sector_of`` on every stock (unknown SIC = 0 =
-    Industrials).  The paper's "average decile difference for mixed pairs"
-    of 0.97 is below one, the least a mean of integer gaps between mixed pairs
-    can be, so the scored row ``avg_decile_diff_mixed_pairs`` carries the
-    average over *all* pairs (same-decile pairs count 0; SCORE_LOG row 6), as
-    does ``avg_decile_diff_all_pairs``.  The mean over mixed pairs only is
-    ``avg_decile_diff_mixed_only`` (NaN when no pair is mixed).
+    Industrials).  ``avg_decile_diff_mixed_pairs`` is the paper's row,
+    "Average decile difference for mixed pairs" (Table 2 Panel B, p. 809): the
+    mean gap over pairs whose stocks sit in different deciles, as §3.2 describes
+    it ("the stocks in mixed pairs differ on average by a single decile", p.
+    809; NaN when no pair is mixed). A mean of integer gaps between mixed pairs
+    cannot be below one, so the printed 0.97 is not reachable; that is a gap to
+    report, not a reason to average in the same-decile pairs (REVIEW_NOTES
+    sections 34 and 54). The all-pairs average is ``avg_decile_diff_all_pairs``;
+    ``avg_decile_diff_mixed_only`` repeats the scored row for older readers.
 
     Returns a Series indexed by ``COMPOSITION_ROWS``; empty portfolios give NaN.
     """
@@ -535,10 +575,10 @@ def composition_stats(pairs_info: dict, ranks) -> pd.Series:
                 diff = np.abs(d1 - d2)
                 mixed = d1[ok] != d2[ok]
                 out["share_mixed_decile_pairs"] = float(mixed.mean())
-                out["avg_decile_diff_mixed_pairs"] = float(diff[ok].mean())
                 out["avg_decile_diff_all_pairs"] = float(diff[ok].mean())
                 if mixed.any():
-                    out["avg_decile_diff_mixed_only"] = float(diff[ok][mixed].mean())
+                    out["avg_decile_diff_mixed_pairs"] = float(diff[ok][mixed].mean())
+                    out["avg_decile_diff_mixed_only"] = out["avg_decile_diff_mixed_pairs"]
 
     if pairs_info.get("sectors") is not None:
         labels = pd.Series(pairs_info["sectors"])
