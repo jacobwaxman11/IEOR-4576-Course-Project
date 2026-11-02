@@ -253,6 +253,20 @@ class TestWasteManagementIsIndustrials:
         assert sector_of(4960) == "Utilities"   # just above the range
         assert sector_of(4924) == "Utilities"   # pipelines stay, measured worse
 
+    def test_the_waste_sensitivity_puts_the_range_back_in_utilities(self):
+        for telephone in ("4811", "481x"):
+            for sic in (4950, 4953, 4959):
+                assert sector_of(sic, telephone=telephone, waste="industrials") == "Industrials"
+                assert sector_of(sic, telephone=telephone, waste="utilities") == "Utilities"
+        # nothing outside 4950-4959 moves
+        for sic in (4911, 4941, 4949, 4960, 4811, 3711, 6020, 4512):
+            assert sector_of(sic, waste="utilities") == sector_of(sic)
+
+    def test_sectors_for_passes_the_waste_choice_through(self):
+        sic = pd.Series([4953, 4911, 0], index=[1, 2, 3])
+        assert list(sectors_for(sic)) == ["Industrials", "Utilities", "Industrials"]
+        assert list(sectors_for(sic, waste="utilities")) == ["Utilities", "Utilities", "Industrials"]
+
 
 class TestProductionFallbackOrder:
     def test_driver_passes_header_sic_before_earliest_known(self):

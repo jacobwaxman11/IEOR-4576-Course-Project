@@ -12,8 +12,8 @@ Usage:
         [--limit-cohorts K] [--force] [--universe vol_common]
         [--normalization continued|rebased] [--aggregate-only]
         [--same-issuer exclude|allow] [--max-stale-share SHARE|none]
-        [--telephone-sic 4811|481x] [--trigger-sigma rms|std]
-        [--size-deciles-top N]
+        [--telephone-sic 4811|481x] [--waste-sic industrials|utilities]
+        [--trigger-sigma rms|std] [--size-deciles-top N] [--long-delisting-loss]
 
 Cohorts are cached under data/processed/replication/{NAME}/cohorts/, stamped
 with their trading normalization, cache format and formation options in
@@ -530,7 +530,7 @@ def verify_cache(universe: str, continued: bool) -> None:
             f"pass --normalization {meta.get('normalization')} or rebuild with --force"
         )
     for key in ("exclude_same_issuer", "max_stale_share", "telephone_sic", "trigger_sigma",
-                "short_weights", "size_deciles_top"):
+                "short_weights", "size_deciles_top", "long_delisting_loss", "waste_sic"):
         if meta.get(key) != want.get(key):
             built = f"{key}={meta[key]}" if key in meta else f"no {key} stamp"
             now = f"{key}={want[key]}" if key in want else f"no {key}"
@@ -596,6 +596,10 @@ class Job:
     #: screen). ``3`` forms pairs only inside the top three deciles, the universe
     #: of the paper's Table 9 Panel A. Judge eligibility first, then the screen.
     size_deciles_top: int | None = None
+    #: Footnote 4's robustness check (RFS p. 804): a delisting long leg returns -100%.
+    long_delisting_loss: bool = False
+    #: Sector of waste management (SIC 4950-4959): ``industrials`` or ``utilities``.
+    waste_sic: str = "industrials"
 
 
 def init_worker(fallbacks: tuple[pd.Series, ...] | None = None) -> None:
@@ -715,7 +719,8 @@ def build_cohort(job: Job) -> tuple[int, int]:
     pairs = select_pairs(prices, issuers, job.trigger_sigma)
 
     labels = sectors_for(row["siccd"].reindex(universe).fillna(0),
-                         *_sic_fallbacks(job.cohorts_root), telephone=job.telephone_sic)
+                         *_sic_fallbacks(job.cohorts_root), telephone=job.telephone_sic,
+                         waste=job.waste_sic)
     sector_pairs = select_pairs_within_groups(prices, labels, issuers, job.trigger_sigma)
     levels = prices.iloc[-1] if job.continued else None
     del prices
@@ -757,7 +762,8 @@ def build_cohort(job: Job) -> tuple[int, int]:
         # stays byte-identical to the shipped cache.
         summary["size_deciles_top"] = job.size_deciles_top
     for wait in job.waits:
-        result = simulate_cohort(pairs, rets, term, wait=wait, start_levels=levels)
+        result = simulate_cohort(pairs, rets, term, wait=wait, start_levels=levels,
+                                 long_delisting_loss=job.long_delisting_loss)
         result.trades.to_parquet(coh_dir / f"w{wait}_trades.parquet")
         result.opened.rename("opened").to_frame().to_parquet(coh_dir / f"w{wait}_opened.parquet")
         for pname, ranks in PORTFOLIOS.items():
@@ -789,7 +795,8 @@ def build_cohort(job: Job) -> tuple[int, int]:
         summary["sector_counts"][f"pairs_{sector}"] = len(sp)
         if sp.empty:
             continue
-        result = simulate_cohort(sp, rets, term, wait=1, start_levels=levels)
+        result = simulate_cohort(sp, rets, term, wait=1, start_levels=levels,
+                                 long_delisting_loss=job.long_delisting_loss)
         for pname, ranks in TABLE3_PORTFOLIOS.items():
             if ranks is not None and len(sp) < max(ranks):
                 continue
@@ -2287,6 +2294,11 @@ def formation_options(args: argparse.Namespace) -> dict:
     options["telephone_sic"] = args.telephone_sic
     options["trigger_sigma"] = args.trigger_sigma
     options["short_weights"] = args.short_weights
+    # Stamped only when on, so a default cache's stamp is unchanged.
+    if getattr(args, "long_delisting_loss", False):
+        options["long_delisting_loss"] = True
+    if getattr(args, "waste_sic", "industrials") != "industrials":
+        options["waste_sic"] = args.waste_sic
     return options
 
 
@@ -2341,6 +2353,11 @@ def main() -> None:
              "1987 (default), or the older 4810-4819 map",
     )
     parser.add_argument(
+        "--waste-sic", choices=("industrials", "utilities"), default="industrials",
+        help="sector of waste management, SIC 4950-4959: Industrials, as GICS has it "
+             "(default; REVIEW_NOTES section 24), or Utilities with the rest of SIC 49",
+    )
+    parser.add_argument(
         "--trigger-sigma", choices=("rms", "std"), default="rms",
         help="sigma of the 2-sigma rule: the formation spread's root mean square about "
              "zero, sqrt(SSD/N) (default), or its standard deviation about its mean",
@@ -2355,6 +2372,12 @@ def main() -> None:
         "--size-deciles-top", type=_decile_count, default=None,
         help="form pairs only among stocks in the largest N CRSP size deciles at the "
              "formation end (Table 9 Panel A uses 3); default off (no size screen)",
+    )
+    parser.add_argument(
+        "--long-delisting-loss", action="store_true",
+        help="the robustness check of the paper's footnote 4 (RFS p. 804): an open "
+             "position's long leg returns -100%% on its delisting row (the short leg "
+             "keeps its actual return); default off",
     )
     parser.add_argument(
         "--aggregate-only", action="store_true",
@@ -2435,7 +2458,8 @@ def main() -> None:
                 Job(y, m, end, waits, args.universe, continued, args.cohorts_root,
                     exclude_same_issuer, args.max_stale_share, args.telephone_sic,
                     args.trigger_sigma, args.short_weights,
-                    size_deciles_top=args.size_deciles_top)
+                    size_deciles_top=args.size_deciles_top,
+                    long_delisting_loss=args.long_delisting_loss, waste_sic=args.waste_sic)
                 for y, m in cohorts
                 if args.force or not cohort_cache_complete(y, m, waits, args.universe)
             ]
