@@ -512,6 +512,9 @@ def figures_dir(universe: str) -> Path:
 
 CACHE_FORMAT = 7
 T1_CAPITALS = ("committed", "employed", "committed_count", "employed_count", "employed_literal", "period_cash", "selected_cash")
+#: table1.csv row of the paper-literal fully invested mean, reported unscored beside the headline.
+PAPER_FULLY_INVESTED_ROW = "mean_fully_invested_paper_definition"
+PAPER_FULLY_INVESTED_LABEL = "fully invested, paper definition (payoffs over pairs opened)"
 
 
 def read_cache_meta(universe: str) -> dict | None:
@@ -1163,6 +1166,11 @@ def write_outputs(
                 row["mean_employed_literal"] = summary_stats(
                     strategy[wait][pname]["employed_literal"]
                 )["mean"]
+                # Section 2.3's own definition of the fully invested return: the
+                # period's payoffs over the pairs that opened in it (``period_cash``).
+                row[PAPER_FULLY_INVESTED_ROW] = summary_stats(
+                    strategy[wait][pname]["period_cash"]
+                )["mean"]
                 cols[(panel, pname)] = row
         table1 = pd.DataFrame(cols)
         table1.columns = pd.MultiIndex.from_tuples(table1.columns, names=["panel", "portfolio"])
@@ -1285,6 +1293,9 @@ def write_comparison(
                     ours = summary_stats(strategy[wait][pname]["employed"])[metric]
                 cells.append(_fmt(ours, paper))
             lines.append(f"| {metric} | " + " | ".join(cells) + " |")
+        cells = [f"{summary_stats(strategy[wait][p]['period_cash'])['mean']:.5f} vs "
+                 f"{PAPER_TABLE1[panel][p]['mean']:.5f}" for p in PORTFOLIOS]
+        lines.append(f"| mean, {PAPER_FULLY_INVESTED_LABEL}; unscored | " + " | ".join(cells) + " |")
         lines.append("")
     if 0 in waits or 1 in waits:
         lines += [
@@ -1293,7 +1304,9 @@ def write_comparison(
                 " that of the open short positions (eq. 2); 'committed capital' scales it by"
                 " the share of selected pairs holding a position."
                 " `mean_employed_literal` (table1.csv only) uses INTERFACES.md's literal"
-                " denominator for comparison."
+                " denominator for comparison. The unscored 'paper definition' row divides the"
+                " period's summed payoffs by the pairs that opened in it (section 2.3's wording;"
+                f" `{PAPER_FULLY_INVESTED_ROW}` in table1.csv)."
             ),
             "",
         ]
@@ -1747,6 +1760,12 @@ def write_replication_check(out_dir: Path, fig_dir: Path, universe: str,
                                stat in PCT_STATS, tally) for p in PORTFOLIOS]
                 label = {"mean": "mean (fully invested)", "committed_mean": "mean (committed)"}
                 lines.append(f"| {label.get(stat, stat)} | " + " | ".join(cells) + " |")
+            if PAPER_FULLY_INVESTED_ROW in t1.index:
+                # "ours vs paper", without the scored cells' " / ", so the scorer skips it.
+                cells = [f"{100 * float(t1[(panel, p)][PAPER_FULLY_INVESTED_ROW]):.2f}% vs "
+                         f"{100 * PAPER_TABLE1[panel][p]['mean']:.2f}%" for p in PORTFOLIOS]
+                lines.append(f"| mean ({PAPER_FULLY_INVESTED_LABEL}; unscored) | "
+                             + " | ".join(cells) + " |")
             lines.append("")
         lines += [_tally_line(tally), ""]
         summary.append("Table 1: " + _tally_line(tally))

@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 
 from project import sectors
+from project.replication_report import score_report
 
 ROOT = Path(__file__).resolve().parents[1]
 _spec = importlib.util.spec_from_file_location("replicate", ROOT / "scripts" / "03_replicate.py")
@@ -272,6 +273,31 @@ def test_check_scores_table1_cells_against_the_paper(tmp_path):
     assert f"Table 1: Cells: {n}; ✓ {n - 1} (within 10%), ~ 0 (within 25%), ✗ 1." in text
     assert "Figure 1 (Kennecott vs Uniroyal" in text and "Not run" in text
     assert f"- Score: {n - 1:.1f} weighted points across {n} compared cells" in text
+
+
+def test_table1_reports_the_paper_definition_of_fully_invested_unscored(tmp_path):
+    """period_cash (payoffs over pairs opened) sits beside the headline, outside the score."""
+    months = pd.date_range("2000-01-31", periods=24, freq="ME")
+    rng = np.random.default_rng(3)
+    strategy = {0: {p: {c: pd.Series(rng.normal(0.01, 0.02, len(months)), index=months)
+                        for c in (*rep.T1_CAPITALS, *rep.LEG_CAPITALS)}
+                    for p in rep.PORTFOLIOS}}
+    out = tmp_path / "tab"
+    rep.write_outputs(strategy, {}, (0,), 1, out)
+    t1 = pd.read_csv(out / "table1.csv", header=[0, 1], index_col=0)
+    row = rep.PAPER_FULLY_INVESTED_ROW
+    for p in rep.PORTFOLIOS:
+        assert t1.loc[row, ("A", p)] == pytest.approx(strategy[0][p]["period_cash"].mean())
+        assert t1.loc["mean", ("A", p)] == pytest.approx(strategy[0][p]["employed"].mean())
+    assert f"mean, {rep.PAPER_FULLY_INVESTED_LABEL}; unscored" in (out / "table1_vs_paper.md").read_text()
+
+    text = rep.write_replication_check(out, tmp_path / "fig", "vol_common", "value").read_text()
+    lines = [x for x in text.splitlines() if rep.PAPER_FULLY_INVESTED_LABEL in x]
+    assert len(lines) == 1 and " / " not in lines[0] and "vs 1.31%" in lines[0]
+    # the extra row adds no scored cell
+    n = len(rep.PAPER_TABLE1["A"]["top5"]) * len(rep.PORTFOLIOS)
+    assert f"Table 1: Cells: {n};" in text
+    assert score_report(text)["total_cells"] == n
 
 
 def test_check_header_describes_the_short_weight_it_was_run_with(tmp_path):
