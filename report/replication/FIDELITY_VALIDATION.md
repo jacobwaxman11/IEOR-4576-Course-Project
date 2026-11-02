@@ -106,16 +106,28 @@ The Table 9A reporter retains both the printed skewness/kurtosis targets and its
 
 **Table 9B remains unexecuted:** the available UI export has daily volume but lacks `DlyCumFacShr`, required for split-adjusted volume. WRDS authentication had not completed at audit time. The driver now rejects missing yearly files or missing/nonpositive adjustment factors for observed volume instead of treating them as no recalls or no split. The exact missing inputs are `permno`, `dlycaldt`, `dlyvol`, and `dlycumfacshr` for 1962–2002; these observations must remain local.
 
-### Opt-in sensitivities (implemented, not yet run)
+### Opt-in sensitivities
 
-Each is off by default and recorded in `cache_meta.json` only when on, so a default cache and its outputs are unchanged. No full-sample results exist for them yet.
+Each is off by default and recorded in `cache_meta.json` only when on, so a default cache and its outputs are unchanged.
 
 | Flag (default) | What changes | Paper basis |
 |---|---|---|
-| `--long-delisting-loss` (off) | An open position's long leg returns -100% on its delisting row; the short leg keeps its actual return. | Footnote 5 reports top 20 at 1.32% per month (s.d. 1.9%) under this assumption. It does not say which panel or wait that figure refers to. |
-| `--waste-sic {industrials,utilities}` (`industrials`) | `utilities` puts SIC 4950-4959 back in Utilities with the rest of SIC 49. | The paper names the S&P groups but gives no SIC ranges. |
+| `--long-delisting-loss` (off) | An open position's long leg returns -100% on its delisting row; the short leg keeps its actual return. | Footnote 5 reports top 20 at 1.32% per month (s.d. 1.9%) under this assumption. The text does not name the panel, but it can only be Table 1 Panel A (no wait): a loss-only change cannot raise Panel B's 0.895% to 1.32%. |
+| `--waste-sic {industrials,utilities}` (`industrials`) | `utilities` puts SIC 4950-4959 back in Utilities with the rest of SIC 49. | The paper names the S&P groups but gives no SIC ranges. Not yet run. |
 
-Table 1 also prints the paper-definition fully invested mean, unscored: a period's summed payoffs divided by the pairs that opened in it (`period_cash`; `mean_fully_invested_paper_definition` in `table1.csv`). It is computed from series that default caches already store. It is a comparison, not a replacement for the scored headline.
+**Footnote 5 run** (November 2, 2026; fresh CIZ pull 1961–2002; default `paper` profile; 479 cohorts, 474 reported months; fully invested top 20):
+
+| | Baseline | `--long-delisting-loss` | Change |
+|---|---:|---:|---:|
+| Ours, Panel A mean | 1.751% | 1.656% | −9.5 bp |
+| Ours, Panel A s.d. | 1.80% | 2.00% | +0.19 |
+| Paper, Table 1A to footnote 5, mean | 1.436% | 1.32% | −11.6 bp |
+| Paper, s.d. | 1.69% | 1.9% | +0.21 |
+| Ours, Panel B mean | 1.115% | 1.025% | −9.0 bp |
+
+The change is close to the paper's; the levels inherit the default profile's overshoot of Table 1A. The all-pairs portfolio falls most (Panel A 1.104% to 0.905%), as it holds the most legs that later delist.
+
+Table 1 also prints the paper-definition fully invested mean, unscored: a period's summed payoffs divided by the pairs that opened in it (`period_cash`; `mean_fully_invested_paper_definition` in `table1.csv`). It is computed from series that default caches already store. In the same run it is 1.045% for top 20 in Panel A against 1.039% on committed capital (Panel B 0.667% against 0.666%), because nearly every selected pair opens: 19.7 of 20 per period here, 19.3 in the paper's Table 2A. The paper's own fully invested and committed means differ by a factor of 1.8 (1.436% against 0.805%), which a payoffs-over-pairs-opened denominator cannot produce when nearly all pairs open. The printed numbers are therefore consistent with a return on capital while deployed, the scored headline's reading, rather than with section 2.3's wording alone. The row documents that gap; it does not replace the headline.
 
 
 ## Remaining limits
