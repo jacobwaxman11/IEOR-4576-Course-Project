@@ -129,7 +129,7 @@ def factor_regression(y: pd.Series, factors: pd.DataFrame) -> pd.Series:
     """OLS of ``y`` on ``factors`` with an intercept: intercept, one loading per column, R2.
 
     Months missing from either side are dropped. Coefficients only; the paper's
-    Newey-West t-statistics are not reproduced.
+    Newey-West t-statistics come from ``factor_tstats``.
     """
     data = pd.concat([pd.Series(y, name="y"), factors], axis=1, join="inner").dropna()
     if len(data) <= factors.shape[1] + 1:

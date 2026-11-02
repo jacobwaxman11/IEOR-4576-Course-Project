@@ -1,14 +1,14 @@
 # Replication outputs
 
-> **Historical snapshot, superseded by the accounting audit.** This document describes
-> the legacy run retained at `6644cbf`. Current defaults, corrected rules, and measured
-> validation are in [ACCOUNTING_CORRECTIONS.md](../ACCOUNTING_CORRECTIONS.md). The old 267.5 is weighted
-> points across 481 comparisons: 214 cells within 10%, 321 within 25%, 160 outside.
-> It is not a count of 267.5 matching cells or evidence for the corrected run.
-
+> **Historical main-branch snapshot through PRs #9–10 (`bc528c0`).**
+> The 261.0 weighted points across 481 comparisons are 207 cells within 10%,
+> 108 additional cells within 25%, and 166 outside 25%. These are the legacy
+> `vol_common` conventions, not the reconciled `baseline` profile. The original
+> 267.5-point snapshot remains in Git history (`6644cbf`). See
+> [PR_RECONCILIATION.md](../PR_RECONCILIATION.md) for the new run.
 
 Generated files, committed so they can be read without the licensed CRSP data. `results/` is
-git-ignored, so these are copies of one run over the full 474-cohort cache (score 267.5).
+git-ignored, so these are copies of one run over the full 474-cohort cache (score 261.0).
 
 | file | what it is | written by |
 |---|---|---|
@@ -30,7 +30,8 @@ The cell-by-cell comparison is [`../REPLICATION_CHECK.md`](../REPLICATION_CHECK.
 [`../REPLICATION_SUMMARY.md`](../REPLICATION_SUMMARY.md). Tables 6 and 9 and the Table 7
 regressions have their own reports in [`../claims/`](../claims/).
 
-To regenerate, from a checkout with the cohort cache:
+To reproduce this archived snapshot, check out `bc528c0` separately with its original
+inputs and cache. Its commands were:
 
     python scripts/03_replicate.py --universe vol_common --aggregate-only --steps tables,table3,figure1,check
     python scripts/replication_figures.py

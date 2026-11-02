@@ -550,7 +550,8 @@ RFS side most, because the RFS sample adds 1989-2002, where we are too high.
   the mean effect and 1.6x the std effect. Our long legs carry more delisting exposure than the
   paper's, or milder actual delisting returns; 140 of 20,774 top-20 trades close on a delisting.
   The extreme assumption itself scores 129.5 (Table 1: 18 of 88 within 10%), so the paper's own
-  figure is not our data's.
+  figure is not our data's. *Superseded by section 55*, which re-measures it on the current
+  accounting with the `--long-delisting-loss` flag: 1.387% to 1.274%, the paper's size.
 
 - *Missing delisting returns do not explain post-1988.* The CIZ delisting table (local,
   `delisting.parquet`, 29,727 rows) has no return for 62% of for-cause (GDR) delistings before 1989
@@ -1028,6 +1029,9 @@ entry-only delay collapses Table 1 Panel B from 30.5 to 21.5 points, which is
 independent confirmation of the 2026-10-16 fix in section 3; and the
 innovation-scaled trigger produces 22% triggers, closing Q7's remaining
 alternative.
+
+`--waste-sic utilities` restores the old map as a flag; section 55 re-measures it on the
+current code (261.0 -> 259.0, the same Utilities 101-120 cells in reverse).
 
 ## 25. Payoff-count returns measured and rejected (2026-10-24)
 
@@ -2659,3 +2663,164 @@ exposure is small. Cell-level agreement is poor, because Panel A's reversal fact
 (section 51) and Panel B's coefficients are mostly indistinguishable from zero, with our post-1988
 "all" portfolio off by the Q8 era split.
 
+
+## 54. Two readings the paper's text requires: book compounding and the mixed-pairs decile row (2026-11-02): 267.5 -> 261.0
+
+Origin: a teammate's rule audit (public PR #8) bundled about a dozen convention changes. Two of them
+are required by the paper's own text and tables; this section adopts those two, measures both, and
+records what was measured of the rest. Both lower the score; they are adopted because the paper
+requires them, not for fit.
+
+**1. Compound each book, then subtract (Tables 1 and 3).** §2.3, p. 805: "The daily returns on the
+long and short positions are calculated as value-weighted returns ... and the daily returns are
+compounded to obtain monthly returns. This has the simple interpretation of a buy-and-hold
+strategy." The tables pin the order: Table 7's long minus short book means (p. 821) equal Table 1
+Panel B (p. 807) in all four portfolios, 0.01245 - 0.00501 = 0.00744 against 0.00745 and exactly
+0.00895 / 0.00795 / 0.00715. That holds only if each book is compounded to a monthly return before
+the two are differenced. Section 33 measured this reading and kept the daily difference because it
+scored three points more on Tables 1-3; this section reverses that choice.
+`evaluation.portfolio_monthly` compounds the long and the short book separately (committed capital
+scales each book's day by n_t / N first); the driver uses it for Tables 1 and 3, and the Table 6
+and Table 9B claim scripts use it too, so every portfolio series in the repository follows one
+accounting. Table 7's books were already compounded separately and do not move. CACHE_FORMAT 6, and
+the cache stamp records `monthly_aggregation: books`, so a format-5 cache is refused.
+
+**2. "Average decile difference for mixed pairs" averages the mixed pairs (Table 2 Panel B).** §3.2,
+p. 809: "About two-thirds of the pairs combine stocks from different size deciles (i.e., 'size mixed
+pairs'), and the stocks in mixed pairs differ on average by a single decile." Section 34 found that
+the scored key carried the all-pairs mean under the mixed-pairs name. It now carries the mean over
+mixed pairs (1.67 / 1.74 / 2.17 / 2.64 against 0.97 / 0.97 / 0.97 / 0.98); the all-pairs mean is
+`avg_decile_diff_all_pairs`. A mean over mixed pairs cannot be below 1, so the printed row is a
+reported gap, and the second half of claim 10 is recorded as not replicated (`CLAIMS.md`).
+
+**Measured on a full 474-cohort rebuild** (private cache; the shared cache is untouched):
+
+| | Table 1 | 2A | 2B | 3 | 7 | 4 | 5A | 8 | Fig. 4 | total |
+|---|---|---|---|---|---|---|---|---|---|---|
+| before (row 16) | 54.0 | 20.5 | 29.0 | 83.5 | 26.5 | 24.0 | 9.5 | 19.5 | 1.0 | 267.5 |
+| after (row 17) | 55.5 | 20.5 | 28.5 | 80.0 | 26.5 | 21.5 | 10.0 | 17.5 | 1.0 | 261.0 |
+
+Table 1 Panel B means move toward the paper (0.691 / 0.879 / 0.749 / 0.603% -> 0.723 / 0.891 /
+0.764 / 0.629%, paper 0.745 / 0.895 / 0.795 / 0.715%) and the top-5 worst month improves (-15.3% ->
+-13.6%, paper -12.6%); Table 3's sector means, already at or above the paper's, rise further. The
+decile row costs 0.5 (top 5 from ~ to ✗).
+
+**Checks.**
+
+- *Data and cache.* Before the change, a from-scratch rebuild of `personal/main` on the current shared
+  panel reproduced the committed check line for line (only the Figure 1 file path differs), so the
+  data and SIC mapping are the ones behind 267.5.
+- *An independent implementation.* The same two changes in the teammate's code (PR #8 at 5d137c3,
+  `--specification legacy --monthly-aggregation books --start 1963-07`) give identical marks on all
+  484 cells both checks mark. Its `legacy` profile alone reproduces our 267.5 except the decile row.
+- *Controls.* Table 6's control rebuilds the true-pair series from the trade logs with the new
+  accounting and matches the cache exactly (maximum difference 0; the vectorised layer to 1.3e-15).
+  Table 9B's no-recall control matches all 474 cohorts.
+- *The paper's identity.* With book compounding, Table 1 Panel B equals Table 7 long minus short in
+  every portfolio (gap below 0.00001; `claims/TABLE7_REGRESSIONS.md`).
+
+**The rest of PR #8, measured one change at a time on top of these two fixes (261.0), not adopted:**
+
+| change | score change | why not adopted |
+|---|---|---|
+| drop the 95% stale-quote screen | -17.5 | our disclosed convention (section 18); the paper is silent |
+| value short weights | -11.5 | our disclosed reading of eq. (3) (section 29, with its objections) |
+| allow same-issuer pairs | -9.5 | our disclosed convention (section 18) |
+| formation-end SIC only | -1.0 | a separate decision; the paper is silent |
+| next-day entry without the crossing check | -1.0 | a separate decision; the paper's wording supports it (p. 808) |
+| zero return for a whole idle month | 0.0 | a separate decision |
+| all six together | -25.0 | |
+| strict trade-flag universe (`traded_common`) | | 1,799 stocks and 1,561 pairs per cohort against the paper's 2,317 and 2,057 (pp. 807, 812); it drops all pre-November-1982 Nasdaq stocks |
+| sigma as the demeaned standard deviation | -6.0 | the paper's only direct measurement of sigma, Table 2A's trigger (p. 809), is closer under RMS in three columns and tied in the fourth (section 21) |
+| warm-up cohorts from 1963-02 | | contradicts p. 806: "with the exception of the first 12 months, which are needed to estimate pairs" |
+
+**Table 6's design: the random position opens and closes with its true trade.** The caption
+(p. 819) opens "a position in a random pair when the stocks in the true pair diverge by two
+historical standard deviations and closes the position after the next crossing of prices", and
+§3.6 (p. 818) takes "the set of historical dates on which the various pairs open" and reads "the
+difference between the actual and the simulated pairs returns" as "the portion of our pairs return
+that is not due to reversion". The only crossing the sentence defines is the true pair's, and the
+A/B difference isolates stock selection only if both sides hold their positions over the same
+dates. So each random position now opens and closes with the true trade it replaces (earlier only
+if a drawn stock delists or its data end); the drawn stocks keep their true legs' long and short
+roles. The previous primary closed on the drawn stocks' own next crossing, a reading with no
+sentence behind it. Three designs were measured on this build's accounting (no wait, fully
+invested, top 5 / top 20 / 101-120 / all 120):
+
+| design | random means | random SDs | Table 6 cells ✓ / ~ / ✗ |
+|---|---|---|---|
+| (a) open and close with the true trade (primary) | -0.20 / -0.31 / -0.31 / -0.34% | 4.12 / 2.13 / 2.15 / 1.01% | 8 / 10 / 30 |
+| (b) close on the drawn stocks' own crossing (`--close own`) | -0.16 / -0.23 / -0.23 / -0.24% | 3.49 / 1.84 / 1.92 / 0.85% | 1 / 18 / 29 |
+| (c) the drawn stocks on their own 2-sigma rule (scratch only) | -0.11 / -0.15 / -0.18 / -0.17% | 4.79 / 3.88 / 3.98 / 3.12% | 9 / 6 / 33 |
+| paper | -0.14 / -0.11 / -0.11 / -0.11% | 5.52 / 2.30 / 2.26 / 1.20% | |
+
+(a) was chosen on the text; it also scores best (13.0 of 48 against 10.0 and 12.0). (c) contradicts
+the caption's open and does not diversify like the paper's random pairs: their SD falls from 5.5%
+to 1.2% between 5 and 120 pairs, (a)'s from 4.1% to 1.0%, (c)'s only from 4.8% to 3.1%. The
+decile stays the previous calendar month (§3.6, "previous month's performance"): ranking on the
+trailing month that ends on the open day made random pairs earn +0.09 to +0.16% a month on PR #8's
+other conventions, the reversal profit, against the paper's "slightly negative". In every design
+true minus random is positive with t > 2 in all 16 series. The sign of the random-pair mean is set
+by the short-weight convention, not by the bootstrap: under PR #8's value weights the random means
+are near zero, under this repository's position weights they are negative, as in the paper.
+
+**Claim 4 is no longer counted.** "Pairs trading profits from temporary mispricing of close
+substitutes" (p. 797) is the abstract's interpretation, used nowhere else in the paper (its body
+speaks of the "Law of One Price"). `CLAIMS.md` lists it under "Not tested" and counts 24 claims:
+19 replicate (5 with the paper's numbers, 14 in substance), 4 partly, 1 not as stated.
+
+**Legacy SIZ, for the data question.** A run of the shipped code on CRSP's legacy SIZ daily file
+(final December 2024 release; `data/raw/wrds_api/legacy/dsf/`) scores 249.5 with the usual share
+codes 10/11/12 and 263.5 with REITs (code 18) added. The two releases agree on 56.6 million matched
+rows except the share code of corporate REITs, which CIZ classes as ordinary common stock; the data
+are not closer to the paper in either format.
+
+## 55. Footnote 4's delisting check and the 495x map as flags; one Newey-West estimator (2026-11-02): 261.0 -> 261.0
+
+Two opt-in flags of `scripts/03_replicate.py` and one estimator fix. Neither flag is on by default,
+and each is stamped in `cache_meta.json` only when on, so a default cache's stamp is unchanged and
+the shipped check is untouched by them. All numbers are a full 474-cohort build of this
+repository's defaults (`vol_common`), which reproduces the committed check at 261.0 before the
+change; each flag was built into its own cache (`--cache-root`).
+
+**1. `--long-delisting-loss`: footnote 4 (RFS p. 804).** The paper's robustness check assumes
+every delisted long position loses 100% and reports the top-20 no-wait fully invested mean falling
+from 1.436% to 1.32% and its standard deviation rising from 1.69% to 1.9%. With the flag, an open
+position whose long leg has a terminal (`dlydelflg == 'Y'`) row books -1.0 on that leg that day,
+including when the row has no return; a delisting short leg keeps its actual return, and prices
+that drive the rule are unchanged (`models.simulate_cohort`, `long_delisting_loss`).
+
+| top 20, no wait | plain | footnote 4 | change |
+|---|---|---|---|
+| fully invested mean, ours | 1.387% | 1.274% | -11.2 bp |
+| fully invested mean, paper | 1.436% | 1.32% | -11.6 bp |
+| standard deviation, ours | 1.67% | 1.87% | +0.20 |
+| standard deviation, paper | 1.69% | 1.9% | +0.21 |
+| committed mean, ours | 0.807% | 0.730% | -7.8 bp |
+
+On the current accounting the effect has the paper's size in both the mean and the dispersion.
+Section 17's earlier calibration (1.333% to 1.169%, about 1.4x the paper's effect) was measured
+before the book-compounding change of section 54 and is superseded. The other portfolios: top 5
+-16.6 bp, 101-120 -6.3 bp, all pairs -24.2 bp (no wait); the one-day wait moves by the same
+amounts to within 1 bp. The top-5 worst month falls from -13.1% to -23.9%. Scored, the assumption
+gives 217.0 of 481 (Table 1: 20 of 88 within 10%), so it stays a sensitivity, as in the paper.
+
+**2. `--waste-sic utilities`: section 24's map as a flag.** SIC 4950-4959 back in Utilities moves
+261.0 to 259.0, all in Table 3: the Utilities stock count improves (137 to 144 against 156, ~ to
+✓) and Utilities 101-120 loses the cells section 24 gained (mean 0.89% to 0.72% against 0.93%;
+t, skew, kurtosis, minimum and maximum each lose a mark; standard deviation gains one), with small
+moves in Utilities "all". The top-pair sector weights do not move (weight_utilities 0.774), as
+section 24 found. The default stays Industrials.
+
+**3. Table 1's Newey-West standard error has no small-sample factor.** `evaluation.summary_stats`
+used statsmodels' HAC with `use_correction=True` (an n/(n-1) factor) while `factors.factor_tstats`
+(Tables 4 and 8) uses none; the paper states none. Both now use none, and a test pins the two to
+one estimator. Five printed t-statistics move by 0.01 (Table 1 Panel B and the four Table 3
+sectors), no mark changes, and the score stays 261.0; `REPLICATION_CHECK.md` is regenerated.
+
+**Not added: a second fully invested row.** A row dividing the period's summed fixed-dollar
+payoffs by the pairs that opened was considered and dropped: `mean_employed_literal` in
+`table1.csv` already reports payoffs over the pairs that open (compounded daily). It gives
+0.856% for the top 20 against 0.807% committed and 1.387% fully invested, a ratio of 1.06
+against the paper's 1.8, so the literal denominator cannot produce the paper's fully invested
+numbers and the employed-capital reading the shipped headline uses is consistent with them.

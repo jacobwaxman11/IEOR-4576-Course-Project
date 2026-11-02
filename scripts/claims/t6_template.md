@@ -42,9 +42,8 @@ position to the return-matrix column. The random pair is opened at the true
 pair's opening day, $1 each, with each drawn stock kept in its true leg's role
 (the true long leg's replacement is bought, the true short leg's replacement
 sold short); the paper replaces "the actual stocks" of the pair and does not
-say the random pair is re-ordered by price at the open. It is closed on its
-own next price crossing, or early on a delisting, a leg's last available row
-or the end of the trading period. Accounting, portfolio
+say the random pair is re-ordered by price at the open. This run uses
+`--close {{CLOSE_RULE}}`: {{CLOSE_METHOD}}. Accounting, portfolio
 construction and monthly compounding use the shipped engine's conventions
 (paper eqq. 2-3, the pipeline's --short-weights value, separately compounded books, then
 the overlap average across cohorts).
@@ -57,7 +56,7 @@ Choices where the paper is silent, and the reading used:
 | decile population | that universe's cross-section of mthret in the prior month | "same decile of previous month's performance" |
 | prior month | calendar month before the opening date (for a first-month open, the last filing month before trading) | "previous month" |
 | open date and size | the true pair's opening day; each drawn stock keeps its true leg's long/short role ($1 each) | "the set of historical dates on which the pairs open"; "we replace the actual stocks" |
-| close | the random pair's own next crossing; forced exits on delisting, last row, period end | "after the next crossing of prices" |
+| close | {{CLOSE_METHOD}} (`--close {{CLOSE_RULE}}`) | "after the next crossing of prices" |
 | accounting | buy-and-hold $1 legs, eq. (2) payoff, shorted-security value weights, with zero idle cash returns | the pipeline's conventions |
 | portfolios | ranks 1-5, 1-20, 101-120, 1-120 of each cohort's ranking | Table 6's columns; "All 120" is the top 120 pairs |
 | replications | 200, fixed seed | the paper's count; reproducible |
@@ -114,13 +113,15 @@ True minus random, replication by replication:
 - The bootstrap trades every true opening, including the second and later
  round trips of a pair, and each draw is a fresh pair (the paper does not say
  whether stocks are resampled per opening or per pair).
-- Because a random pair closes on its own crossing, a later opening of the same
+- Under `--close own`, because a random pair closes on its own crossing, a later opening of the same
  rank can arrive while an earlier random position is still open; the two are
  then held together in that rank's book (the true-pair rule re-opens a pair
  only after it has closed).
 - A random leg with no price after the opening day produces no position.
-- The random pair closes on its own crossing; closing on the true pair's date
- is equally literal and is not computed here.
+- The caption does not explicitly identify whose crossing closes the position.
+ `--close true` holds the true trade’s schedule fixed to isolate selection;
+ `--close own` preserves the earlier experiment. Results from the two methods
+ use separate output directories and cannot be mixed.
 - The significance test is a Newey-West t of the monthly true-minus-random
  series, averaged over replications, not the paper's own (unreported) test.
 
@@ -134,14 +135,14 @@ Runtime depends on the machine; one worker limits peak memory.
 ```sh
 python scripts/claims/table6_random_pairs.py --mode control \
     --cache-root data/processed/replication/fidelity/combined \
-    --out-root results/replication/fidelity/table6
+    --close {{CLOSE_RULE}} --out-root results/replication/reconciliation/table6_{{CLOSE_RULE}}
 python scripts/claims/table6_random_pairs.py --mode run --reps 200 --workers 1 \
     --cache-root data/processed/replication/fidelity/combined \
-    --out-root results/replication/fidelity/table6
+    --close {{CLOSE_RULE}} --out-root results/replication/reconciliation/table6_{{CLOSE_RULE}}
 python scripts/claims/table6_random_pairs.py --mode report --reps 200 \
     --cache-root data/processed/replication/fidelity/combined \
-    --out-root results/replication/fidelity/table6 \
-    --report-dir results/replication/fidelity/table6/report
+    --close {{CLOSE_RULE}} --out-root results/replication/reconciliation/table6_{{CLOSE_RULE}} \
+    --report-dir results/replication/reconciliation/table6_{{CLOSE_RULE}}/report
 ```
 
 The control writes `control.json` directly into the output directory. The

@@ -31,7 +31,13 @@ def render(out_root, reps):
     diff_lines = rep.difference_block(diffs)
     result = rep.verdict(stats, diffs, count, effect_frame)
     rep.write_csv(stats, diffs, effect_frame, meta, targets)
-    text = template
+    stamp = json.loads((out_root / "accounting_meta.json").read_text())
+    close_rule = stamp["parameters"].get("close_rule", "own")
+    if close_rule not in ("own", "true"):
+        raise ValueError(f"Unknown close rule: {close_rule}")
+    close_text = ("the true trade’s close date, capped by earlier delisting or data-end exits"
+                  if close_rule == "true" else "the drawn pair’s own next crossing, capped by forced exits")
+    text = template.replace("{{CLOSE_RULE}}", close_rule).replace("{{CLOSE_METHOD}}", close_text)
     text = text.replace("{{TABLE6}}", "\n".join(blocks))
     text = text.replace("{{EFFECT}}", "\n".join(effects))
     text = text.replace("{{SPREAD}}", "\n".join(spreads))

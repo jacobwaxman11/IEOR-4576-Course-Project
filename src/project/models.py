@@ -10,6 +10,9 @@ The optional ``recall`` input adds paper §3.9's short-recall robustness check
 early, with the same timing the rule uses for any other close. It is off by
 default, so every shipped number is produced by the same code path as before.
 
+The optional ``long_delisting_loss`` switch applies the delisted-long robustness
+check in footnote 4 (RFS p. 804); it is off by default.
+
 The day loop runs in a numba kernel over plain arrays; ``simulate_cohort``
 prepares the arrays and wraps the results in pandas objects.
 """
@@ -81,7 +84,7 @@ def _empty_result(dates: pd.Index) -> CohortResult:
 
 @numba.njit(cache=True, error_model="numpy")
 def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait, RC, use_recall, recall_lock,
-                      recall_rearm, cancel_crossed_entry):
+                      recall_rearm, cancel_crossed_entry, long_delisting_loss=0):
     """Day loop of the trading rule; see ``simulate_cohort`` for the conventions.
 
     ``RC`` (days x stock columns, bool) marks the high-volume days of a short
@@ -133,7 +136,10 @@ def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait, RC, use_re
         last_day = t == T - 1
         for k in range(n):
             if is_open[k]:
-                new_l = L[k] * (1.0 + R[t, long_col[k]])
+                r_long = R[t, long_col[k]]
+                if long_delisting_loss == 1 and term[t, long_col[k]]:
+                    r_long = -1.0
+                new_l = L[k] * (1.0 + r_long)
                 new_s = S[k] * (1.0 + R[t, short_col[k]])
                 pi = (new_l - L[k]) - (new_s - S[k])
                 pair_ret[t, k] = pi / w[k]
@@ -265,6 +271,7 @@ def simulate_cohort(
     recall_lock: bool = False,
     recall_rearm: bool = False,
     delayed_entry: str = "execute",
+    long_delisting_loss: bool = False,
 ) -> CohortResult:
     """Simulate one cohort's 6-month trading period.
 
@@ -327,6 +334,12 @@ def simulate_cohort(
         new divergence episode fires. A recall leaves the spread divergent, so
         without this the pair re-opens the next day on the signal that was
         already open, which a recall does not permit. Default False.
+
+    long_delisting_loss:
+        Footnote 4 (RFS p. 804): replace the return on an open position’s
+        delisting long leg with -100%, even if the terminal return is missing.
+        The short leg keeps its actual return. Signal prices are unchanged and
+        the pair still closes that day. Default False.
 
     A pair can only signal, or execute a pending wait-1 open, while both
     stocks still have data: after a stock's last available row its price is
@@ -395,6 +408,7 @@ def simulate_cohort(
         int(recall_lock),
         int(recall_rearm),
         int(delayed_entry == "cancel"),
+        int(long_delisting_loss),
     )
 
     rank_index = pd.Index(ranks, name="rank")

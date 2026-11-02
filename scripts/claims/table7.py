@@ -28,7 +28,7 @@ Usage
     python scripts/claims/table7.py --csv out.csv --json out.json
 
 With no ``--cache-root`` the script reads the checkout's own
-``data/processed/replication/traded_common/cohorts`` (or the shared fallback), and never
+``data/processed/replication/vol_common/cohorts`` (or the shared fallback), and never
 writes it.
 """
 
@@ -372,14 +372,14 @@ def resolve_cache(cache_root: str | None, universe: str) -> Path:
     return local
 
 
-def build(cache_root: str | None = None, universe: str = "traded_common",
+def build(cache_root: str | None = None, universe: str = "vol_common",
           factors: pd.DataFrame | None = None, start: tuple[int, int] | None = None,
           end: tuple[int, int] | None = None, french_dir: str | None = None) -> dict:
     """Read the cache and build every number the report prints."""
     cohorts_dir = resolve_cache(cache_root, universe) / "cohorts"
     meta = json.loads((cohorts_dir / "cache_meta.json").read_text())
-    from project.specification import validate_paper_cache
-    validate_paper_cache(meta)
+    from project.specification import validate_book_cache
+    validate_book_cache(meta)
     cohorts = cohort_list(cohorts_dir)
     if start is not None:
         cohorts = [c for c in cohorts if c >= start]
@@ -478,8 +478,8 @@ def _frame(payload: dict, key: str) -> pd.DataFrame:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--cache-root", default=None,
-                        help="cohorted cache root (default: this checkout's traded_common cache)")
-    parser.add_argument("--universe", default="traded_common")
+                        help="cohorted cache root (default: this checkout's vol_common cache)")
+    parser.add_argument("--universe", default="vol_common")
     parser.add_argument("--french-dir", default=None,
                         help="directory with French's factor archives (default: data/raw/french, "
                              "or the shared tree's pulled copies when LFS is not)")

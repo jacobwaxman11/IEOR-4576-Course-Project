@@ -50,10 +50,11 @@ class TestCollected:
     def test_table_1_3_totals_reconcile_with_the_check(self, cells):
         # Tables 1-3 are 291 of the check's 323 cells (Table 7 holds the rest).
         assert len(cells) == 291
-        assert cells.points.sum() == pytest.approx(187.0)
-        assert (cells.mark == "✓").sum() == 152
-        assert (cells.mark == "~").sum() == 70
-        assert (cells.mark == "✗").sum() == 69
+        # SCORE_LOG row 17 (book compounding, mixed-pairs decile row): 187.0 -> 184.5
+        assert cells.points.sum() == pytest.approx(184.5)
+        assert (cells.mark == "✓").sum() == 150
+        assert (cells.mark == "~").sum() == 69
+        assert (cells.mark == "✗").sum() == 72
 
     def test_every_cell_names_a_known_section(self, cells):
         expected = {"Table 1 Panel A", "Table 1 Panel B", "Table 2 Panel A",
@@ -80,5 +81,5 @@ class TestCollected:
     def test_tail_statistics_are_the_weak_family(self, cells):
         tails = cells[cells.statistic.isin(cell_margins.TAILS)]
         assert len(tails) == 92
-        assert tails.points.sum() == pytest.approx(28.5)
+        assert tails.points.sum() == pytest.approx(30.0)  # 28.5 before SCORE_LOG row 17
         assert tails.points.mean() < cells.points.mean()

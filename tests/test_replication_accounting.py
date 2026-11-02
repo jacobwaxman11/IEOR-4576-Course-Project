@@ -140,3 +140,42 @@ def test_random_pair_vectorization_obeys_same_monthly_cashflow_identity():
     for capital, vector in [('employed', employed), ('committed', committed)]:
         expected = portfolio_monthly(result, [1, 2], capital)
         np.testing.assert_allclose(vector[:, 0], expected.to_numpy(), atol=1e-14)
+
+
+def test_baseline_preserves_supported_mechanics_and_names_uncertain_conventions():
+    args = resolve_profile(Namespace(specification="baseline"))
+    assert (args.universe, args.trigger_sigma, args.short_weights) == ("vol_common", "rms", "value")
+    assert (args.monthly_aggregation, args.delayed_entry, args.idle_policy) == ("books", "execute", "opened")
+    assert args.exclude_constant and args.max_stale_share == 0.95
+    assert args.same_issuer == "exclude"
+
+
+def test_claim_cache_rejects_opt_in_robustness_results():
+    from project.specification import PROFILES
+    profile = PROFILES['paper']
+    meta = {**profile, 'format': 7, 'normalization': 'continued', 'telephone_sic': '4811',
+            'exclude_same_issuer': False, 'size_deciles_top': None}
+    validate_paper_cache(meta)
+    for key, value in [('long_delisting_loss', True), ('waste_sic', 'utilities')]:
+        with pytest.raises(ValueError, match=key):
+            validate_paper_cache({**meta, key: value})
+
+
+def test_random_pair_close_rule_cannot_relabel_an_old_bootstrap(tmp_path):
+    from project.specification import stamp_experiment
+    params = {'seed': 20060101, 'reps': 200, 'wait': '0,1'}
+    stamp_experiment(tmp_path, {'format': 7}, params)
+    stamp_experiment(tmp_path, {'format': 7}, params, read_only=True)
+    with pytest.raises(ValueError, match='incompatible'):
+        stamp_experiment(tmp_path, {'format': 7}, {**params, 'close_rule': 'true'})
+
+
+def test_book_cache_accepts_new_universe_but_rejects_old_accounting():
+    from project.specification import validate_book_cache, PROFILES
+    for name in ('baseline', 'paper'):
+        meta = {'format': 7, **PROFILES[name]}
+        validate_book_cache(meta)
+        for key, value in [('format', 6), ('monthly_aggregation', 'daily_difference'),
+                           ('short_weights', 'position')]:
+            with pytest.raises(ValueError, match='corrected book accounting'):
+                validate_book_cache({**meta, key: value})

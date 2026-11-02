@@ -28,10 +28,13 @@ One replication (see ``report/replication/claims/TABLE6.md``)
 For every true-pair opening in a cohort (``w0_trades`` for Panel A,
 ``w1_trades`` for Panel B) draw two stocks from the cohort's formation universe,
 each from the decile of the previous calendar month's ``mthret`` that its true
-leg occupies, excluding the two true legs and each other.  Go long the cheaper
-leg at the open and short the dearer.  Close on the random pair's own first
+leg occupies, excluding the two true legs and each other. Each drawn stock
+keeps the true leg's long/short role. With ``--close own`` (the preserved PR #8
+default), close on the random pair's own first
 crossing of the normalized prices; exit early on a delisting, a leg's last
-available row, or the end of the trading period.  Position accounting, portfolio
+available row, or the end of the trading period. ``--close true`` inherits
+the true trade’s close date, capped by earlier forced exits (Hao PR #10).
+Both interpretations of the caption remain explicit. Position accounting, portfolio
 construction and monthly compounding follow the shipped engine
 (``project.models``) and portfolio layer (``project.evaluation``); the vectorised
 re-implementation in ``scripts/claims/t6_engine.py`` is pinned against both.
@@ -547,8 +550,10 @@ def true_pair_series(cache_root: Path, panel: CohortPanel, wait: int) -> tuple[n
 
 
 def run_cohort(cache_root: Path, year: int, month: int, reps: int, seed: int,
-               chunk: int = 25) -> dict:
+               chunk: int = 25, close_rule: str = "own") -> dict:
     """Bootstrap and true-pair series of one cohort, both panels."""
+    if close_rule not in ("true", "own"):
+        raise ValueError("close_rule must be true or own")
     panel = cohort_panel(cache_root, year, month)
     months = np.unique(panel.month_of_day)
     random = np.full((reps, months.size, len(SERIES)), np.nan)
@@ -595,9 +600,19 @@ def run_cohort(cache_root: Path, year: int, month: int, reps: int, seed: int,
                                         panel.levels[ids_l.ravel()])
             ps = eng.prices_from_returns(panel.returns[:, ids_s.ravel()],
                                         panel.levels[ids_s.ravel()])
-            close, reason = eng.resolve_closes(
-                opens, pl, ps, panel.terminal[:, ids_l.ravel()], panel.terminal[:, ids_s.ravel()],
-                panel.last_valid[ids_l.ravel()], panel.last_valid[ids_s.ravel()], wait=wait)
+            if close_rule == "true":
+                forced, _ = eng.forced_closes(
+                    opens, panel.terminal[:, ids_l.ravel()], panel.terminal[:, ids_s.ravel()],
+                    panel.last_valid[ids_l.ravel()], panel.last_valid[ids_s.ravel()])
+                true_close = np.repeat(trades["close_day"].to_numpy(np.int64), c)
+                close = np.minimum(forced, true_close)
+                stats["waits"][str(wait)].setdefault("forced_before_true_close", 0)
+                stats["waits"][str(wait)]["forced_before_true_close"] += int(
+                    (live & (forced < true_close)).sum())
+            else:
+                close, _ = eng.resolve_closes(
+                    opens, pl, ps, panel.terminal[:, ids_l.ravel()], panel.terminal[:, ids_s.ravel()],
+                    panel.last_valid[ids_l.ravel()], panel.last_valid[ids_s.ravel()], wait=wait)
             close = np.where(live, close, opens)
             vals = eng.account(opens, close, ids_l.ravel(), ids_s.ravel(), panel.returns)
             books = eng.rank_books(vals, events["rank"].to_numpy(np.int64), N_RANKS, c)
@@ -635,7 +650,7 @@ def run_shard(args, cohorts: list[tuple[int, int]], shard: int, shards: int) -> 
             done += 1
             continue
         started = time.time()
-        payload = run_cohort(cache_root, year, month, args.reps, args.seed)
+        payload = run_cohort(cache_root, year, month, args.reps, args.seed, close_rule=args.close)
         tmp = path.with_suffix(".npz.tmp")
         with open(tmp, "wb") as handle:
             np.savez_compressed(handle, **payload)
@@ -656,7 +671,8 @@ def run_all(args, cohorts: list[tuple[int, int]]) -> int:
     for shard in range(workers):
         cmd = [sys.executable, script, "--mode", "shard",
                "--cache-root", str(Path(args.cache_root).resolve()), "--out-root", str(out_root),
-               "--reps", str(args.reps), "--seed", str(args.seed),
+               "--reps", str(args.reps), "--seed", str(args.seed), "--close", args.close,
+               "--wait", args.wait,
                "--shard", str(shard), "--shards", str(workers)]
         if args.force:
             cmd.append("--force")
@@ -764,6 +780,9 @@ def main() -> int:
                         help="paper-profile cache directory holding cohorts/ (read only)")
     parser.add_argument("--out-root", default=str(_ROOT / "results" / "replication" / "table6"),
                         help="private output directory")
+    parser.add_argument("--close", choices=("true", "own"), default="own",
+                        help="true-trade close schedule (Hao PR #10), or own crossing "
+                             "(existing PR #8 experiment; default)")
     parser.add_argument("--wait", default="0,1")
     parser.add_argument("--limit-cohorts", type=int, default=None)
     parser.add_argument("--reps", type=int, default=200)
@@ -779,8 +798,13 @@ def main() -> int:
     cache_root = Path(args.cache_root).resolve()
     source_meta = json.loads((cache_root / "cohorts/cache_meta.json").read_text())
     validate_paper_cache(source_meta)
+    parameters = {"reps": args.reps, "seed": args.seed, "wait": args.wait}
+    # Historical PR #8 outputs omitted this key and mean own crossings.
+    # A true-schedule run must never reuse them, even with --force.
+    if args.close != "own":
+        parameters["close_rule"] = args.close
     stamp_experiment(args.out_root, source_meta,
-                     {"reps": args.reps, "seed": args.seed, "wait": args.wait},
+                     parameters,
                      read_only=args.mode == "report")
     waits = tuple(int(w) for w in args.wait.split(",") if w.strip())
     cohorts = cohort_list(cache_root)

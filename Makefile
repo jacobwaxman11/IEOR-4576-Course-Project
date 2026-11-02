@@ -22,7 +22,7 @@ export PATH := $(CURDIR)/.venv/bin:$(PATH)
 all: build-data replicate
 
 replicate:
-	python scripts/03_replicate.py --specification paper
+	python scripts/03_replicate.py --specification baseline
 
 test:
 	python -m pytest tests/ -q
@@ -41,7 +41,7 @@ build-data:
 	python scripts/02_build_dataset.py
 
 benchmark:
-	python scripts/03_replicate.py --specification paper --aggregate-only --steps tables,table3,check
+	python scripts/03_replicate.py --specification baseline --aggregate-only --steps tables,table3,check
 	python scripts/replication_score.py
 
 edition-1999:

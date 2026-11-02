@@ -23,16 +23,21 @@ block reads the Goyal-Welch `.xls` through `xlrd`, and without it the check prin
 leaves those 24 cells unscored. `git lfs pull` fetches the factor files under `data/raw/french`
 and `data/raw/goyal_welch`; without them the factor-regression rows are not computed either.
 
-The replication pipeline is implemented. Its default `--specification paper` uses
-formation-spread standard deviation, stock-value short weights, and separate book
-compounding. Formation requires an observed transaction price and a finite return
-on every trading day; idle cohorts retain zero cash returns. Delayed entries keep
-the signal-day direction. Five warmup cohorts precede the July 1963 reporting start.
-The explicitly named `legacy` profile preserves superseded settings
-for sensitivity analysis. See [the replication summary](report/replication/REPLICATION_SUMMARY.md)
-and [the corrections audit](report/replication/ACCOUNTING_CORRECTIONS.md) for measured
-results, limitations, and exact reproduction commands. This is a partial replication.
-The extension script remains a placeholder; `make all` rebuilds the replication only.
+The replication pipeline is implemented and remains a **partial replication**.
+The default `--specification baseline` reconciles PRs #8–10 and Eiko’s replacement
+PR #12: a volume-based universe, July 1963 first cohort, separately compounded
+books, stock-value short weights, and next-day execution in the signal direction.
+RMS triggers, same-issuer exclusion, flat-path exclusion and the 95% stale screen
+are disclosed conventions; alternatives remain available. Idle months earn zero,
+but never-opened portfolios have undefined employed capital.
+
+`--specification paper --start 1963-02 --report-start 1963-07` preserves the earlier
+strict-price/warmup experiment; the historical name does not establish it as the
+unique paper specification. `legacy` preserves the earlier accounting comparison.
+Use separate `--cache-root` and `--out-root` paths for each specification.
+See [the reconciliation](report/replication/PR_RECONCILIATION.md) for decisions,
+old/new/paper comparisons, validation and reproduction commands. The extension
+script remains a placeholder; `make all` rebuilds the replication only.
 
 `make validate-fidelity` rebuilds five controlled variants and compares all of them
 with the paper. It verifies the full reporting calendar, accounting identities,
@@ -115,34 +120,21 @@ folder is the repository root; there is no extra nested `project-name/` folder.
 
 ## Replication status
 
-**Thesis.** Gatev, Goetzmann and Rouwenhorst (2006) find that a simple pairs-trading rule earns
-large, significant excess returns that transaction costs, conventional risk factors and
-short-term reversal do not explain. They link the profits to a latent common factor that weakened
-after 1988. Rebuilt from CRSP with the paper's stated rules, **the paper's conclusions replicate
-but its tables only partly do**. 23 of its 25 claims hold (6 with the paper's numbers, 17 in
-substance, plus half of one), and 2 do not hold as stated. 267.5 of the 481 printed cells match
-(✓ within 10%, ~ within 25%). The gaps trace to data and to underspecified methods, above all a
-reversal factor the paper's description does not pin down.
+The paper reports positive pairs-trading returns, weaker returns after 1988,
+and robustness to several risk controls. Our results reproduce some patterns,
+while numerical levels, tails, capital accounting and several robustness claims
+remain unresolved. A weighted comparison score is not a fraction of proven claims.
+Current results and the historical experiments are separated in these records:
 
-- **Start here:** [`report/replication/REPLICATION_SUMMARY.md`](report/replication/REPLICATION_SUMMARY.md),
-  which has the thesis, every table and figure against the paper, and the claims checklist.
-- **Generated tables and Figures 1-4:** [`report/replication/outputs/`](report/replication/outputs/);
-  cell by cell: [`REPLICATION_CHECK.md`](report/replication/REPLICATION_CHECK.md).
-- **Score history and counting rule:** [`report/replication/SCORE_LOG.md`](report/replication/SCORE_LOG.md).
+- [Replication summary](report/replication/REPLICATION_SUMMARY.md): measured results and gaps.
+- [Reconciliation](report/replication/PR_RECONCILIATION.md): Hao’s and Eiko’s additions, decisions and commands.
+- [Claims ledger](report/replication/CLAIMS.md): each numbered claim with its evidence scope.
+- [Historical main outputs](report/replication/outputs/): already-committed artifacts from `bc528c0`, not the reconciled baseline.
+- [Score history](report/replication/SCORE_LOG.md): the archived 481-cell scoring series.
+- [WRDS follow-up](report/replication/WRDS_FOLLOWUP.md): universe and CIZ/SIZ sensitivities, licensed input provenance, and unresolved factor inputs.
 
-- **Systematic risk (Tables 4 and 8).** With French's short-term reversal factor (ST_Rev), the
-  paper's conclusion replicates: pairs returns load little on the Fama-French, momentum and
-  reversal factors, and keep a significant Newey-West alpha before 1989 and after 1988, smaller
-  in the second period. Cell-level agreement is poor (Table 8: 19.5 of 72), because the paper's
-  own reversal factor is unidentified before 1989 and most post-1988 coefficients are
-  statistically zero, with our post-1988 all-pairs portfolio off by an era split in the stock
-  universe. Details: [`REVIEW_NOTES.md`](report/replication/REVIEW_NOTES.md) sections 50-52.
-- **Every claim, with evidence.** [`CLAIMS.md`](report/replication/CLAIMS.md) lists each
-  substantive claim of the abstract, sections 3.1-3.9 and the conclusion, the cells behind
-  it and a verdict, including the Table 7 long/short result.
-- **The paper's own consistency.** What the printed statistics imply about the unnamed reversal
-  factor is set out in [`PAPER_CONSISTENCY.md`](report/replication/PAPER_CONSISTENCY.md).
-- **Open gaps** are tracked in [`OPEN_QUESTIONS.md`](report/replication/OPEN_QUESTIONS.md).
+All new generated output goes under ignored `results/`. Restricted observations
+stay local; queries and acquisition metadata may be committed.
 
 ## Data and results map
 

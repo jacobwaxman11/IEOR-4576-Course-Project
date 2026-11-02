@@ -172,7 +172,7 @@ class TestSummaryStats:
         x = pd.Series(rng.normal(0.01, 0.02, 500))
         stats = summary_stats(x, nw_lags=6)
         res = sm.OLS(x.to_numpy(), np.ones(500)).fit(
-            cov_type="HAC", cov_kwds={"maxlags": 6, "use_correction": True}
+            cov_type="HAC", cov_kwds={"maxlags": 6, "use_correction": False}
         )
         assert np.isclose(stats["nw_se"], res.bse[0])
         assert np.isclose(stats["t_stat"], x.mean() / res.bse[0])
@@ -182,7 +182,18 @@ class TestSummaryStats:
         rng = np.random.default_rng(1)
         x = pd.Series(rng.normal(0.0, 0.03, 200))
         stats = summary_stats(x, nw_lags=0)
-        assert np.isclose(stats["nw_se"], x.std(ddof=1) / np.sqrt(len(x)))
+        assert np.isclose(stats["nw_se"], x.std(ddof=0) / np.sqrt(len(x)))
+
+    def test_nw_se_matches_the_factor_regression_estimator(self):
+        """Table 1's standard error and Table 4's t-statistics use one estimator."""
+        from project.factors import factor_tstats
+
+        rng = np.random.default_rng(5)
+        months = pd.date_range("1963-07-31", periods=474, freq="ME")
+        x = pd.Series(rng.normal(0.01, 0.02, 474), index=months)
+        no_factors = pd.DataFrame(index=months)
+        stats = summary_stats(x)
+        assert np.isclose(stats["t_stat"], factor_tstats(x, no_factors)["intercept"])
 
     def test_moments_hand_calc(self):
         x = pd.Series([1.0, 2.0, 3.0])
@@ -653,3 +664,25 @@ class TestCompletedComponents:
         out = evaluation._completed_components(parts, ["2002-02", "2002-09"])
         assert out == parts  # unfiltered fallback
         assert "completion flags unavailable" in capsys.readouterr().err
+
+
+def test_opened_idle_policy_drops_never_opened_cohort_but_keeps_idle_months():
+    from project.models import simulate_cohort
+    from project.evaluation import portfolio_legs, portfolio_monthly
+    dates = pd.to_datetime(['2000-01-28', '2000-01-31', '2000-02-01', '2000-03-01'])
+    pairs = pd.DataFrame({'rank': [1], 'permno_1': [1], 'permno_2': [2],
+                          'distance': [0.0], 'sigma': [0.01]})
+    returns = pd.DataFrame(0.0, index=dates, columns=[1, 2])
+    terminal = returns.astype(bool)
+    idle = simulate_cohort(pairs, returns, terminal)
+    assert portfolio_monthly(idle, [1], 'employed', idle_policy='opened').empty
+    assert portfolio_daily(idle, [1], 'employed', idle_policy='opened').isna().all()
+    assert portfolio_legs(idle, [1], idle_policy='opened')[0].isna().all()
+    assert (portfolio_monthly(idle, [1], 'committed', idle_policy='opened') == 0).all()
+    returns.iloc[1, 1] = .03
+    returns.iloc[2, 1] = 1 / 1.03 - 1
+    active = simulate_cohort(pairs, returns, terminal)
+    employed = portfolio_monthly(active, [1], 'employed', idle_policy='opened')
+    assert len(employed) == 3 and employed.iloc[-1] == 0.0
+    long, short = portfolio_legs(active, [1], idle_policy='opened')
+    pd.testing.assert_series_equal(employed, cohort_monthly(long) - cohort_monthly(short))

@@ -799,6 +799,13 @@ No reading fits the four values; the per-cohort median of all pairs fits two of 
 need pairs to be size-adjacent, which ours are not (only 32% of mixed "all" pairs differ by one decile).
 The row stays at 1 ~ and 3 ✗; the shipped all-pairs mean is kept and documented.
 
+*Update 2026-11-02 (REVIEW_NOTES section 54, SCORE_LOG row 17):* the scored row now carries the
+quantity the paper names, the mean gap over mixed pairs only (1.67 / 1.74 / 2.17 / 2.64 in the full
+build), and is 4 ✗. The all-pairs mean stays in `table2_panelB.csv` as
+`avg_decile_diff_all_pairs`. The row is a reported gap: the paper's own sentence ("the stocks in
+mixed pairs differ on average by a single decile", p. 809) defines it, and the printed values
+cannot be reached by a mean over mixed pairs.
+
 **Q5 (open).** Ours Financials 0.141 / 0.140, Industrials 0.070 / 0.078, Transportation 0.012 /
 0.011 for top 5 / top 20 (paper 0.11 / 0.13, 0.15 / 0.14, 0.02 / 0.02). Only 3.7 stocks per cohort
 keep an unknown SIC after the fallbacks (Q10), so the SIC code is not the cause. Post-1983 test: see the section above; the sector map, ranking and stale limit are ruled out.

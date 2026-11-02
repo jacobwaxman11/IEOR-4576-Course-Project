@@ -90,7 +90,7 @@ def audit_formation(cache: Path, cohorts=("1963-08", "1980-08", "1999-09", "2002
     return evidence
 
 
-def validate_outputs(output: Path, cache: Path) -> dict:
+def validate_outputs(output: Path, cache: Path, expected_cohorts: int = 479) -> dict:
     """Reject partial samples, nonfinite primary returns, and broken book identities."""
     summary = summarize_run(output)
     monthly = pd.read_parquet(output / "tables/monthly_returns.parquet")
@@ -112,8 +112,8 @@ def validate_outputs(output: Path, cache: Path) -> dict:
         if path.exists() and not np.isfinite(pd.read_csv(path, index_col=0).to_numpy()).all():
             raise ValueError(f"Nonfinite available risk statistics: {name}")
     dirs = sorted((cache / "cohorts").glob("????-??"))
-    if len(dirs) != 479:
-        raise ValueError(f"Expected 474 report cohorts plus five warmup cohorts, got {len(dirs)}")
+    if len(dirs) != expected_cohorts:
+        raise ValueError(f"Expected {expected_cohorts} cohorts, got {len(dirs)}")
     summary["cohorts_including_warmup"] = len(dirs)
     summary["settings"] = json.loads((cache / "cohorts/cache_meta.json").read_text())
     summary["table2_trading"] = pd.read_csv(output / "tables/table2_panelA.csv", index_col=0).to_dict()

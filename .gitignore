@@ -51,3 +51,7 @@ eval/
 # Local claim experiments and WRDS UI import provenance.
 scratch/
 data/processed/ui_import_manifest.json
+
+# Local issuer mapping extracted from licensed CIZ web observations.
+data/interim/ciz_issuer_header.parquet
+data/interim/ciz_issuer_header.source.json

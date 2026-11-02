@@ -480,7 +480,7 @@ FIGURE1 = {
     "day_tolerance": 3,
 }
 
-PRIMARY_UNIVERSE = "traded_common"
+PRIMARY_UNIVERSE = "vol_common"
 STEPS = ("tables", "table3", "figure1", "check")
 _SIC_FALLBACKS: tuple[pd.Series, ...] | None = None
 
@@ -547,7 +547,7 @@ def verify_cache(universe: str, continued: bool) -> None:
             f"pass --normalization {meta.get('normalization')} or rebuild with --force"
         )
     for key in ("exclude_same_issuer", "max_stale_share", "telephone_sic", "trigger_sigma",
-                "short_weights", "size_deciles_top", "monthly_aggregation", "exclude_constant", "sic_fallback", "universe", "delayed_entry", "idle_policy", "data_source"):
+                "short_weights", "size_deciles_top", "long_delisting_loss", "waste_sic", "monthly_aggregation", "exclude_constant", "sic_fallback", "universe", "delayed_entry", "idle_policy", "data_source", "issuer_source"):
         if meta.get(key) != want.get(key):
             built = f"{key}={meta[key]}" if key in meta else f"no {key} stamp"
             now = f"{key}={want[key]}" if key in want else f"no {key}"
@@ -618,6 +618,8 @@ class Job:
     sic_fallback: str = "formation_end"
     delayed_entry: str = "execute"
     idle_policy: str = "zero"
+    long_delisting_loss: bool = False
+    waste_sic: str = "industrials"
 
 
 def init_worker(fallbacks: tuple[pd.Series, ...] | None = None) -> None:
@@ -738,7 +740,7 @@ def build_cohort(job: Job) -> tuple[int, int]:
 
     fallbacks = _sic_fallbacks(job.cohorts_root) if job.sic_fallback == "legacy" else ()
     labels = sectors_for(row["siccd"].reindex(universe).fillna(0),
-                         *fallbacks, telephone=job.telephone_sic)
+                         *fallbacks, telephone=job.telephone_sic, waste=job.waste_sic)
     sector_pairs = select_pairs_within_groups(prices, labels, issuers, job.trigger_sigma)
     levels = prices.iloc[-1] if job.continued else None
     del prices
@@ -781,7 +783,8 @@ def build_cohort(job: Job) -> tuple[int, int]:
         # stays byte-identical to the shipped cache.
         summary["size_deciles_top"] = job.size_deciles_top
     for wait in job.waits:
-        result = simulate_cohort(pairs, rets, term, wait=wait, start_levels=levels, delayed_entry=job.delayed_entry)
+        result = simulate_cohort(pairs, rets, term, wait=wait, start_levels=levels, delayed_entry=job.delayed_entry,
+                                 long_delisting_loss=job.long_delisting_loss)
         result.trades.to_parquet(coh_dir / f"w{wait}_trades.parquet")
         result.opened.rename("opened").to_frame().to_parquet(coh_dir / f"w{wait}_opened.parquet")
         for pname, ranks in PORTFOLIOS.items():
@@ -820,7 +823,8 @@ def build_cohort(job: Job) -> tuple[int, int]:
         summary["sector_counts"][f"pairs_{sector}"] = len(sp)
         if sp.empty:
             continue
-        result = simulate_cohort(sp, rets, term, wait=1, start_levels=levels, delayed_entry=job.delayed_entry)
+        result = simulate_cohort(sp, rets, term, wait=1, start_levels=levels, delayed_entry=job.delayed_entry,
+                                 long_delisting_loss=job.long_delisting_loss)
         for pname, ranks in TABLE3_PORTFOLIOS.items():
             if ranks is not None and len(sp) < max(ranks):
                 continue
@@ -2243,13 +2247,21 @@ def formation_options(args: argparse.Namespace) -> dict:
     options["telephone_sic"] = args.telephone_sic
     options["trigger_sigma"] = args.trigger_sigma
     options["short_weights"] = args.short_weights
+    # Preserve existing stamps when sensitivities are off.
+    if getattr(args, "long_delisting_loss", False):
+        options["long_delisting_loss"] = True
+    if getattr(args, "waste_sic", "industrials") != "industrials":
+        options["waste_sic"] = args.waste_sic
     options["monthly_aggregation"] = getattr(args, "monthly_aggregation", "books")
     options["exclude_constant"] = getattr(args, "exclude_constant", False)
     options["sic_fallback"] = getattr(args, "sic_fallback", "formation_end")
     options["universe"] = getattr(args, "universe", "traded_common")
     options["delayed_entry"] = getattr(args, "delayed_entry", "execute")
     options["idle_policy"] = getattr(args, "idle_policy", "zero")
-    from project.data import processed_source_identity
+    from project.data import processed_source_identity, SECURITY_HEADER_FILE
+    if args.same_issuer == "exclude" and os.environ.get("GGR_ISSUER_HEADER"):
+        from project.import_ui import file_sha256
+        options["issuer_source"] = file_sha256(SECURITY_HEADER_FILE)
 
     if source := processed_source_identity():
         options["data_source"] = source
@@ -2271,12 +2283,12 @@ def main_shard(args) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--specification", choices=tuple(PROFILES), default="paper",
-                        help="paper rules and corrected accounting (default); legacy is a superseded comparison")
+    parser.add_argument("--specification", choices=tuple(PROFILES), default="baseline",
+                        help="reconciled baseline (default); paper preserves the earlier strict-price sensitivity; legacy preserves old accounting")
     parser.add_argument("--report-start", default=None, help="first reported month; earlier cohorts supply staggered positions")
     parser.add_argument("--delayed-entry", choices=("execute", "cancel"), default=argparse.SUPPRESS)
-    parser.add_argument("--idle-policy", choices=("zero", "exclude"), default=argparse.SUPPRESS)
-    parser.add_argument("--start", default="1963-02", help="first cohort month YYYY-MM, including warmup")
+    parser.add_argument("--idle-policy", choices=("zero", "exclude", "opened"), default=argparse.SUPPRESS)
+    parser.add_argument("--start", default="1963-07", help="first cohort month YYYY-MM; use 1963-02 explicitly for warmup sensitivity")
     parser.add_argument("--end", default="2002-12", help="last cohort month YYYY-MM")
     parser.add_argument("--wait", default="0,1", help="comma-separated waits, e.g. 0,1")
     parser.add_argument(
@@ -2321,17 +2333,26 @@ def main() -> None:
     parser.add_argument(
         "--trigger-sigma", choices=("rms", "std"), default=argparse.SUPPRESS,
         help="sigma of the 2-sigma rule: the formation spread's root mean square about "
-             "zero, sqrt(SSD/N), or its standard deviation about its mean (paper default)",
+             "zero, sqrt(SSD/N) (baseline), or its demeaned standard deviation (strict reference)",
     )
     parser.add_argument(
         "--short-weights", choices=("value", "position"), default=argparse.SUPPRESS,
         help="eq. (3) weight of a short position in the value-weighted books: the position's "
-             "own inverse return (legacy only), or the shorted stock's value (paper default)",
+             "own inverse return (legacy sensitivity), or the shorted stock's value (baseline)",
     )
     parser.add_argument(
         "--size-deciles-top", type=_decile_count, default=None,
         help="form pairs only among stocks in the largest N CRSP size deciles at the "
              "formation end (Table 9 Panel A uses 3); default off (no size screen)",
+    )
+    parser.add_argument(
+        "--waste-sic", choices=("industrials", "utilities"), default="industrials",
+        help="sector sensitivity for SIC 4950-4959 (REVIEW_NOTES section 24)",
+    )
+    parser.add_argument(
+        "--long-delisting-loss", action="store_true",
+        help="footnote 4 (RFS p. 804): an open delisting long leg returns -100%%; "
+             "short legs retain actual returns; default off",
     )
     parser.add_argument(
         "--aggregate-only", action="store_true",
@@ -2418,7 +2439,8 @@ def main() -> None:
                     size_deciles_top=args.size_deciles_top,
                     monthly_aggregation=args.monthly_aggregation,
                     exclude_constant=args.exclude_constant, sic_fallback=args.sic_fallback,
-                    delayed_entry=args.delayed_entry, idle_policy=args.idle_policy)
+                    delayed_entry=args.delayed_entry, idle_policy=args.idle_policy,
+                    long_delisting_loss=args.long_delisting_loss, waste_sic=args.waste_sic)
                 for y, m in cohorts
                 if args.force or not cohort_cache_complete(y, m, waits, args.universe)
             ]

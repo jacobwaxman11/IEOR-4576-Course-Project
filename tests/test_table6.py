@@ -7,6 +7,7 @@ rank scatter, the portfolio and monthly aggregation, and the decile draw.
 """
 
 import importlib.util
+import json
 import sys
 from datetime import date
 from pathlib import Path
@@ -101,6 +102,21 @@ def test_forced_exits_are_not_delayed_by_the_wait():
         np.array([0]), p_long, _short_prices(), term, np.zeros((6, 1), bool),
         np.array([5]), np.array([5]), wait=1)
     assert close[0] == 2 and reason[0] == eng.DELISTED
+
+
+def test_forced_closes_ignore_crossings_and_stop_at_a_delisting():
+    # The default close is the true trade's day; a drawn stock can only cut it short
+    # by a delisting or its last row, never by its own prices crossing.
+    T = 8
+    term = np.zeros((T, 2), dtype=bool)
+    term[4, 1] = True                       # position 2's short leg delists on day 4
+    last = np.array([T - 1, T - 1])
+    close, reason = eng.forced_closes(np.array([1, 1]), np.zeros((T, 2), dtype=bool), term,
+                                      last, np.array([T - 1, 4]))
+    assert close.tolist() == [T - 1, 4]
+    assert reason.tolist() == [eng.END, eng.DELISTED]
+    true_close = np.array([3, 6])
+    assert np.minimum(close, true_close).tolist() == [3, 4]
 
 
 def test_last_available_row_and_end_of_period_close():
@@ -288,6 +304,9 @@ def test_control_rebuilds_a_shipped_cohort_exactly():
     cache = Path(t6.SHARED_CACHE)
     if not (cache / "cohorts" / "1963-07" / "monthly.parquet").exists():
         pytest.skip("shared cohort cache unavailable")
+    meta = cache / "cohorts" / "cache_meta.json"
+    if not meta.exists() or json.loads(meta.read_text()).get("monthly_aggregation") != "books":
+        pytest.skip("cohort cache predates book compounding (cache format 6); rebuild it to run this")
     for wait in (0, 1):
         row = t6.control_cohort(cache, 1963, 7, wait)
         assert row["max_diff_shipped"] == 0.0

@@ -223,14 +223,17 @@ def portfolio_legs(result, ranks, short_weights: str = "value", idle_policy: str
     Table 1 Panel B and the difference of Table 7's two columns (REVIEW_NOTES
     section 33).
 
-    Idle cash earns zero (section 2.3 footnote 6), including a whole idle month.
-    ``exclude`` is the prior sensitivity that drops idle cohorts from the desk.
+    Idle cash earns zero (RFS p. 805 footnote 5; working-paper footnote 6), including a whole idle month.
+    ``exclude`` drops idle days/months. ``opened`` keeps zero idle months only
+    if a selected pair opened at least once; otherwise employed capital is undefined.
     """
     index = result.pair_returns.index
     sel = _resolve_ranks(result.pair_returns, ranks)
-    if idle_policy not in ("zero", "exclude"):
-        raise ValueError("idle_policy must be zero or exclude")
-    idle = 0.0 if idle_policy == "zero" else np.nan
+    if idle_policy not in ("zero", "exclude", "opened"):
+        raise ValueError("idle_policy must be zero, exclude, or opened")
+    idle = 0.0 if idle_policy == "zero" or (
+        idle_policy == "opened" and any(result.opened.get(c, False) for c in sel)
+    ) else np.nan
     if not sel:
         empty = pd.Series(np.nan, index=index)
         return empty, empty.copy()
@@ -328,8 +331,8 @@ def portfolio_daily(result, ranks, capital: str, short_weights: str = "value",
         raise ValueError(f"capital must be one of {CAPITAL_CHOICES}, got {capital!r}")
     if short_weights not in SHORT_WEIGHTS:
         raise ValueError(f"short_weights must be one of {SHORT_WEIGHTS}, got {short_weights!r}")
-    if idle_policy not in ("zero", "exclude"):
-        raise ValueError("idle_policy must be zero or exclude")
+    if idle_policy not in ("zero", "exclude", "opened"):
+        raise ValueError("idle_policy must be zero, exclude, or opened")
     pr = result.pair_returns
     index = pr.index
     sel = _resolve_ranks(pr, ranks)
@@ -338,7 +341,9 @@ def portfolio_daily(result, ranks, capital: str, short_weights: str = "value",
         excess, n_open = _vw_legs(result, sel, index, short_weights)
         if capital == "committed":
             excess = np.nan_to_num(excess) * n_open / len(sel) if sel else excess
-        if idle_policy == "zero" and sel:
+        if sel and (idle_policy == "zero" or (
+            idle_policy == "opened" and any(result.opened.get(c, False) for c in sel)
+        )):
             excess = np.nan_to_num(excess)
         return pd.Series(excess, index=index)
     payoff, w_prev = _payoffs_and_accounts(result, sel, len(index))
@@ -413,8 +418,8 @@ def portfolio_monthly(result, ranks, capital: str, short_weights: str = "value",
         return cohort_monthly(portfolio_daily(result, ranks, capital, short_weights, idle_policy))
     index = result.pair_returns.index
     sel = _resolve_ranks(result.pair_returns, ranks)
-    if idle_policy not in ("zero", "exclude"):
-        raise ValueError("idle_policy must be zero or exclude")
+    if idle_policy not in ("zero", "exclude", "opened"):
+        raise ValueError("idle_policy must be zero, exclude, or opened")
     if not sel:
         return pd.Series(dtype=float)
     long_ret, short_ret, n_open = _leg_arrays(result, sel, short_weights)
@@ -422,7 +427,9 @@ def portfolio_monthly(result, ranks, capital: str, short_weights: str = "value",
         scale = n_open / len(sel)
         long_ret, short_ret = long_ret * scale, short_ret * scale
     else:
-        idle = 0.0 if idle_policy == "zero" else np.nan
+        idle = 0.0 if idle_policy == "zero" or (
+            idle_policy == "opened" and any(result.opened.get(c, False) for c in sel)
+        ) else np.nan
         long_ret = np.where(n_open > 0, long_ret, idle)
         short_ret = np.where(n_open > 0, short_ret, idle)
     long_month = cohort_monthly(pd.Series(long_ret, index=index))
@@ -639,9 +646,10 @@ def summary_stats(monthly: pd.Series, nw_lags: int = 6) -> pd.Series:
     Rows (in Table 1 order): ``mean``; ``nw_se``, the Newey-West standard error
     of the mean with a Bartlett kernel truncated at ``nw_lags``, computed as
     the HAC standard error of the constant in a constant-only OLS regression
-    (statsmodels ``cov_type="HAC"`` with ``use_correction=True``, i.e. an
-    n/(n-1) small-sample factor).  With ``nw_lags=0`` this equals the usual
-    SE ``std(ddof=1)/sqrt(n)``.
+    (statsmodels ``cov_type="HAC"`` with ``use_correction=False``: no
+    small-sample degrees-of-freedom factor, since the paper states none; the
+    same estimator as ``factors.factor_tstats``).  With ``nw_lags=0`` this is
+    ``std(ddof=0)/sqrt(n)``.
     ``t_stat`` is mean / nw_se.  ``median``; ``std`` (ddof=1); ``skew`` and
     ``kurtosis`` are raw Pearson central moments (normal kurtosis = 3);
     ``min``; ``max``; ``share_negative`` is the fraction of months < 0.
@@ -653,7 +661,7 @@ def summary_stats(monthly: pd.Series, nw_lags: int = 6) -> pd.Series:
     n = x.size
     mean = float(x.mean())
     res = sm.OLS(x, np.ones(n)).fit(
-        cov_type="HAC", cov_kwds={"maxlags": int(nw_lags), "use_correction": True}
+        cov_type="HAC", cov_kwds={"maxlags": int(nw_lags), "use_correction": False}
     )
     se = float(res.bse[0])
     u = x - mean

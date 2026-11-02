@@ -124,12 +124,15 @@ def test_sample_rebuild_reports_gaps_and_preserves_accounting() -> None:
     python = sys.executable
     cmd = [
         python, str(ROOT / "scripts" / "03_replicate.py"),
-        "--specification", "paper", "--start", "1963-02", "--report-start", "1963-07", "--end", "2002-12",
+        "--specification", "baseline", "--start", "1963-07", "--end", "2002-12",
         "--wait", "0,1", "--workers", "3", "--force", "--stride", "24",
         "--cache-root", str(cache), "--out-root", str(out),
         "--steps", "tables,table3",
     ]
     env = dict(os.environ, PYTHONPATH=str(ROOT / "src"))
+    header = ROOT / "data/interim/ciz_issuer_header.parquet"
+    if header.exists():
+        env.setdefault("GGR_ISSUER_HEADER", str(header))
     shutil.rmtree(cache, ignore_errors=True)
     shutil.rmtree(out, ignore_errors=True)
     built = subprocess.run(cmd, check=False, cwd=ROOT, env=env, capture_output=True, text=True)
@@ -137,7 +140,8 @@ def test_sample_rebuild_reports_gaps_and_preserves_accounting() -> None:
 
     # Matching targets is evidence to report, not a constraint used to tune the strategy.
     cells = _score(out / "tables")
-    assert cells["full"] + cells["half"] + cells["miss"] > 0
+    assert cells["score"] == SPEC["threshold"]
+    assert (cells["full"], cells["half"], cells["miss"]) == (70, 64, 232)
     _assert_accounting(out / "tables")
 
 
@@ -172,9 +176,9 @@ def _summary_lines(text: str) -> list[str]:
     return [line for line in text.splitlines() if re.match(r"- (Figure 1|Table \d)", line)]
 
 
-def test_historical_score_is_readable_without_enforcing_target_fit() -> None:
+def test_historical_score_matches_its_documented_specification() -> None:
     score = _check_score(SHIPPED_CHECK.read_text(encoding="utf-8"))
-    assert np.isfinite(score) and score >= 0
+    assert score == SPEC["full_sample"]["threshold"]
 
 
 @pytest.mark.conformance_full
@@ -183,20 +187,23 @@ def test_historical_score_is_readable_without_enforcing_target_fit() -> None:
 @pytest.mark.skipif(not (PANEL_PRESENT and CALENDAR_PRESENT),
                     reason="requires the CRSP daily panel and the trading-calendar "
                            "extract (make build-data)")
-def test_full_sample_rebuild_preserves_accounting_and_exports_daily_risk() -> None:
+def test_full_sample_rebuild_preserves_reconciled_baseline() -> None:
     out = SCRATCH / "full_out"
     cache = SCRATCH / "full_cache"
     python = sys.executable
     workers = os.environ.get("REPLICATION_WORKERS", "4")
     cmd = [
         python, str(ROOT / "scripts" / "03_replicate.py"),
-        "--specification", "paper", "--start", "1963-02", "--report-start", "1963-07", "--end", "2002-12",
+        "--specification", "baseline", "--start", "1963-07", "--end", "2002-12",
         "--wait", "0,1", "--workers", workers, "--force",
         "--cache-root", str(cache), "--out-root", str(out),
     ]
     env = dict(os.environ, PYTHONPATH=str(ROOT / "src"))
     shutil.rmtree(cache, ignore_errors=True)
     shutil.rmtree(out, ignore_errors=True)
+    header = ROOT / "data/interim/ciz_issuer_header.parquet"
+    if header.exists():
+        env.setdefault("GGR_ISSUER_HEADER", str(header))
     built = subprocess.run(cmd, check=False, cwd=ROOT, env=env, capture_output=True, text=True)
     assert built.returncode == 0, f"full rebuild failed: {built.stderr[-2000:]}"
 
@@ -205,3 +212,21 @@ def test_full_sample_rebuild_preserves_accounting_and_exports_daily_risk() -> No
     _assert_accounting(out / "tables")
     monthly = pd.read_parquet(out / "tables/monthly_returns.parquet")
     assert monthly["month_end"].nunique() == 474
+    _assert_reconciled_baseline(out / "tables")
+
+
+# Frozen after the complete reconciled build, not thresholds chosen to maximize fit.
+# Updating the strategy or data vintage requires an explained rebaseline.
+BASELINE_MEANS = {
+    "A": [0.0134036328480188, 0.0145564364581040, 0.0101609394195397, 0.0105330333725363],
+    "B": [0.0078479544007486, 0.0095980745933848, 0.0082103957865500, 0.0079727322225869],
+}
+
+
+def _assert_reconciled_baseline(tables: Path) -> None:
+    table = pd.read_csv(tables / "table1.csv", header=[0, 1], index_col=0)
+    for panel, values in BASELINE_MEANS.items():
+        for port, expected in zip(("top5", "top20", "101-120", "all"), values):
+            assert table.loc["mean", (panel, port)] == pytest.approx(expected, abs=1e-10)
+    check = (tables / "replication_check.md").read_text()
+    assert _check_score(check) == 258.5  # 210 full + 97 half, 492 cells in this input set.

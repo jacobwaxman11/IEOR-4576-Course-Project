@@ -494,7 +494,9 @@ def formation_universe(
     return pd.Index(keep.sort_values(), name="permno")
 
 
-SECURITY_HEADER_FILE = WRDS_API_DIR / "security_info_header.parquet"
+SECURITY_HEADER_FILE = Path(os.environ.get(
+    "GGR_ISSUER_HEADER", WRDS_API_DIR / "security_info_header.parquet"
+))
 
 
 def issuer_map(path: Path = SECURITY_HEADER_FILE) -> pd.Series:
