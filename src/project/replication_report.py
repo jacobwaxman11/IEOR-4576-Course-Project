@@ -30,6 +30,9 @@ def conventions(options: dict, short_weights: str) -> list[str]:
     if options.get("long_delisting_loss"):
         optional += ["Long delisting loss: on. An open position's long leg returns -100% on its",
                      "delisting row (footnote 5's extreme assumption); this is a sensitivity."]
+    if options.get("waste_sic", "industrials") != "industrials":
+        optional += [f"Waste management (SIC 4950-4959): `{options['waste_sic']}` instead of",
+                     "Industrials; a sector-map sensitivity."]
     return [
         "## Specification and limitations", "",
         f"Entry scale: `{sigma}`. Standard deviation about the formation mean implements",

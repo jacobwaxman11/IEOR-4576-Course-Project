@@ -40,6 +40,8 @@ def validate_paper_cache(meta: dict, *, size_deciles_top=None,
         "size_deciles_top": size_deciles_top, "exclude_same_issuer": False, "max_stale_share": None,
         "exclude_constant": exclude_constant, "trigger_sigma": "std", "short_weights": "value",
         "monthly_aggregation": "books", "sic_fallback": "formation_end",
+        # Opt-in sensitivities, stamped only when on: absent from a paper cache.
+        "waste_sic": None, "long_delisting_loss": None,
     }
     bad = {key: (meta.get(key), value) for key, value in expected.items()
            if meta.get(key) != value}

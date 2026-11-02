@@ -105,6 +105,57 @@ def test_long_delisting_loss_is_stamped_only_when_on(tmp_path, monkeypatch):
     assert not any("delisting loss" in line for line in rep.conventions(off, "value"))
 
 
+def test_waste_sic_flag_is_stamped_only_when_not_industrials(tmp_path, monkeypatch):
+    base = argparse.Namespace(same_issuer="allow", max_stale_share=None, telephone_sic="4811",
+                              trigger_sigma="std", short_weights="value", size_deciles_top=None)
+    default = rep.formation_options(argparse.Namespace(**vars(base), waste_sic="industrials"))
+    assert default == rep.formation_options(base) and "waste_sic" not in default
+    moved = rep.formation_options(argparse.Namespace(**vars(base), waste_sic="utilities"))
+    assert moved == {**default, "waste_sic": "utilities"}
+    monkeypatch.setattr(rep, "cohort_dir", lambda universe: tmp_path / universe / "cohorts")
+    monkeypatch.setattr(rep, "FORMATION_OPTIONS", default)
+    rep.stamp_cache("u", continued=True, force=False)
+    monkeypatch.setattr(rep, "FORMATION_OPTIONS", moved)
+    with pytest.raises(SystemExit, match="no waste_sic stamp"):
+        rep.verify_cache("u", continued=True)
+    job = rep.Job(2020, 7, (2020, 12), (0, 1), "u", True, waste_sic="utilities")
+    assert rep.job_from_shard(rep.job_to_shard(job)) == job
+    assert rep.Job(2020, 7, (2020, 12), (0, 1), "u", True).waste_sic == "industrials"
+    assert any("SIC 4950-4959): `utilities`" in line for line in rep.conventions(moved, "value"))
+
+
+def test_waste_sic_command_line_choices(monkeypatch):
+    seen = {}
+
+    def stop(args):
+        seen.update(vars(args))
+        raise SystemExit(0)
+
+    monkeypatch.setattr(rep, "resolve_profile", stop)
+    for argv, want in ((["x"], "industrials"), (["x", "--waste-sic", "utilities"], "utilities")):
+        monkeypatch.setattr(sys, "argv", argv)
+        with pytest.raises(SystemExit):
+            rep.main()
+        assert seen["waste_sic"] == want
+    monkeypatch.setattr(sys, "argv", ["x", "--waste-sic", "water"])
+    with pytest.raises(SystemExit) as err:
+        rep.main()
+    assert err.value.code == 2
+
+
+def test_paper_cache_validation_rejects_opt_in_sensitivities():
+    from project.specification import validate_paper_cache
+
+    meta = {"format": 7, "normalization": "continued", "telephone_sic": "4811",
+            "universe": "traded_common", "delayed_entry": "execute", "idle_policy": "zero",
+            "exclude_same_issuer": False, "exclude_constant": False, "trigger_sigma": "std",
+            "short_weights": "value", "monthly_aggregation": "books", "sic_fallback": "formation_end"}
+    validate_paper_cache(meta)
+    for extra in ({"waste_sic": "utilities"}, {"long_delisting_loss": True}):
+        with pytest.raises(ValueError, match=next(iter(extra))):
+            validate_paper_cache({**meta, **extra})
+
+
 def test_verify_names_an_unstamped_option(tmp_path, monkeypatch):
     monkeypatch.setattr(rep, "cohort_dir", lambda universe: tmp_path / universe / "cohorts")
     rep.stamp_cache("u", continued=True, force=False)
