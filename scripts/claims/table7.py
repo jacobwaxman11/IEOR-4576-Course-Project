@@ -361,8 +361,8 @@ def resolve_cache(cache_root: str | None, universe: str) -> Path:
     """
     if cache_root:
         rep.CACHE_ROOT_OVERRIDE = Path(cache_root).resolve()
-        return rep.CACHE_ROOT_OVERRIDE
-    local = rep.cohort_dir(universe)
+        return rep.cohort_dir(universe).parent
+    local = rep.cohort_dir(universe).parent
     if cohort_list(local / "cohorts"):
         return local
     shared = _SHARED_REPLICATION / universe
@@ -378,6 +378,8 @@ def build(cache_root: str | None = None, universe: str = "vol_common",
     """Read the cache and build every number the report prints."""
     cohorts_dir = resolve_cache(cache_root, universe) / "cohorts"
     meta = json.loads((cohorts_dir / "cache_meta.json").read_text())
+    from project.specification import validate_cache_identity
+    validate_cache_identity(meta, expected_format=rep.CACHE_FORMAT)
     cohorts = cohort_list(cohorts_dir)
     if start is not None:
         cohorts = [c for c in cohorts if c >= start]

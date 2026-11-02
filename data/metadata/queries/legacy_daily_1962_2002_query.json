@@ -1,0 +1,33 @@
+{
+  "source": "WRDS CRSP web query",
+  "query_id": 11858718,
+  "downloaded_date": "2026-11-02",
+  "sample_start": "1962-01-01",
+  "sample_end": "2002-12-31",
+  "universe": "All securities, no identifier filter",
+  "fields": [
+    "permno",
+    "date",
+    "permco",
+    "shrcd",
+    "exchcd",
+    "siccd",
+    "prc",
+    "vol",
+    "ret",
+    "shrout",
+    "dlstcd",
+    "dlprc",
+    "dlret",
+    "cfacshr",
+    "nmsind"
+  ],
+  "version": "Legacy annual SIZ, last vintage 2024-12-31",
+  "format": "CSV gzip, ISO dates",
+  "ui_reported_rows": 57599940,
+  "file": "data/raw/crsp_siz/legacy_daily_1962_2002.csv.gz",
+  "bytes": 541629461,
+  "sha256": "46edb5bca020fc96be0dc999057ed74e248b92be8dca8fbaed29b6c9df155616",
+  "access": "Restricted: observations remain local; this record contains acquisition metadata only",
+  "return_convention": "SIZ RET and DLRET combined once by the explicit legacy importer"
+}

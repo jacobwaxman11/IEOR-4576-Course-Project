@@ -210,13 +210,14 @@ class VolumeSource:
         files = [
             self.raw_dir / f"{year}.parquet"
             for year in range(start.year, end.year + 1)
-            if (self.raw_dir / f"{year}.parquet").exists()
         ]
+        missing = [str(path) for path in files if not path.exists()]
+        if missing:
+            raise FileNotFoundError("Table 9B requires split-adjusted volume inputs; missing "
+                                    + ", ".join(missing))
         empty = pd.DataFrame({"permno": pd.Series(dtype="int64"),
                               "date": pd.Series(dtype="datetime64[ns]"),
                               "adjvol": pd.Series(dtype="float64")})
-        if not files:
-            return empty
         wanted = sorted({int(p) for p in permnos})
         dataset = ds.dataset(files, format="parquet")
         flt = (
@@ -228,16 +229,18 @@ class VolumeSource:
         frame = table.to_pandas()
         if frame.empty:
             return empty
-        factor = frame["dlycumfacshr"].astype("float64").fillna(1.0)
-        frame["adjvol"] = frame["dlyvol"].astype("float64") * factor
+        frame["adjvol"] = adjusted_volume(frame["dlyvol"], frame["dlycumfacshr"])
         frame["date"] = pd.to_datetime(frame["dlycaldt"])
         return frame.loc[:, ["permno", "date", "adjvol"]]
 
 
 def volume_wide(volume: pd.DataFrame, permnos: list[int]) -> pd.DataFrame:
     """(days x permno) split-adjusted volume; one row per stock-day."""
+    volume = volume.drop_duplicates()
+    if volume.duplicated(["date", "permno"]).any():
+        raise ValueError("Conflicting adjusted volume observations")
     return (
-        volume.drop_duplicates(["date", "permno"])
+        volume
         .pivot(index="date", columns="permno", values="adjvol")
         .reindex(columns=permnos)
         .sort_index()
