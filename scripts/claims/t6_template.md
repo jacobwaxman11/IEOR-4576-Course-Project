@@ -42,9 +42,11 @@ position to the return-matrix column. The random pair is opened at the true
 pair's opening day, $1 each, with each drawn stock kept in its true leg's role
 (the true long leg's replacement is bought, the true short leg's replacement
 sold short); the paper replaces "the actual stocks" of the pair and does not
-say the random pair is re-ordered by price at the open. It is closed on its
-own next price crossing, or early on a delisting, a leg's last available row
-or the end of the trading period. Accounting, portfolio
+say the random pair is re-ordered by price at the open. It is closed when the
+true trade it replaces closes, at the true pair's next price crossing (or the
+end of the trading period), or earlier if a drawn stock delists or its data
+end. Open and close are the true pair's signals, so the random trade differs
+from the true trade only in the stocks held. Accounting, portfolio
 construction and monthly compounding use the shipped engine's conventions
 (paper eqq. 2-3, the pipeline's --short-weights position, cohort_monthly, then
 the overlap average across cohorts).
@@ -57,7 +59,7 @@ Choices where the paper is silent, and the reading used:
 | decile population | that universe's cross-section of mthret in the prior month | "same decile of previous month's performance" |
 | prior month | calendar month before the opening date (for a first-month open, the last filing month before trading) | "previous month" |
 | open date and size | the true pair's opening day; each drawn stock keeps its true leg's long/short role ($1 each) | "the set of historical dates on which the pairs open"; "we replace the actual stocks" |
-| close | the random pair's own next crossing; forced exits on delisting, last row, period end | "after the next crossing of prices" |
+| close | with the true trade it replaces (the true pair's next crossing, or period end); earlier only on a drawn stock's delisting or last row | the caption ties the open to "the stocks in the true pair" and closes "after the next crossing of prices"; the dates come from the true trades ("the set of historical dates on which the various pairs open", "the entire set of trading dates") |
 | accounting | buy-and-hold $1 legs, eq. (2) payoff, eq. (3) short weight floored at zero | the pipeline's conventions |
 | portfolios | ranks 1-5, 1-20, 101-120, 1-120 of each cohort's ranking | Table 6's columns; "All 120" is the top 120 pairs |
 | replications | 200, fixed seed | the paper's count; reproducible |
@@ -114,13 +116,14 @@ True minus random, replication by replication:
 - The bootstrap trades every true opening, including the second and later
  round trips of a pair, and each draw is a fresh pair (the paper does not say
  whether stocks are resampled per opening or per pair).
-- Because a random pair closes on its own crossing, a later opening of the same
- rank can arrive while an earlier random position is still open; the two are
- then held together in that rank's book (the true-pair rule re-opens a pair
- only after it has closed).
 - A random leg with no price after the opening day produces no position.
-- The random pair closes on its own crossing; closing on the true pair's date
- is equally literal and is not computed here.
+- The caption does not say whose crossing closes the random position. Closing
+ on the drawn stocks' own next crossing (`--close own`) is the measured
+ alternative: random means -0.16 / -0.23 / -0.23 / -0.24% without the wait,
+ standard deviations 3.5 / 1.8 / 1.9 / 0.8%, and the claim holds as well
+ (REVIEW_NOTES section 54). A third reading, trading the drawn stocks on their
+ own 2-sigma rule, contradicts the caption's open and does not diversify like
+ the paper's random pairs (top-120 standard deviation 3.1% against 1.2%).
 - The significance test is a Newey-West t of the monthly true-minus-random
  series, averaged over replications, not the paper's own (unreported) test.
 

@@ -104,6 +104,21 @@ def test_forced_exits_are_not_delayed_by_the_wait():
     assert close[0] == 2 and reason[0] == eng.DELISTED
 
 
+def test_forced_closes_ignore_crossings_and_stop_at_a_delisting():
+    # The default close is the true trade's day; a drawn stock can only cut it short
+    # by a delisting or its last row, never by its own prices crossing.
+    T = 8
+    term = np.zeros((T, 2), dtype=bool)
+    term[4, 1] = True                       # position 2's short leg delists on day 4
+    last = np.array([T - 1, T - 1])
+    close, reason = eng.forced_closes(np.array([1, 1]), np.zeros((T, 2), dtype=bool), term,
+                                      last, np.array([T - 1, 4]))
+    assert close.tolist() == [T - 1, 4]
+    assert reason.tolist() == [eng.END, eng.DELISTED]
+    true_close = np.array([3, 6])
+    assert np.minimum(close, true_close).tolist() == [3, 4]
+
+
 def test_last_available_row_and_end_of_period_close():
     # no crossing here, so a leg's last available row is what closes the pair
     close, reason = eng.resolve_closes(

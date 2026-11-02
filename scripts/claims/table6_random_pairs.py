@@ -28,10 +28,16 @@ One replication (see ``report/replication/claims/TABLE6.md``)
 For every true-pair opening in a cohort (``w0_trades`` for Panel A,
 ``w1_trades`` for Panel B) draw two stocks from the cohort's formation universe,
 each from the decile of the previous calendar month's ``mthret`` that its true
-leg occupies, excluding the two true legs and each other.  Go long the cheaper
-leg at the open and short the dearer.  Close on the random pair's own first
-crossing of the normalized prices; exit early on a delisting, a leg's last
-available row, or the end of the trading period.  Position accounting, portfolio
+leg occupies, excluding the two true legs and each other.  Each drawn stock
+keeps its true leg's role (the long leg's stand-in is bought, the short leg's
+sold short).  The random position opens and closes with the true trade it
+replaces, the true pair's 2-sigma divergence and its next crossing (Table 6's
+caption: "opens a position in a random pair when the stocks in the true pair
+diverge by two historical standard deviations and closes the position after the
+next crossing of prices"), and exits early only on a delisting or a drawn leg's
+last available row (``--close true``, the default).  ``--close own`` closes on
+the drawn stocks' own next crossing instead, the alternative reading of the
+caption (REVIEW_NOTES section 54).  Position accounting, portfolio
 construction and monthly compounding follow the shipped engine
 (``project.models``) and portfolio layer (``project.evaluation``); the vectorised
 re-implementation in ``scripts/claims/t6_engine.py`` is pinned against both.
@@ -105,6 +111,8 @@ STATS = ("mean", "std", "median")
 END = (2002, 12)
 UNIVERSE = "vol_common"
 MAX_STALE_SHARE = 0.95
+#: Table 6 close rules: with the true trade (primary) or the drawn stocks' own crossing.
+CLOSE_RULES = ("true", "own")
 DEFAULT_SEED = 20060101
 #: The pipeline's eq. (3) short weight (``--short-weights position``).
 SHORT_WEIGHTS = "position"
@@ -538,8 +546,15 @@ def true_pair_series(cache_root: Path, panel: CohortPanel, wait: int) -> tuple[n
 
 
 def run_cohort(cache_root: Path, year: int, month: int, reps: int, seed: int,
-               chunk: int = 25) -> dict:
-    """Bootstrap and true-pair series of one cohort, both panels."""
+               chunk: int = 25, close_rule: str = "true") -> dict:
+    """Bootstrap and true-pair series of one cohort, both panels.
+
+    ``close_rule`` "true" closes each random position with the true trade it
+    replaces (capped by the drawn legs' forced exits); "own" closes it on the drawn
+    stocks' own next crossing.
+    """
+    if close_rule not in CLOSE_RULES:
+        raise ValueError(f"close_rule must be one of {CLOSE_RULES}, got {close_rule!r}")
     panel = cohort_panel(cache_root, year, month)
     months = np.unique(panel.month_of_day)
     month_index = pd.DatetimeIndex([month_timestamp(int(k)) for k in months])
@@ -587,9 +602,21 @@ def run_cohort(cache_root: Path, year: int, month: int, reps: int, seed: int,
                                         panel.levels[ids_l.ravel()])
             ps = eng.prices_from_returns(panel.returns[:, ids_s.ravel()],
                                         panel.levels[ids_s.ravel()])
-            close, reason = eng.resolve_closes(
-                opens, pl, ps, panel.terminal[:, ids_l.ravel()], panel.terminal[:, ids_s.ravel()],
-                panel.last_valid[ids_l.ravel()], panel.last_valid[ids_s.ravel()], wait=wait)
+            if close_rule == "own":
+                close, reason = eng.resolve_closes(
+                    opens, pl, ps, panel.terminal[:, ids_l.ravel()],
+                    panel.terminal[:, ids_s.ravel()], panel.last_valid[ids_l.ravel()],
+                    panel.last_valid[ids_s.ravel()], wait=wait)
+            else:
+                forced, forced_reason = eng.forced_closes(
+                    opens, panel.terminal[:, ids_l.ravel()], panel.terminal[:, ids_s.ravel()],
+                    panel.last_valid[ids_l.ravel()], panel.last_valid[ids_s.ravel()])
+                true_close = np.repeat(trades["close_day"].to_numpy(np.int64), c)
+                close = np.minimum(forced, true_close)
+                reason = np.where(forced < true_close, forced_reason, eng.CONVERGED)
+                cut = int((live & (forced < true_close)).sum())
+                stats["waits"][str(wait)]["forced_before_true_close"] = (
+                    stats["waits"][str(wait)].get("forced_before_true_close", 0) + cut)
             close = np.where(live, close, opens)
             vals = eng.account(opens, close, ids_l.ravel(), ids_s.ravel(), panel.returns)
             books = eng.rank_books(vals, events["rank"].to_numpy(np.int64), N_RANKS, c)
@@ -635,7 +662,8 @@ def run_shard(args, cohorts: list[tuple[int, int]], shard: int, shards: int) -> 
             done += 1
             continue
         started = time.time()
-        payload = run_cohort(cache_root, year, month, args.reps, args.seed)
+        payload = run_cohort(cache_root, year, month, args.reps, args.seed,
+                             close_rule=args.close)
         tmp = path.with_suffix(".npz.tmp")
         with open(tmp, "wb") as handle:
             np.savez_compressed(handle, **payload)
@@ -656,7 +684,7 @@ def run_all(args, cohorts: list[tuple[int, int]]) -> int:
     for shard in range(workers):
         cmd = [sys.executable, script, "--mode", "shard",
                "--cache-root", str(Path(args.cache_root).resolve()), "--out-root", str(out_root),
-               "--reps", str(args.reps), "--seed", str(args.seed),
+               "--reps", str(args.reps), "--seed", str(args.seed), "--close", args.close,
                "--shard", str(shard), "--shards", str(workers)]
         if args.force:
             cmd.append("--force")
@@ -772,6 +800,9 @@ def main() -> int:
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--shards", type=int, default=1)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--close", choices=CLOSE_RULES, default="true",
+                        help="close each random position with its true trade (default) or on the "
+                             "drawn stocks' own next crossing")
     args = parser.parse_args()
 
     cache_root = Path(args.cache_root).resolve()

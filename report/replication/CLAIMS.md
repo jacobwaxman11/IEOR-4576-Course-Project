@@ -16,8 +16,9 @@ Verdict standard:
 - **partly replicated**: one part of the claim, or some of its portfolios, meets one of the two
   standards above and the rest does not; the verdict names which.
 - **not replicated as stated**: the claim's own wording fails, with the reason given.
-- **not testable by replication**: an interpretation the paper draws from evidence, which no
-  statistic can confirm; the verdict says what of the evidence replicates.
+
+Claims keep the numbers 1-25. Claim 4 is an interpretation, not a result, and is not counted:
+it is listed under "Not tested" below, so 24 claims are tested.
 
 Scores of the tables the claims rest on (✓ within 10% / ~ within 25% / ✗), from
 `REPLICATION_CHECK.md`: Table 1 47/17/24 of 88; Table 2A 17/7/0 of 24; Table 2B 28/1/11 of 40;
@@ -35,12 +36,14 @@ the SCORE_LOG row 17 accounting (each book compounded before subtracting; REVIEW
 | replicated in substance (14) | 2, 3, 5, 6, 11, 12, 13, 14, 15, 18, 21, 22, 23, 25 |
 | partly replicated (4) | 9 (top 20 and 20 after the top 100), 10 (the size mix, not the single-decile gap), 20 ((a) profits survive recalls; (b) the 4-13 bp cost does not replicate), 24 (all but the top 5) |
 | not replicated as stated (1) | 16 (the top-20 long alpha is significant) |
-| not testable by replication (1) | 4 (temporary mispricing is the paper's interpretation) |
+
+Not counted: claim 4 (temporary mispricing), the paper's interpretation of the evidence above;
+see "Not tested".
 
 This ledger used to say "23 of 25 claims hold". That count put the partly replicated claims 9, 20
 and 24 and the interpretation in claim 4 among the claims that hold, and quoted claim 10 without
 the half of its sentence that does not replicate (the decile row then averaged all pairs). The
-table above counts each of them once, in the verdict it earns.
+table above counts each tested claim once, in the verdict it earns, and leaves claim 4 out.
 
 ## Abstract and introduction
 
@@ -48,8 +51,7 @@ table above counts each of them once, in the verdict it earns.
 |---|---|---|---|
 | 1 | "average annualized excess returns of up to 11% for self-financing portfolios of pairs" (p. 797) | Table 1 Panel B: 0.723 / 0.891 / 0.764 / 0.629% a month (0.745 / 0.895 / 0.795 / 0.715%), t 6.45 / 9.28 / 9.85 / 7.00 (6.26 / 9.29 / 9.40 / 7.92); the top 20 annualise to 11.2% (10.7%) | replicated with numbers: three of four means within 10%, the all-pairs mean 12% low; Table 1 has 64 of 88 cells within 25% |
 | 2 | "The profits typically exceed conservative transaction-cost estimates" (p. 797) | claims 7-9: net of the paper's 324 bp per six months, our profits are 59-223 bp (113-225 bp) | replicated in substance; see claim 9 |
-| 3 | "Bootstrap results suggest that the 'pairs' effect differs from previously documented reversal profits" (p. 797) | Table 6 (`claims/TABLE6.md`), 200 replications: each leg replaced by a stock from the same decile of prior-month return, traded on the true pairs' opening dates. Random pairs lose 0.12-0.25% a month in all 16 series (0.00-0.18%); with the one-day wait the top 20 earn 0.891% against -0.219% for their random twins (0.895% against -0.004%); true minus random is 0.94-1.24 times the paper's own gap, positive in every replication, Newey-West t 4.47-16.8 | replicated in substance: random pairs lose money and fall far below the true pairs, as the paper finds; 1 of 48 cells within 10% and 19 within 25%, because our random losses are larger than the paper's |
-| 4 | "Robustness of the excess returns indicates that pairs trading profits from temporary mispricing of close substitutes" (p. 797) | the robustness evidence the sentence rests on replicates: the one-day wait (claim 7), every sector (claim 11), both subperiods (claims 17-18), the top three size deciles (claim 19) and short recalls (claim 20 (a)) | not testable by replication: "profits from temporary mispricing" is the paper's interpretation of that evidence, not a statistic it prints |
+| 3 | "Bootstrap results suggest that the 'pairs' effect differs from previously documented reversal profits" (p. 797) | Table 6 (`claims/TABLE6.md`), 200 replications: each leg replaced by a stock from the same decile of prior-month return, opened and closed with the true trades they replace. Random pairs lose 0.15-0.34% a month in all 16 series (0.00-0.18%); with the one-day wait the top 20 earn 0.891% against -0.290% for their random twins (0.895% against -0.004%); true minus random is 1.00-1.31 times the paper's own gap, positive in every replication, Newey-West t 4.34-16.8 | replicated in substance: random pairs lose money and fall far below the true pairs, as the paper finds; 8 of 48 cells within 10% and 18 within 25%, because our random losses are larger than the paper's |
 | 5 | "We link the profitability to the presence of a common factor in the returns, different from conventional risk measures" (p. 797) | Figure 4: correlation of the top 20 and the 20 after the top 100, 0.33 (0.48) raw and 0.28 (0.41) on five-factor residuals; Figure 4 0/2/4 of 6 | replicated in substance: a positive common component that survives the five factors, at about two thirds of the paper's level |
 | 6 | "If the U.S. equity market were efficient at all times, risk-adjusted returns from pairs trading should not be positive" (p. 797) | Table 4 intercepts 0.739 / 0.886 / 0.824 / 0.660% (0.545 / 0.764 / 0.714 / 0.512%), Newey-West t 6.19 / 8.71 / 11.04 / 10.04 (3.81 / 7.08 / 8.66 / 5.30) | replicated in substance: positive and significant in every column, 15-36% above the paper's |
 
@@ -82,9 +84,17 @@ table above counts each of them once, in the verdict it earns.
 | 24 | "although raw returns have fallen, the risk-adjusted returns have continued to persist despite increased hedge fund activity" (p. 826) | Table 8 after 1988: means 0.286 / 0.381 / 0.526 / 0.143% (0.217 / 0.375 / 0.327 / 0.212%); intercepts 0.207 / 0.368 / 0.587 / 0.308% (0.337 / 0.417 / 0.363 / -0.065%), t 1.58 / 4.50 / 8.04 / 3.26 (2.12 / 3.77 / 3.01 / -0.56); `REVIEW_NOTES.md` section 52 | partly replicated: positive and significant for the top 20 and the 20 after the top 100; the top-5 alpha is positive but not significant (t 1.58 against 2.12) |
 | 25 | "the change in risk-adjusted returns of pairs trading is accompanied by the diminished importance of a common factor" (p. 826) | Figure 4: raw correlation 0.39 (0.51) before 1989 and 0.05 (0.18) after; on residuals 0.33 (0.42) and 0.10 (0.20) | replicated in substance: the common component weakens after 1988 in both; the levels are lower than the paper's (0/2/4 of 6) |
 
-Not tested: the conclusion's call for "further examination of the nature of this common factor"
-(p. 826), which is a direction for research. Table 5 Panel A (value at risk, 7/6/7 of 20) is
-descriptive and carries no separate claim.
+Not tested:
+
+- Claim 4, "Robustness of the excess returns indicates that pairs trading profits from temporary mispricing of close substitutes" (p. 797): "profits from temporary mispricing" is the paper's reading of the evidence,
+  not a statistic it prints, and the paper's body never uses the phrase again (its mechanism
+  language is the "Law of One Price", pp. 798, 800, 823, 826). The robustness it rests on is
+  tested in its own rows: the one-day wait (claim 7), every sector (11), both subperiods
+  (17-18), the top three size deciles (19) and short recalls (20 (a)).
+- The conclusion's call for "further examination of the nature of this common factor"
+  (p. 826), which is a direction for research.
+
+Table 5 Panel A (value at risk, 7/6/7 of 20) is descriptive and carries no separate claim.
 
 ## How to read the verdicts
 

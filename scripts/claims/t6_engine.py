@@ -123,6 +123,34 @@ def resolve_closes(
     return close, reason
 
 
+def forced_closes(
+    open_days: np.ndarray,
+    terminal_long: np.ndarray,
+    terminal_short: np.ndarray,
+    last_valid_long: np.ndarray,
+    last_valid_short: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """The first forced exit of each position: a delisting, a leg's last row, or period end.
+
+    ``resolve_closes`` without the crossing: the day after ``o`` on which either
+    leg has a terminal row or its last available row, else the last day of the
+    trading period. Forced exits are never delayed, so ``wait`` does not enter.
+    Returns ``(close_day, reason)`` of shape ``(N,)``.
+    """
+    open_days = np.asarray(open_days, dtype=np.int64)
+    T, N = terminal_long.shape
+    days = np.arange(T)[:, None]
+    after = days > open_days[None, :]
+    delisted = terminal_long | terminal_short
+    lastrow = (days == last_valid_long[None, :]) | (days == last_valid_short[None, :])
+    event = (delisted | lastrow | (days == T - 1)) & after
+    has_event = event.any(axis=0)
+    close = np.where(has_event, event.argmax(axis=0).astype(np.int64), T - 1)
+    close = np.maximum(close, np.minimum(open_days + 1, T - 1))
+    reason = np.where(delisted[close, np.arange(N)], DELISTED, END).astype(np.int64)
+    return close, reason
+
+
 def account(
     open_days: np.ndarray,
     close_days: np.ndarray,
@@ -189,9 +217,9 @@ def rank_books(
     (``index = trade * n_reps + rep``), which is what the bootstrap produces.
     The value of a rank is the sum over that rank's trades: an exact one-
     position-at-a-time book for the kernel's own trade log (the control path),
-    while a replication, whose closes are re-resolved from the random prices,
-    can hold two openings of one rank at once and then sums them into a single
-    book for that rank.
+    and for a replication that closes with the true trades (the default). Under
+    ``--close own`` a replication re-resolves closes from the random prices, can
+    hold two openings of one rank at once and then sums them into one book.
     """
     T, N = next(iter(trade_values.values())).shape
     n_trades = trade_rank.shape[0]
