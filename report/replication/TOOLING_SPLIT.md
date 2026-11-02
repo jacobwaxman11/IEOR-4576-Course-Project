@@ -16,6 +16,10 @@ the baseline PR still needs the outstanding specification-wide validations.
   share-adjustment factors for observed volume. Missing inputs cannot masquerade as
   zero recall costs (paper §3.9 / Table 9B).
 - Resolve the Table 7 cache root correctly and reject an unsupported cache schema.
+- Reconcile explicitly supplied full-run outputs: sample coverage, finite values,
+  Table 1/Table 7 identities, isolated robustness settings, unchanged selections
+  and trade timing, and the matched Table 6 control. This validator reads existing
+  experiment directories; adding it does not adopt their baseline in main.
 
 ## Evidence that the team's baseline is preserved
 
