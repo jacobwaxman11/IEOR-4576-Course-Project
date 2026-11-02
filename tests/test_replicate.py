@@ -81,6 +81,29 @@ def test_formation_options_stamp_every_value():
     }
 
 
+def test_long_delisting_loss_is_stamped_only_when_on(tmp_path, monkeypatch):
+    base = argparse.Namespace(same_issuer="allow", max_stale_share=None, telephone_sic="4811",
+                              trigger_sigma="std", short_weights="value", size_deciles_top=None)
+    off = rep.formation_options(argparse.Namespace(**vars(base), long_delisting_loss=False))
+    assert "long_delisting_loss" not in off
+    assert off == rep.formation_options(base)
+    on = rep.formation_options(argparse.Namespace(**vars(base), long_delisting_loss=True))
+    assert on == {**off, "long_delisting_loss": True}
+    # a default cache does not verify for a wipeout run, nor the reverse
+    monkeypatch.setattr(rep, "cohort_dir", lambda universe: tmp_path / universe / "cohorts")
+    monkeypatch.setattr(rep, "FORMATION_OPTIONS", off)
+    rep.stamp_cache("u", continued=True, force=False)
+    rep.verify_cache("u", continued=True)
+    monkeypatch.setattr(rep, "FORMATION_OPTIONS", on)
+    with pytest.raises(SystemExit, match="no long_delisting_loss stamp"):
+        rep.verify_cache("u", continued=True)
+    job = rep.Job(2020, 7, (2020, 12), (0, 1), "u", True, long_delisting_loss=True)
+    assert rep.job_from_shard(rep.job_to_shard(job)) == job
+    assert not rep.Job(2020, 7, (2020, 12), (0, 1), "u", True).long_delisting_loss
+    assert any("Long delisting loss: on" in line for line in rep.conventions(on, "value"))
+    assert not any("delisting loss" in line for line in rep.conventions(off, "value"))
+
+
 def test_verify_names_an_unstamped_option(tmp_path, monkeypatch):
     monkeypatch.setattr(rep, "cohort_dir", lambda universe: tmp_path / universe / "cohorts")
     rep.stamp_cache("u", continued=True, force=False)

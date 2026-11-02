@@ -25,6 +25,11 @@ def conventions(options: dict, short_weights: str) -> list[str]:
     """Describe the run's actual settings, never hard-coded historical defaults."""
     sigma = options.get("trigger_sigma", "std")
     aggregation = options.get("monthly_aggregation", "books")
+    # Opt-in sensitivities are described only when on, so a default run's text is unchanged.
+    optional = []
+    if options.get("long_delisting_loss"):
+        optional += ["Long delisting loss: on. An open position's long leg returns -100% on its",
+                     "delisting row (footnote 5's extreme assumption); this is a sensitivity."]
     return [
         "## Specification and limitations", "",
         f"Entry scale: `{sigma}`. Standard deviation about the formation mean implements",
@@ -55,6 +60,7 @@ def conventions(options: dict, short_weights: str) -> list[str]:
         "and exits the next day if a crossing occurred on the entry day. Cancel is legacy behavior.",
         "period_cash and selected_cash outputs audit fixed-dollar payoff/period denominators;",
         "they are explicit alternatives, not substitutes chosen to improve target fit.",
+        *optional,
         "", "Factor results are proxy robustness checks: French ST_Rev is not the paper's",
         "unavailable custom reversal series, and rebuilt Ibbotson inputs have not been",
         "validated against its proprietary vintage. Significant proxy-factor alpha does not",

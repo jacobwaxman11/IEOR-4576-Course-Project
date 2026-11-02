@@ -14,7 +14,7 @@ Usage:
         [--same-issuer exclude|allow] [--max-stale-share SHARE|none]
         [--telephone-sic 4811|481x] [--trigger-sigma rms|std]
         [--size-deciles-top N] [--specification paper|legacy]
-        [--monthly-aggregation books|daily_difference]
+        [--monthly-aggregation books|daily_difference] [--long-delisting-loss]
 
 Cohorts are cached under data/processed/replication/{NAME}/cohorts/, stamped
 with their trading normalization, cache format and formation options in
@@ -547,7 +547,8 @@ def verify_cache(universe: str, continued: bool) -> None:
             f"pass --normalization {meta.get('normalization')} or rebuild with --force"
         )
     for key in ("exclude_same_issuer", "max_stale_share", "telephone_sic", "trigger_sigma",
-                "short_weights", "size_deciles_top", "monthly_aggregation", "exclude_constant", "sic_fallback", "universe", "delayed_entry", "idle_policy", "data_source"):
+                "short_weights", "size_deciles_top", "monthly_aggregation", "exclude_constant", "sic_fallback", "universe", "delayed_entry", "idle_policy", "data_source",
+                "long_delisting_loss"):
         if meta.get(key) != want.get(key):
             built = f"{key}={meta[key]}" if key in meta else f"no {key} stamp"
             now = f"{key}={want[key]}" if key in want else f"no {key}"
@@ -618,6 +619,8 @@ class Job:
     sic_fallback: str = "formation_end"
     delayed_entry: str = "execute"
     idle_policy: str = "zero"
+    #: Footnote 5's robustness check: a delisting long leg returns -100%.
+    long_delisting_loss: bool = False
 
 
 def init_worker(fallbacks: tuple[pd.Series, ...] | None = None) -> None:
@@ -781,7 +784,8 @@ def build_cohort(job: Job) -> tuple[int, int]:
         # stays byte-identical to the shipped cache.
         summary["size_deciles_top"] = job.size_deciles_top
     for wait in job.waits:
-        result = simulate_cohort(pairs, rets, term, wait=wait, start_levels=levels, delayed_entry=job.delayed_entry)
+        result = simulate_cohort(pairs, rets, term, wait=wait, start_levels=levels, delayed_entry=job.delayed_entry,
+                                 long_delisting_loss=job.long_delisting_loss)
         result.trades.to_parquet(coh_dir / f"w{wait}_trades.parquet")
         result.opened.rename("opened").to_frame().to_parquet(coh_dir / f"w{wait}_opened.parquet")
         for pname, ranks in PORTFOLIOS.items():
@@ -820,7 +824,8 @@ def build_cohort(job: Job) -> tuple[int, int]:
         summary["sector_counts"][f"pairs_{sector}"] = len(sp)
         if sp.empty:
             continue
-        result = simulate_cohort(sp, rets, term, wait=1, start_levels=levels, delayed_entry=job.delayed_entry)
+        result = simulate_cohort(sp, rets, term, wait=1, start_levels=levels, delayed_entry=job.delayed_entry,
+                                 long_delisting_loss=job.long_delisting_loss)
         for pname, ranks in TABLE3_PORTFOLIOS.items():
             if ranks is not None and len(sp) < max(ranks):
                 continue
@@ -2249,6 +2254,9 @@ def formation_options(args: argparse.Namespace) -> dict:
     options["universe"] = getattr(args, "universe", "traded_common")
     options["delayed_entry"] = getattr(args, "delayed_entry", "execute")
     options["idle_policy"] = getattr(args, "idle_policy", "zero")
+    # Stamped only when on, so a default cache's stamp is unchanged.
+    if getattr(args, "long_delisting_loss", False):
+        options["long_delisting_loss"] = True
     from project.data import processed_source_identity
 
     if source := processed_source_identity():
@@ -2332,6 +2340,11 @@ def main() -> None:
         "--size-deciles-top", type=_decile_count, default=None,
         help="form pairs only among stocks in the largest N CRSP size deciles at the "
              "formation end (Table 9 Panel A uses 3); default off (no size screen)",
+    )
+    parser.add_argument(
+        "--long-delisting-loss", action="store_true", default=False,
+        help="footnote 5's robustness check: an open position's long leg returns -100%% "
+             "on its delisting row (the short leg keeps its actual return); default off",
     )
     parser.add_argument(
         "--aggregate-only", action="store_true",
@@ -2418,7 +2431,8 @@ def main() -> None:
                     size_deciles_top=args.size_deciles_top,
                     monthly_aggregation=args.monthly_aggregation,
                     exclude_constant=args.exclude_constant, sic_fallback=args.sic_fallback,
-                    delayed_entry=args.delayed_entry, idle_policy=args.idle_policy)
+                    delayed_entry=args.delayed_entry, idle_policy=args.idle_policy,
+                    long_delisting_loss=args.long_delisting_loss)
                 for y, m in cohorts
                 if args.force or not cohort_cache_complete(y, m, waits, args.universe)
             ]
