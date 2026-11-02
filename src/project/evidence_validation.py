@@ -14,11 +14,13 @@ import pandas as pd
 from project.validation import PORTFOLIOS, summarize_run
 
 
-def validate_bootstrap_sample(frames: list[dict], series: dict, reps: int) -> dict:
+def validate_bootstrap_sample(frames: list[dict], series: dict, reps: int, *, start="1963-02") -> dict:
     """A Table 6 full-sample report must not silently average incomplete runs."""
-    expected_cohorts = pd.period_range("1963-02", "2002-12", freq="M").astype(str).tolist()
+    if start not in {"1963-02", "1963-07"}:
+        raise ValueError("Unsupported full-sample first cohort")
+    expected_cohorts = pd.period_range(start, "2002-12", freq="M").astype(str).tolist()
     if sorted(f["cohort"] for f in frames) != expected_cohorts:
-        raise ValueError("Table 6 requires every cohort from 1963-02 through 2002-12")
+        raise ValueError(f"Table 6 requires every cohort from {start} through 2002-12")
     if len(series) != 16:
         raise ValueError("Table 6 requires all 16 portfolio/capital/delay series")
     for frame in frames:
