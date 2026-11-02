@@ -82,3 +82,12 @@ def stamp_experiment(output, source_meta: dict, parameters: dict, *, read_only=F
         raise ValueError("Unstamped or incompatible claim output; use a new output directory for changed conventions")
     output.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(expected, sort_keys=True, indent=2) + "\n")
+
+
+def validate_cache_identity(meta: dict, *, expected_format: int, options=None) -> None:
+    """A report must read the cache schema and explicit settings it supports."""
+    expected = {"format": expected_format, **(options or {})}
+    bad = {key: (meta.get(key), value) for key, value in expected.items()
+           if meta.get(key) != value}
+    if bad:
+        raise ValueError(f"Incompatible report cache: {bad}")

@@ -52,6 +52,7 @@ eval/
 scratch/
 data/processed/ui_import_manifest.json
 
-# Local issuer mapping extracted from licensed CIZ web observations.
+# Local import/audit products and issuer mappings.
+data/processed/crsp_siz_reits/
 data/interim/ciz_issuer_header.parquet
 data/interim/ciz_issuer_header.source.json

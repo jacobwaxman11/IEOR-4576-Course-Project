@@ -7,6 +7,7 @@ same paper values the check uses, and the totals must reconcile with the check.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -17,8 +18,9 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "scripts"))
 
 import cell_margins
+from project.replication_report import score_report
 
-TABLES = REPO / "results" / "replication" / "tables"
+TABLES = Path(os.environ.get("GGR_REPLICATION_TABLES", REPO / "results" / "replication" / "tables"))
 
 
 @pytest.fixture(scope="module")
@@ -28,6 +30,13 @@ def cells():
     if not (TABLES / "table1.csv").exists():
         pytest.skip("needs the built tables in results/replication/tables; run `make benchmark`")
     return cell_margins.collect(TABLES)
+
+
+@pytest.fixture(scope="module")
+def check_text(cells):
+    # A populated table directory without its matching check is an incomplete
+    # build, not a reason to silently skip reconciliation.
+    return (TABLES / "replication_check.md").read_text()
 
 
 class TestGrade:
@@ -47,14 +56,14 @@ class TestGrade:
 
 
 class TestCollected:
-    def test_table_1_3_totals_reconcile_with_the_check(self, cells):
+    def test_table_1_3_totals_reconcile_with_the_check(self, cells, check_text):
         # Tables 1-3 are 291 of the check's 323 cells (Table 7 holds the rest).
         assert len(cells) == 291
-        # SCORE_LOG row 17 (book compounding, mixed-pairs decile row): 187.0 -> 184.5
-        assert cells.points.sum() == pytest.approx(184.5)
-        assert (cells.mark == "✓").sum() == 150
-        assert (cells.mark == "~").sum() == 69
-        assert (cells.mark == "✗").sum() == 72
+        check = score_report(check_text, tables={1, 2, 3})
+        assert check["total_cells"] == len(cells)
+        assert cells.points.sum() == pytest.approx(check["score"])
+        for mark, key in (("✓", "full"), ("~", "half"), ("✗", "miss")):
+            assert (cells.mark == mark).sum() == check[key]
 
     def test_every_cell_names_a_known_section(self, cells):
         expected = {"Table 1 Panel A", "Table 1 Panel B", "Table 2 Panel A",
@@ -78,8 +87,9 @@ class TestCollected:
         expected = movers.gap - np.where(movers.mark == "~", 0.10, 0.25)
         assert np.allclose(movers.margin.to_numpy(), expected.to_numpy())
 
-    def test_tail_statistics_are_the_weak_family(self, cells):
+    def test_tail_statistics_reconcile_with_the_check(self, cells, check_text):
         tails = cells[cells.statistic.isin(cell_margins.TAILS)]
         assert len(tails) == 92
-        assert tails.points.sum() == pytest.approx(30.0)  # 28.5 before SCORE_LOG row 17
-        assert tails.points.mean() < cells.points.mean()
+        check = score_report(check_text, tables={1, 2, 3}, statistics=cell_margins.TAILS)
+        assert check["total_cells"] == len(tails)
+        assert tails.points.sum() == pytest.approx(check["score"])

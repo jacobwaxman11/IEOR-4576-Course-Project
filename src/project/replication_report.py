@@ -6,11 +6,24 @@ import re
 from collections import Counter
 
 
-def score_report(text: str) -> dict:
-    """Count marked comparison cells; points are not a count of matching cells."""
+def score_report(text: str, *, tables=None, statistics=None) -> dict:
+    """Count comparison cells, optionally restricted to tables and row statistics.
+
+    Filters use report headings and row names, not a stored historical score.
+    Points are not a count of matching cells.
+    """
     counts = Counter()
+    table = None
     for line in text.splitlines():
+        if line.startswith("## "):
+            match = re.match(r"## Table (\d+)\b", line)
+            table = int(match.group(1)) if match else None
+        if tables is not None and table not in tables:
+            continue
         if line.lstrip().startswith("|") and " / " in line:
+            statistic = line.split("|")[1].strip()
+            if statistics is not None and statistic not in statistics:
+                continue
             counts.update(re.findall(r"\s(✓|~|✗)\s*(?=\||$)", line))
     full, half, miss = (counts[m] for m in ("✓", "~", "✗"))
     n = full + half + miss

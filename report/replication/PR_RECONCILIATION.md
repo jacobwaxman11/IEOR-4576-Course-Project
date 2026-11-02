@@ -1,10 +1,22 @@
 # Reconciliation of PR #8 with Hao and Eiko
 
 November 2, 2026. PR #8 reconciles Hao’s merged **#9–10** and Eiko’s **#12**
-(`f07fc8c`), which superseded her closed, unmerged #11 (`83aa60c`). The team
+(`f07fc8c`), which superseded his closed, unmerged #11 (`83aa60c`). The team
 merged #12 into `main` at **`5499701`** while this reconciliation was running.
 That updated main is integrated locally into PR #8. No teammate branch was
-rewritten. **PR #8 remains open, with auto-merge off; this task merged no GitHub PR.**
+rewritten. Hao’s subsequent review confirms the six earlier concerns are resolved.
+His requested split is now implemented: [PR #13](https://github.com/jacobwaxman11/IEOR-4576-Course-Project/pull/13)
+contains importers and cache/input safeguards with main’s trading defaults and
+checked outputs unchanged. PR #8 is based on that tooling branch and contains the
+remaining baseline conventions, experiments and evidence. Review #13 first.
+
+The two stale cell-margin tests now reconcile independent CSV calculations with
+the matching generated check rather than hard-code main’s old score. They pass
+against the existing complete baseline outputs; this fixes a test inconsistency,
+not a strategy result. The report/artifact alignment and same-baseline reruns of
+Tables 6, 9A and 9B remain outstanding. Hao’s independent same-input comparison
+is **243.0/481 versus main’s 261.0/481**; the baseline is not a uniformly better
+replication. The full historical evidence below remains tied to its named runs.
 
 The comparison starts from PR #8 at `5d137c3`. No old experiment or restricted
 observation is discarded. New generated results remain local in `results/`.
@@ -157,6 +169,29 @@ isolation, unchanged selections/trade timing, Table 1/Table 7 identities and the
 full Table 6 control, and writes aggregate evidence plus output SHA-256 hashes
 to ignored `results/replication/reconciliation/validation.json`.
 
+
+## Validation of the review split
+
+After integrating tooling PR #13, **395 tests passed and 9 skipped**. This run
+explicitly pointed the cell-margin checks at the full baseline table directory,
+so the two failures Hao reported were exercised rather than skipped. The tests
+compare all 291 Table 1–3 cells and all 92 tail cells with the matching check;
+they do not assert a desired replication score. A separate filter test confirms
+that other tables and summary marks cannot contaminate those counts.
+
+`python -m project.reconciliation` passed again against the existing three full
+474-cohort runs and the strict-reference Table 6 control. This is revalidation
+of preserved outputs, not a new same-baseline Table 6/9A/9B run. The nine suite
+skips concern published-PDF checks, unavailable Ibbotson proxy inputs, an opt-in
+full rebuild and the shared-path Table 6 fixture. Local numerical-library warnings
+remain; the independent validator checks the full outputs for finite statistics.
+
+```sh
+GGR_ISSUER_HEADER=data/interim/ciz_issuer_header.parquet \
+GGR_REPLICATION_TABLES=results/replication/reconciliation/baseline/tables \
+PYTHONPATH=src OPENBLAS_NUM_THREADS=1 python -m pytest tests/ -q -rs
+PYTHONPATH=src OPENBLAS_NUM_THREADS=1 python -m project.reconciliation
+```
 
 ## Reproduction
 

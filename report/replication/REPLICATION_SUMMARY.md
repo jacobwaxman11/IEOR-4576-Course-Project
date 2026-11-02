@@ -1,4 +1,9 @@
-# GGR (2006): reconciled replication results
+# GGR (2006): proposed baseline and replication evidence
+
+Review split: [PR #13](https://github.com/jacobwaxman11/IEOR-4576-Course-Project/pull/13)
+preserves main’s checked baseline and separates the import/cache tooling. PR #8
+contains the proposed baseline below. These results are a labeled alternative
+until its remaining report alignment and same-baseline claim checks are reviewed.
 
 The project remains a **partial replication**. The new baseline combines Hao’s
 paper-supported compounding/decile fixes, a volume-based universe and July 1963
@@ -78,5 +83,11 @@ not replicate (0/48 within 10%, 9/48 within 25%). Validation: 383 tests passed,
 [PR_RECONCILIATION.md](PR_RECONCILIATION.md) records each decision, robustness
 results, controls and exact commands. [CLAIMS.md](CLAIMS.md) retains the numbered
 claim-by-claim ledger. New outputs and restricted observations remain local.
-The archived main check and its artifacts are labeled historical. PR #8 must
-remain open and unmerged.
+The archived main check and its artifacts are labeled historical. Cell-margin
+tests now compare against the same run’s generated check and pass on the full
+baseline outputs. Remaining integration work is to align the review artifacts
+with the adopted default and rerun Tables 6, 9A and 9B on that same default.
+Hao’s independent same-input rerun scores 243.0/481 versus main’s 261.0/481;
+that deterioration is reported alongside the closer Table 1 means. For submission,
+keep main’s checked results as the established team baseline and label PR #8’s
+numbers as this separately evaluated alternative.

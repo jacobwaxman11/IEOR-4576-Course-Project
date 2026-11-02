@@ -378,7 +378,8 @@ def build(cache_root: str | None = None, universe: str = "vol_common",
     """Read the cache and build every number the report prints."""
     cohorts_dir = resolve_cache(cache_root, universe) / "cohorts"
     meta = json.loads((cohorts_dir / "cache_meta.json").read_text())
-    from project.specification import validate_book_cache
+    from project.specification import validate_book_cache, validate_cache_identity
+    validate_cache_identity(meta, expected_format=rep.CACHE_FORMAT)
     validate_book_cache(meta)
     cohorts = cohort_list(cohorts_dir)
     if start is not None:

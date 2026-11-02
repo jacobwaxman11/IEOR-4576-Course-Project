@@ -16,6 +16,27 @@ from project.replication_report import conventions, score_report
 from project.specification import resolve_profile, validate_paper_cache
 
 
+def test_report_score_filters_do_not_mix_other_tables_or_summary_marks():
+    report = """## Summary
+| min | 1 / 1 ✓ |
+## Table 1 Panel A
+| mean | 1 / 1 ✓ | 1 / 2 ✗ |
+| min | 1 / 1.2 ~ |
+## Table 3: Utilities
+| min | 1 / 1 ✓ |
+## Table 7
+| min | 1 / 2 ✗ |
+## Limitations
+| min | 1 / 1 ✓ |
+"""
+    scored = score_report(report, tables={1, 2, 3})
+    assert (scored["total_cells"], scored["score"]) == (4, 2.5)
+    tails = score_report(report, tables={1, 2, 3}, statistics={"min"})
+    assert (tails["total_cells"], tails["score"]) == (2, 1.5)
+    changed = score_report(report.replace("1 / 1.2 ~", "1 / 1.2 ✗"), tables={1, 2, 3})
+    assert changed["score"] != scored["score"]
+
+
 def two_pairs(short_a, short_b, long_a=None):
     dates = pd.bdate_range("2000-01-03", periods=len(short_a))
     returns = pd.DataFrame({1: long_a if long_a is not None else 0., 2: short_a,
