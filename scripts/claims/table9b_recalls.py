@@ -76,7 +76,7 @@ from project.evaluation import (
 from project.features import normalized_prices
 from project.models import simulate_cohort
 from project.paths import ROOT
-from project.recalls import high_volume_days, volume_thresholds
+from project.recalls import adjusted_volume, high_volume_days, volume_thresholds
 
 PRIMARY_UNIVERSE = "vol_common"
 WAIT = 1

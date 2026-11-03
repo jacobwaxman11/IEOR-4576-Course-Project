@@ -28,6 +28,16 @@ def test_missing_volume_year_is_not_a_zero_recall_result(tmp_path):
                                     pd.Timestamp("2000-12-31").date())
 
 
+def test_volume_is_read_and_split_adjusted(tmp_path):
+    pd.DataFrame({"permno": [1, 1, 2], "dlycaldt": pd.to_datetime(["2000-01-03", "2000-01-04", "2000-01-03"]).date,
+                  "dlyvol": [100.0, 200.0, 50.0], "dlycumfacshr": [2.0, 2.0, 1.0]}
+                 ).to_parquet(tmp_path / "2000.parquet")
+    frame = VolumeSource(tmp_path).window([1], pd.Timestamp("2000-01-01").date(),
+                                          pd.Timestamp("2000-12-31").date())
+    assert frame.permno.tolist() == [1, 1]
+    assert frame.adjvol.tolist() == [200.0, 400.0]
+
+
 def test_conflicting_volume_is_rejected():
     frame = pd.DataFrame({"date": [pd.Timestamp("2000-01-01")] * 2,
                           "permno": [1, 1], "adjvol": [10., 11.]})
