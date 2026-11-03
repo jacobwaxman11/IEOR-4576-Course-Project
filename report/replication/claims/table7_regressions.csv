@@ -7,14 +7,14 @@ st_rev,mean,Mean monthly return,101-120,long,0.014816670622083842,0.01458,✓
 st_rev,mean,Mean monthly return,101-120,short,0.007173433880101591,0.00663,✓
 st_rev,mean,Mean monthly return,all,long,0.015066893821681695,0.01623,✓
 st_rev,mean,Mean monthly return,all,short,0.008776412195942133,0.00908,✓
-st_rev,nw_se,Standard error (Newey-West),top5,long,0.0018709242199005855,0.00183,✓
-st_rev,nw_se,Standard error (Newey-West),top5,short,0.0019650193320188488,0.00177,~
-st_rev,nw_se,Standard error (Newey-West),top20,long,0.001838677423966758,0.00179,✓
-st_rev,nw_se,Standard error (Newey-West),top20,short,0.0018627335996965484,0.00174,✓
-st_rev,nw_se,Standard error (Newey-West),101-120,long,0.0018765420971653323,0.0017,~
-st_rev,nw_se,Standard error (Newey-West),101-120,short,0.0016817401173485308,0.00165,✓
-st_rev,nw_se,Standard error (Newey-West),all,long,0.002685199041344557,0.00254,✓
-st_rev,nw_se,Standard error (Newey-West),all,short,0.0023813287862212346,0.00231,✓
+st_rev,nw_se,Standard error (Newey-West),top5,long,0.001868949629144727,0.00183,✓
+st_rev,nw_se,Standard error (Newey-West),top5,short,0.0019629454324098664,0.00177,~
+st_rev,nw_se,Standard error (Newey-West),top20,long,0.0018367368667780955,0.00179,✓
+st_rev,nw_se,Standard error (Newey-West),top20,short,0.0018607676533971395,0.00174,✓
+st_rev,nw_se,Standard error (Newey-West),101-120,long,0.0018745615772497587,0.0017,~
+st_rev,nw_se,Standard error (Newey-West),101-120,short,0.0016799651932473026,0.00165,✓
+st_rev,nw_se,Standard error (Newey-West),all,long,0.0026823650573978633,0.00254,✓
+st_rev,nw_se,Standard error (Newey-West),all,short,0.002378815509757166,0.00231,✓
 st_rev,std,Standard deviation,top5,long,0.03866174366806107,0.03875,✓
 st_rev,std,Standard deviation,top5,short,0.03554062221827736,0.03259,✓
 st_rev,std,Standard deviation,top20,long,0.037013238975775624,0.03653,✓
@@ -143,14 +143,14 @@ losers_only,mean,Mean monthly return,101-120,long,0.014816670622083842,0.01458,�
 losers_only,mean,Mean monthly return,101-120,short,0.007173433880101591,0.00663,✓
 losers_only,mean,Mean monthly return,all,long,0.015066893821681695,0.01623,✓
 losers_only,mean,Mean monthly return,all,short,0.008776412195942133,0.00908,✓
-losers_only,nw_se,Standard error (Newey-West),top5,long,0.0018709242199005855,0.00183,✓
-losers_only,nw_se,Standard error (Newey-West),top5,short,0.0019650193320188488,0.00177,~
-losers_only,nw_se,Standard error (Newey-West),top20,long,0.001838677423966758,0.00179,✓
-losers_only,nw_se,Standard error (Newey-West),top20,short,0.0018627335996965484,0.00174,✓
-losers_only,nw_se,Standard error (Newey-West),101-120,long,0.0018765420971653323,0.0017,~
-losers_only,nw_se,Standard error (Newey-West),101-120,short,0.0016817401173485308,0.00165,✓
-losers_only,nw_se,Standard error (Newey-West),all,long,0.002685199041344557,0.00254,✓
-losers_only,nw_se,Standard error (Newey-West),all,short,0.0023813287862212346,0.00231,✓
+losers_only,nw_se,Standard error (Newey-West),top5,long,0.001868949629144727,0.00183,✓
+losers_only,nw_se,Standard error (Newey-West),top5,short,0.0019629454324098664,0.00177,~
+losers_only,nw_se,Standard error (Newey-West),top20,long,0.0018367368667780955,0.00179,✓
+losers_only,nw_se,Standard error (Newey-West),top20,short,0.0018607676533971395,0.00174,✓
+losers_only,nw_se,Standard error (Newey-West),101-120,long,0.0018745615772497587,0.0017,~
+losers_only,nw_se,Standard error (Newey-West),101-120,short,0.0016799651932473026,0.00165,✓
+losers_only,nw_se,Standard error (Newey-West),all,long,0.0026823650573978633,0.00254,✓
+losers_only,nw_se,Standard error (Newey-West),all,short,0.002378815509757166,0.00231,✓
 losers_only,std,Standard deviation,top5,long,0.03866174366806107,0.03875,✓
 losers_only,std,Standard deviation,top5,short,0.03554062221827736,0.03259,✓
 losers_only,std,Standard deviation,top20,long,0.037013238975775624,0.03653,✓

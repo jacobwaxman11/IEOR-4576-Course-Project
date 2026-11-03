@@ -91,7 +91,7 @@ Ours first, the paper's in brackets; ✓ within 10%, ~ within 25%, ✗ beyond.
 |---|---|---|---|---|
 | Mean monthly return (fully invested) | 0.935% (0.835%) ~ | 0.945% (0.914%) ✓ | 0.675% (0.728%) ✓ | 0.677% (0.690%) ✓ |
 | Standard error (Newey-West) | 0.130% (0.112%) ~ | 0.111% (0.096%) ~ | 0.076% (0.075%) ✓ | 0.062% (0.064%) ✓ |
-| t-Statistic | 7.21 (7.47) ✓ | 8.51 (9.48) ~ | 8.88 (9.66) ✓ | 10.94 (10.85) ✓ |
+| t-Statistic | 7.22 (7.47) ✓ | 8.52 (9.48) ~ | 8.89 (9.66) ✓ | 10.96 (10.85) ✓ |
 | Median | 0.695% (0.800%) ~ | 0.836% (0.793%) ✓ | 0.563% (0.614%) ✓ | 0.567% (0.508%) ~ |
 | Standard deviation | 2.107% (1.904%) ~ | 1.613% (1.464%) ~ | 1.560% (1.579%) ✓ | 1.262% (1.294%) ✓ |
 | Kurtosis (printed as "Skewness") | 7.60 (7.01) ✓ | 8.31 (8.20) ✓ | 4.91 (6.46) ~ | 7.55 (11.67) ✗ |
@@ -110,14 +110,14 @@ Table 1 Panel B. t-statistics: screened (baseline).
 
 | Portfolio | Our mean change | Paper mean change | Our t | Paper t |
 |---|---|---|---|---|
-| Top 5 | +21.2 bp | +9.0 bp | 7.21 (6.45) | 7.47 (6.26) |
-| Top 20 | +5.3 bp | +1.9 bp | 8.51 (9.28) | 9.48 (9.29) |
-| 20 after top 100 | -9.0 bp | -6.7 bp | 8.88 (9.85) | 9.66 (9.40) |
-| All | +4.8 bp | -2.5 bp | 10.94 (7.00) | 10.85 (7.92) |
+| Top 5 | +21.2 bp | +9.0 bp | 7.22 (6.45) | 7.47 (6.26) |
+| Top 20 | +5.3 bp | +1.9 bp | 8.52 (9.29) | 9.48 (9.29) |
+| 20 after top 100 | -9.0 bp | -6.7 bp | 8.89 (9.86) | 9.66 (9.40) |
+| All | +4.8 bp | -2.5 bp | 10.96 (7.01) | 10.85 (7.92) |
 
 The claim test: the change is small (a few basis points against means of 60-90 bp) in both, it is
 largest and positive for the top 5 in both, negative for the 20 after the top 100 in both, and the
-"All" portfolio's t-statistic rises sharply in both (7.00 to 10.94 here, 7.92 to 10.85 in the
+"All" portfolio's t-statistic rises sharply in both (7.01 to 10.96 here, 7.92 to 10.85 in the
 paper). The one sign that differs is "All", where both changes are within 5 bp of zero.
 
 ## Verdict
@@ -126,7 +126,7 @@ paper). The one sign that differs is "All", where both changes are within 5 bp o
   10% and the top 5 within 25% (ours 0.935 / 0.945 / 0.675 / 0.677% against 0.835 / 0.914 / 0.728 /
   0.690%), and 38 of 44 cells are within 25%.
 - **Replicated in substance** as well: every t-statistic is above 2 where the paper's is (lowest
-  7.21), and our change against our own Table 1 Panel B has the paper's size and, in three of four
+  7.22), and our change against our own Table 1 Panel B has the paper's size and, in three of four
   portfolios, its sign.
 - The paper's sentence that the top 20 "drop by about 2 bp" disagrees with its own tables (+1.9 bp);
   ours rise by 5.3 bp.
