@@ -102,6 +102,29 @@ def test_long_delisting_loss_is_stamped_only_when_on(tmp_path, monkeypatch):
     assert not rep.Job(2020, 7, (2020, 12), (0, 1), "u", True).long_delisting_loss
 
 
+def test_an_explicit_input_panel_is_stamped_by_its_provenance(tmp_path, monkeypatch):
+    from project import data
+
+    default = rep.formation_options(argparse.Namespace(**_BASE_OPTIONS))
+    assert "processed_source" not in default
+    monkeypatch.setattr(rep, "cohort_dir", lambda universe: tmp_path / universe / "cohorts")
+    monkeypatch.setattr(rep, "FORMATION_OPTIONS", default)
+    rep.stamp_cache("u", continued=True, force=False)
+    panel = tmp_path / "siz"
+    panel.mkdir()
+    (panel / "source.json").write_text('{"return_convention": "SIZ"}')
+    monkeypatch.setenv("GGR_PROCESSED_DIR", str(panel))
+    monkeypatch.setattr(data, "PROCESSED_DIR", panel)
+    other = rep.formation_options(argparse.Namespace(**_BASE_OPTIONS))
+    assert other["processed_source"]["return_convention"] == "SIZ"
+    # cohorts built from the default panel are not reused for another vintage
+    monkeypatch.setattr(rep, "FORMATION_OPTIONS", other)
+    with pytest.raises(SystemExit, match="no processed_source stamp"):
+        rep.verify_cache("u", continued=True)
+    with pytest.raises(SystemExit, match="Rebuild it with --force"):
+        rep.stamp_cache("u", continued=True, force=False)
+
+
 def test_waste_sic_flag_is_stamped_only_when_not_industrials(tmp_path, monkeypatch):
     default = rep.formation_options(argparse.Namespace(**_BASE_OPTIONS))
     assert "waste_sic" not in default

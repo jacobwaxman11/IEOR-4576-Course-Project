@@ -207,7 +207,7 @@ def import_daily_csv(source: Path, output: Path, first_year: int, last_year: int
         audit["source_sha256"] = file_sha256(source)
         for year in range(first_year, last_year + 1):
             (stage / f"{year}.parquet").replace(output / f"{year}.parquet")
-    (output.parent / "ui_import_manifest.json").write_text(json.dumps(audit, indent=2) + "\n")
+    (output / "source.json").write_text(json.dumps(audit, indent=2) + "\n")
     return audit
 
 
