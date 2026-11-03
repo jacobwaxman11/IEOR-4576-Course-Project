@@ -2775,6 +2775,13 @@ codes 10/11/12 and 263.5 with REITs (code 18) added. The two releases agree on 5
 rows except the share code of corporate REITs, which CIZ classes as ordinary common stock; the data
 are not closer to the paper in either format.
 
+**One Table 6 output directory holds one run.** `--mode run` resumes by skipping the cohorts
+already written, so a second run with another `--close`, seed or replication count into the same
+`--out-root` would have mixed the two runs without a word. The directory now records the three
+in `run_params.json`; a run or report that does not match it is refused, as are older outputs
+without it, and `--mode report` renders only the primary `--close true` design that
+`t6_template.md` describes. The committed report came from a fresh directory and is unchanged.
+
 ## 55. Footnote 4's delisting check and the 495x map as flags; one Newey-West estimator (2026-11-02): 261.0 -> 261.0
 
 Two opt-in flags of `scripts/03_replicate.py` and one estimator fix. Neither flag is on by default,

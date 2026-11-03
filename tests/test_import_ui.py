@@ -1,10 +1,16 @@
 """Provenance and duplicate-safety checks for importing existing web exports."""
 
+import json
+
 import pandas as pd
 import pytest
 
 from project.import_ui import (
-    file_sha256, import_calendar, import_daily_csv, import_monthly_csv, import_volume_csv,
+    file_sha256,
+    import_calendar,
+    import_daily_csv,
+    import_monthly_csv,
+    import_volume_csv,
 )
 
 
@@ -27,6 +33,7 @@ def volume_rows():
 
 def test_volume_import_preserves_source_and_date_type(tmp_path):
     import datetime
+
     import pyarrow.dataset as ds
 
     source, out = tmp_path / "volume.csv.gz", tmp_path / "volume"
@@ -83,6 +90,8 @@ def test_import_preserves_source_and_ciz_delisting_return(tmp_path):
     assert panel.terminal.tolist() == [False, True]
     assert audit["years"]["2000"]["exact_duplicates_removed"] == 1
     assert audit["source_sha256"] == before == file_sha256(source)
+    # the provenance sits in the panel, where GGR_PROCESSED_DIR's cache stamp reads it
+    assert json.loads((out / "source.json").read_text())["return_convention"].startswith("CIZ")
     with pytest.raises(FileExistsError):
         import_daily_csv(source, out, 2000, 2000)
 
