@@ -1,6 +1,6 @@
 {
   "rank": 4,
-  "sigma": 0.02181414814322591,
+  "sigma": 0.021814135602848637,
   "start_levels": [
     1.1006,
     1.106
@@ -27,5 +27,5 @@
       125
     ]
   ],
-  "png": "report/replication/outputs/figures/figure1.png"
+  "png": "results/replication/reconciliation/baseline/figures/figure1.png"
 }

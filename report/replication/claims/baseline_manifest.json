@@ -1,0 +1,133 @@
+{
+  "specification": {
+    "normalization": "continued",
+    "format": 7,
+    "exclude_same_issuer": true,
+    "max_stale_share": 0.95,
+    "telephone_sic": "4811",
+    "trigger_sigma": "rms",
+    "short_weights": "value",
+    "monthly_aggregation": "books",
+    "exclude_constant": true,
+    "sic_fallback": "formation_end",
+    "universe": "vol_common",
+    "delayed_entry": "execute",
+    "idle_policy": "opened",
+    "issuer_source": "c02881d64d10bc6f1170ec8e1ca893f799244c48bed7b610f7e6230bc0721d7e"
+  },
+  "table6": {
+    "sample": {
+      "cohorts": 474,
+      "months": 474,
+      "replications": 200,
+      "portfolio_capital_delay_series": 16
+    },
+    "control": {
+      "cohort_waits": 948,
+      "cells_compared": 7584,
+      "max_diff_shipped": 0.0,
+      "max_diff_vector_layer": 1.3322676295501878e-15,
+      "max_diff_trade_payoff": 1.0658141036401503e-14,
+      "source_control_sha256": "10271dd51d8cf20a7f85248a6921c509cb01b390619780ceb7447fe242a94862",
+      "opening_mask_validation": {
+        "cohort_wait_portfolios": 3792,
+        "all_have_accruing_openings": true
+      }
+    },
+    "marks": {
+      "\u2717": 39,
+      "~": 7,
+      "\u2713": 2
+    }
+  },
+  "table9b": {
+    "cohorts": 474,
+    "identical_trade_logs": 474,
+    "max_monthly_gap": 0.0
+  },
+  "table7": {
+    "cohorts": 474,
+    "months": 474,
+    "claim": {
+      "portfolios": {
+        "top5": {
+          "long_alpha": 0.002860212724258303,
+          "long_t": 1.5957135411876084,
+          "short_alpha": -0.005223266628202851,
+          "short_t": -3.0851977754637376,
+          "short_contribution": 0.005223266628202851,
+          "pair_alpha": 0.008083479352461153,
+          "short_share": 0.6461656423496075,
+          "short_leg_larger": true,
+          "long_insignificant": true,
+          "short_significant": true
+        },
+        "top20": {
+          "long_alpha": 0.003562105534354795,
+          "long_t": 2.1631850815085336,
+          "short_alpha": -0.006036521669083848,
+          "short_t": -4.0513504483528,
+          "short_contribution": 0.006036521669083848,
+          "pair_alpha": 0.009598627203438643,
+          "short_share": 0.6288942721852251,
+          "short_leg_larger": true,
+          "long_insignificant": false,
+          "short_significant": true
+        },
+        "101-120": {
+          "long_alpha": 0.005055319910655023,
+          "long_t": 4.989487787121654,
+          "short_alpha": -0.0038908303647979614,
+          "short_t": -3.9164509780595145,
+          "short_contribution": 0.0038908303647979614,
+          "pair_alpha": 0.008946150275452983,
+          "short_share": 0.4349167233948517,
+          "short_leg_larger": false,
+          "long_insignificant": false,
+          "short_significant": true
+        },
+        "all": {
+          "long_alpha": 0.004432236008036871,
+          "long_t": 6.5218943559371265,
+          "short_alpha": -0.003803699847707159,
+          "short_t": -5.845179909558022,
+          "short_contribution": 0.003803699847707159,
+          "pair_alpha": 0.00823593585574403,
+          "short_share": 0.4618418494668491,
+          "short_leg_larger": false,
+          "long_insignificant": false,
+          "short_significant": true
+        }
+      },
+      "short_leg_larger_top": true,
+      "long_insignificant_top": false,
+      "short_significant_top": true,
+      "short_share_top": {
+        "top5": 0.6461656423496075,
+        "top20": 0.6288942721852251
+      },
+      "short_share_above_half": true,
+      "replicated": false
+    }
+  },
+  "source_sha256": {
+    "baseline/tables/replication_check.md": "5b6d445d0597b02f5dd8fb5b61241fafabc0904602a8cf2eda5d46500be7a722",
+    "baseline/table7_regressions.csv": "21958356dcaf5fc044eb9f4cba087af7ff4390e1f90896e812fde6bcd0ffb9f5",
+    "baseline_table9a/TABLE9A.csv": "04b8bb40e76c57e1708b6f7d854338789362199114d9d66e7f8582ab44d3d8de",
+    "baseline_table6_v2/report/TABLE6.csv": "283a6c22fc8cfb0c0accfa74e09e51de4f72235f983400e215a9f51191d8f161",
+    "baseline_table9b/report/table9b_results.csv": "80a87804c8fb8b5ff9c970ef2d6eae0225c77b77dd668cd268574ebbd14abe68"
+  },
+  "published_sha256": {
+    "TABLE6.md": "c5d41e992f49285481a9f65cf805a44f87941ba1065c6a30032e1b70a7400cdd",
+    "TABLE6.csv": "283a6c22fc8cfb0c0accfa74e09e51de4f72235f983400e215a9f51191d8f161",
+    "TABLE6_control.log": "cc34243b043465aaf2d10d36d9a08adb42ad8ec148dad3764a9f6a295e6e2980",
+    "TABLE6_run.log": "410186cd8912bb045f7c8cbd267f854e0c6d889c514989711a62176c8bf7cc21",
+    "TABLE7_REGRESSIONS.md": "129ec360f2814044b8e94a7c4190e0d573b0e7f03a62519023b20c1dd6a6d5f6",
+    "table7_regressions.csv": "21958356dcaf5fc044eb9f4cba087af7ff4390e1f90896e812fde6bcd0ffb9f5",
+    "TABLE9A.csv": "04b8bb40e76c57e1708b6f7d854338789362199114d9d66e7f8582ab44d3d8de",
+    "TABLE9A_cohorts.csv": "8a3c967fb16f794eaa2d3c1d98259a56ff20e57dee821ae6b4b62ce8ecee720d",
+    "TABLE9B.md": "89eacb3c3d7bf605626d76d52f37f469f70e4663fcf05aa4310a5c47a90db248",
+    "table9b_results.csv": "80a87804c8fb8b5ff9c970ef2d6eae0225c77b77dd668cd268574ebbd14abe68",
+    "TABLE9A.md": "5063b66d5db290d3e7000780f60721bdb13fc62913ca8570dedd61665dd4dcfd"
+  }
+}

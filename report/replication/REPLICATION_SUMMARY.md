@@ -1,9 +1,10 @@
 # GGR (2006): proposed baseline and replication evidence
 
-Review split: [PR #13](https://github.com/jacobwaxman11/IEOR-4576-Course-Project/pull/13)
-preserves main’s checked baseline and separates the import/cache tooling. PR #8
-contains the proposed baseline below. These results are a labeled alternative
-until its remaining report alignment and same-baseline claim checks are reviewed.
+[PR #13](https://github.com/jacobwaxman11/IEOR-4576-Course-Project/pull/13) is merged
+into main at `2f5e22c`; it preserves main’s strategy defaults. PR #8 now contains
+the four baseline conventions and regenerated evidence. Tables 6, 7, 9A and 9B
+have all been evaluated on the same complete baseline. See
+[BASELINE_CLAIMS.md](BASELINE_CLAIMS.md) for controls and exact commands.
 
 The project remains a **partial replication**. The new baseline combines Hao’s
 paper-supported compounding/decile fixes, a volume-based universe and July 1963
@@ -37,8 +38,8 @@ The new available-input check scores **258.5 weighted points across 492 cells**:
 and **185 outside 25%**. A “roughly 50%” statement describes a weighted diagnostic,
 not half of the economic conclusions proved. Main’s 261.0/481 score is not directly
 comparable: its check includes 24 Ibbotson cells unavailable here, while ours adds
-35 daily Table 5B cells. The complete generated check is local at
-`results/replication/reconciliation/baseline/tables/replication_check.md`.
+35 daily Table 5B cells. The [committed check](REPLICATION_CHECK.md) and [aggregate outputs](outputs/README.md)
+now match that run; the original generated output also remains local.
 
 On the same 492-cell set, the score improves from the strict run's **219.0**
 to **258.5**, but falls from the earlier nonconstant sensitivity's **263.5**.
@@ -67,27 +68,27 @@ vintage remain unavailable or unvalidated.
 
 The full strict-reference re-aggregation preserves **all 26,544 monthly rows
 exactly**. Eiko’s covariance change only alters SEs/t-statistics. Historical
-Table 9A/9B results remain tied to those selections. In particular, the prior
-recall experiment increased employed returns instead of producing the paper’s
-4–13 bp decline; it is not relabeled as a successful new-baseline experiment.
+Table 9A/9B results remain preserved. The new baseline was independently retested:
+Table 9A has 19/44 cells within 10%; Table 9B has 10/44 under the rearm rule, but
+employed returns increase 7.18–48.92 bp instead of reproducing the paper’s decline.
 
 The independently rebuilt footnote-4 stress lowers the top-20 mean from
 **1.4556% to 1.3427%**, versus the paper's **1.436% to 1.32%**, and raises SD
 from **1.7048% to 1.9033%**, versus **1.688% to 1.90%**. Selection and trade timing
 are exactly unchanged across all 474 cohorts. The waste-SIC sensitivity changes
-sector results only. The full 200-replication true-close Table 6 experiment retains
-strict-reference selections: relative outperformance holds, but table levels do
-not replicate (0/48 within 10%, 9/48 within 25%). Validation: 383 tests passed,
-14 skipped; full historical builds and independent isolation controls also passed.
+sector results only. The full 200-replication true-close Table 6 experiment now uses the same 474-cohort
+baseline: relative outperformance holds, but table levels do not replicate (2/48
+within 10%, 9/48 within 25%). The matched control has zero monthly error across
+948 cohort/waits and 7,584 cells. All 474 no-recall trade logs likewise match exactly.
 
-[PR_RECONCILIATION.md](PR_RECONCILIATION.md) records each decision, robustness
-results, controls and exact commands. [CLAIMS.md](CLAIMS.md) retains the numbered
-claim-by-claim ledger. New outputs and restricted observations remain local.
-The archived main check and its artifacts are labeled historical. Cell-margin
-tests now compare against the same run’s generated check and pass on the full
-baseline outputs. Remaining integration work is to align the review artifacts
-with the adopted default and rerun Tables 6, 9A and 9B on that same default.
-Hao’s independent same-input rerun scores 243.0/481 versus main’s 261.0/481;
-that deterioration is reported alongside the closer Table 1 means. For submission,
-keep main’s checked results as the established team baseline and label PR #8’s
-numbers as this separately evaluated alternative.
+[PR_RECONCILIATION.md](PR_RECONCILIATION.md) preserves the earlier decisions and
+controlled experiments. [CLAIMS.md](CLAIMS.md) now records the same-baseline claim
+results. The current check, aggregate outputs, claim reports and SCORE_LOG row 18
+are consistent; the old 261.0/481 check remains separately tested in `archive/`.
+Hao’s independent same-input rerun scores 243.0/481 versus main’s 261.0/481, so
+closer headline means do not imply a uniformly better replication. Licensed
+observations and trade-level caches remain local.
+
+Final local validation: **402 tests passed, 9 skipped**, plus complete baseline
+claim controls and hashed aggregate exports. The skips and reproduction commands
+are documented in [BASELINE_CLAIMS.md](BASELINE_CLAIMS.md).

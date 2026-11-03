@@ -21,9 +21,9 @@ _spec.loader.exec_module(conformance)
 
 
 def _logged() -> tuple[float, int]:
-    match = re.search(r"^Legacy shipped score: ([0-9.]+) weighted points across (\d+) cells$",
+    match = re.search(r"^Current score: ([0-9.]+) weighted points across (\d+) cells$",
                       LOG.read_text(encoding="utf-8"), re.MULTILINE)
-    assert match, "SCORE_LOG.md has no 'Legacy shipped score: X weighted points across N cells' line"
+    assert match, "SCORE_LOG.md has no 'Current score: X weighted points across N cells' line"
     return float(match.group(1)), int(match.group(2))
 
 
@@ -61,7 +61,7 @@ def test_logged_score_is_the_conformance_threshold() -> None:
 def test_check_prints_the_logged_score() -> None:
     score, cells = _logged()
     check = conformance.SHIPPED_CHECK.read_text(encoding="utf-8")
-    assert f"- Score: {score:.1f} of {cells} compared cells" in check
+    assert f"- Score: {score:.1f} weighted points across {cells} compared cells" in check
 
 
 def test_history_ends_at_the_logged_score() -> None:

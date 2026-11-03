@@ -38,6 +38,8 @@ def render(out_root, reps):
     close_text = ("the true trade’s close date, capped by earlier delisting or data-end exits"
                   if close_rule == "true" else "the drawn pair’s own next crossing, capped by forced exits")
     text = template.replace("{{CLOSE_RULE}}", close_rule).replace("{{CLOSE_METHOD}}", close_text)
+    text = ("Source specification: `" + stamp["parameters"].get("specification", "paper")
+            + "`; cache settings: `" + json.dumps(stamp["source"], sort_keys=True) + "`.\n\n" + text)
     text = text.replace("{{TABLE6}}", "\n".join(blocks))
     text = text.replace("{{EFFECT}}", "\n".join(effects))
     text = text.replace("{{SPREAD}}", "\n".join(spreads))
@@ -45,6 +47,16 @@ def render(out_root, reps):
     text = text.replace("{{CONTROL}}", count_text(out_root))
     text = text.replace("{{VERDICT}}", verdict_text(result))
     text = text.replace("{{META}}", meta_text(meta))
+    if stamp["parameters"].get("specification") == "baseline":
+        output = str(out_root.relative_to(ROOT)) if out_root.is_relative_to(ROOT) else str(out_root)
+        cache = "data/processed/replication/reconciliation/baseline"
+        text += ("\n## Reproduce the declared baseline experiment\n\n```sh\n"
+                 f"python scripts/claims/table6_random_pairs.py --specification baseline --mode control "
+                 f"--cache-root {cache} --out-root {output} --close {close_rule}\n"
+                 f"python scripts/claims/table6_random_pairs.py --specification baseline --mode run "
+                 f"--cache-root {cache} --out-root {output} --close {close_rule} --reps {reps} --workers 4\n"
+                 f"python scripts/claims/table6_random_pairs.py --specification baseline --mode report "
+                 f"--cache-root {cache} --out-root {output} --close {close_rule} --reps {reps}\n```\n")
     rep.REPORT_DIR.mkdir(parents=True, exist_ok=True)
     rep.REPORT_MD.write_text(text)
     print(json.dumps(result, indent=2, default=str))

@@ -77,7 +77,7 @@ import t6_engine as eng
 
 from project.data import formation_columns, formation_universe, load_daily, trading_calendar
 from project.evaluation import overlap_average, portfolio_monthly, summary_stats
-from project.specification import validate_paper_cache, stamp_experiment
+from project.specification import validate_claim_cache, stamp_experiment
 from project.features import normalized_prices
 from project.models import CohortResult
 
@@ -111,6 +111,8 @@ STATS = ("mean", "std", "median")
 END = (2002, 12)
 UNIVERSE = "traded_common"
 MAX_STALE_SHARE = None
+EXCLUDE_CONSTANT = False
+IDLE_POLICY = "zero"
 DEFAULT_SEED = 20060101
 #: The pipeline's eq. (3) short weight (``--short-weights position``).
 SHORT_WEIGHTS = "value"
@@ -277,7 +279,7 @@ def control_cohort(cache_root: Path, year: int, month: int, wait: int) -> dict:
 
     for portfolio, ranks in rank_sel.items():
         for capital in CAPITALS:
-            ours = portfolio_monthly(result, list(ranks), capital, SHORT_WEIGHTS)
+            ours = portfolio_monthly(result, list(ranks), capital, SHORT_WEIGHTS, idle_policy=IDLE_POLICY)
             if portfolio in SHIPPED_PORTFOLIOS:
                 paper = shipped_series(portfolio, capital)
                 common = ours.index.intersection(paper.index)
@@ -288,7 +290,8 @@ def control_cohort(cache_root: Path, year: int, month: int, wait: int) -> dict:
                 diff = float(np.abs(ours.reindex(common).to_numpy() - paper.to_numpy()).max())
                 out["max_diff_shipped"] = max(out["max_diff_shipped"], diff)
             sel = [int(r) for r in ranks if r <= n_ranks]
-            keys, employed, committed = eng.portfolio_months(books_vec, sel, month_of_day)
+            keys, employed, committed = eng.portfolio_months(books_vec, sel, month_of_day, idle_policy=IDLE_POLICY,
+                                                             opened=[trades["rank"].isin(sel).any()])
             months = employed if capital == "employed" else committed
             vector = pd.Series(months[:, 0],
                                index=pd.DatetimeIndex([month_timestamp(int(k)) for k in keys]))
@@ -381,7 +384,8 @@ def cohort_panel(cache_root: Path, year: int, month: int) -> CohortPanel:
     panel = load_daily(form_start, form_end,
                        [*formation_columns(UNIVERSE, MAX_STALE_SHARE), "date"])
     universe = formation_universe(form_start, form_end, universe=UNIVERSE,
-                                  max_stale_share=MAX_STALE_SHARE, panel=panel)
+                                  max_stale_share=MAX_STALE_SHARE, panel=panel,
+                                  exclude_constant=EXCLUDE_CONSTANT)
     form = panel.loc[panel["permno"].isin(set(universe)), ["permno", "date", "ret"]]
     levels = normalized_prices(
         form.pivot(index="date", columns="permno", values="ret").sort_index()
@@ -544,7 +548,7 @@ def true_pair_series(cache_root: Path, panel: CohortPanel, wait: int) -> tuple[n
         if w != wait:
             continue
         lo, hi = PORTFOLIOS[portfolio]
-        monthly = portfolio_monthly(result, list(range(lo, hi + 1)), capital, SHORT_WEIGHTS)
+        monthly = portfolio_monthly(result, list(range(lo, hi + 1)), capital, SHORT_WEIGHTS, idle_policy=IDLE_POLICY)
         block[:, j] = monthly.reindex(index).to_numpy()
     return block, len(keep)
 
@@ -623,7 +627,8 @@ def run_cohort(cache_root: Path, year: int, month: int, reps: int, seed: int,
                     continue
                 lo, hi = PORTFOLIOS[portfolio]
                 keys, employed, committed = eng.portfolio_months(
-                    books, list(range(lo, hi + 1)), np.array([month_of(d) for d in panel.dates]))
+                    books, list(range(lo, hi + 1)), np.array([month_of(d) for d in panel.dates]), idle_policy=IDLE_POLICY,
+                    opened=can_trade[events["rank"].between(lo, hi).to_numpy(), start:stop].any(axis=0))
                 if not np.array_equal(keys, months):
                     raise ValueError("Bootstrap aggregation changed the month calendar")
                 values = employed if capital == "employed" else committed
@@ -641,7 +646,8 @@ def run_shard(args, cohorts: list[tuple[int, int]], shard: int, shards: int) -> 
     (out_root / "cohorts").mkdir(parents=True, exist_ok=True)
     cache_root = Path(args.cache_root).resolve()
     if args.mode != "report":
-        validate_paper_cache(json.loads((cache_root / "cohorts/cache_meta.json").read_text()))
+        validate_claim_cache(json.loads((cache_root / "cohorts/cache_meta.json").read_text()),
+                             specification=args.specification)
     mine = [c for i, c in enumerate(cohorts) if i % shards == shard]
     done = 0
     for year, month in mine:
@@ -672,7 +678,7 @@ def run_all(args, cohorts: list[tuple[int, int]]) -> int:
         cmd = [sys.executable, script, "--mode", "shard",
                "--cache-root", str(Path(args.cache_root).resolve()), "--out-root", str(out_root),
                "--reps", str(args.reps), "--seed", str(args.seed), "--close", args.close,
-               "--wait", args.wait,
+               "--wait", args.wait, "--specification", args.specification,
                "--shard", str(shard), "--shards", str(workers)]
         if args.force:
             cmd.append("--force")
@@ -775,6 +781,7 @@ def difference_stats(series: dict, reps: int) -> pd.DataFrame:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--specification", choices=("paper", "baseline"), default="paper")
     parser.add_argument("--mode", choices=("control", "run", "shard", "report"), default="control")
     parser.add_argument("--cache-root", default=str(SHARED_CACHE),
                         help="paper-profile cache directory holding cohorts/ (read only)")
@@ -797,8 +804,15 @@ def main() -> int:
 
     cache_root = Path(args.cache_root).resolve()
     source_meta = json.loads((cache_root / "cohorts/cache_meta.json").read_text())
-    validate_paper_cache(source_meta)
+    validate_claim_cache(source_meta, specification=args.specification)
+    global UNIVERSE, MAX_STALE_SHARE, EXCLUDE_CONSTANT, IDLE_POLICY
+    UNIVERSE = source_meta["universe"]
+    MAX_STALE_SHARE = source_meta["max_stale_share"]
+    EXCLUDE_CONSTANT = source_meta["exclude_constant"]
+    IDLE_POLICY = source_meta["idle_policy"]
     parameters = {"reps": args.reps, "seed": args.seed, "wait": args.wait}
+    if args.specification == "baseline":
+        parameters["specification"] = "baseline"
     # Historical PR #8 outputs omitted this key and mean own crossings.
     # A true-schedule run must never reuse them, even with --force.
     if args.close != "own":

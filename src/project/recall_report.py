@@ -44,12 +44,13 @@ def render_recall_report(cfg, cohorts, tables, summaries, paper, runtime, worker
     gap = max((c["month_gap"] for c in controls), default=float("nan"))
     if identical != len(cohorts) or missing or not np.isfinite(gap) or gap > 1e-12:
         raise ValueError("Cannot report recalls from a failed no-recall control")
-    expected = [(p.year, p.month) for p in pd.period_range("1963-02", "2002-12", freq="M")]
+    start = "1963-07" if getattr(cfg, "specification", "paper") == "baseline" else "1963-02"
+    expected = [(p.year, p.month) for p in pd.period_range(start, "2002-12", freq="M")]
     full = list(cohorts) == expected
     cutoff = pd.Period(f"{cfg.end[0]}-{cfg.end[1]:02d}", freq="M")
     censored = sum(pd.Period(f"{y}-{m:02d}", freq="M") + 5 > cutoff for y, m in cohorts)
     lines = ["# Table 9B: high-volume short recalls", "",
-        f"Sample: {'full 479-cohort build, 474 reporting months' if full else 'PARTIAL diagnostic only'}.",
+        f"Sample: {f'full {len(expected)}-cohort build, 474 reporting months' if full else 'PARTIAL diagnostic only'}.",
         f"Source universe: `{getattr(cfg, 'source_universe', 'traded_common')}`; "
         f"exclude constant histories: {getattr(cfg, 'source_exclude_constant', False)}.",
         f"No-recall control: {identical}/{len(cohorts)} identical trade logs; "
@@ -120,6 +121,7 @@ def render_recall_report(cfg, cohorts, tables, summaries, paper, runtime, worker
                "--out-root", cfg.out_root, "--raw-dir", cfg.raw_dir, "--report-dir", str(report_dir),
                "--start", f"{cohorts[0][0]}-{cohorts[0][1]:02d}", "--end",
                f"{cfg.end[0]}-{cfg.end[1]:02d}", "--workers", str(workers)]
+    command += ["--specification", getattr(cfg, "specification", "paper")]
     if not full:
         command += ["--stop", f"{cohorts[-1][0]}-{cohorts[-1][1]:02d}"]
     if getattr(cfg, "source_universe", "traded_common") != "traded_common":

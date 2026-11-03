@@ -285,14 +285,21 @@ def vw_returns(books, ranks, n_selected=None):
     return long - short, np.nan_to_num(long - short) * fraction
 
 
-def portfolio_months(books, ranks, month_of_day):
+def portfolio_months(books, ranks, month_of_day, idle_policy="zero", opened=None):
     """Vectorized Table 1/Table 7 convention: compound each book, then subtract."""
     long, short, fraction = book_returns(books, ranks)
     keys, lm = monthly_returns(long, month_of_day)
     _, sm = monthly_returns(short, month_of_day)
     _, lc = monthly_returns(np.nan_to_num(long) * fraction, month_of_day)
     _, sc = monthly_returns(np.nan_to_num(short) * fraction, month_of_day)
-    return keys, lm - sm, lc - sc
+    employed = lm - sm
+    if idle_policy == "opened":
+        if opened is None:
+            raise ValueError("Opened-cohort accounting requires explicit trade-opening masks")
+        employed[:, ~np.asarray(opened, dtype=bool)] = np.nan
+    elif idle_policy != "zero":
+        raise ValueError("Vector bootstrap supports zero or opened idle policies")
+    return keys, employed, lc - sc
 
 
 def monthly_returns(daily: np.ndarray, month_of_day: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

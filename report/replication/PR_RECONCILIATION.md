@@ -5,22 +5,27 @@ November 2, 2026. PR #8 reconciles Hao’s merged **#9–10** and Eiko’s **#12
 merged #12 into `main` at **`5499701`** while this reconciliation was running.
 That updated main is integrated locally into PR #8. No teammate branch was
 rewritten. Hao’s subsequent review confirms the six earlier concerns are resolved.
-His requested split is now implemented: [PR #13](https://github.com/jacobwaxman11/IEOR-4576-Course-Project/pull/13)
-contains importers and cache/input safeguards with main’s trading defaults and
-checked outputs unchanged. PR #8 is based on that tooling branch and contains the
-remaining baseline conventions, experiments and evidence. Review #13 first.
+His requested split is complete: [PR #13](https://github.com/jacobwaxman11/IEOR-4576-Course-Project/pull/13)
+is merged into main at `2f5e22c`, including the reconciliation validator and
+import/cache safeguards. PR #8 targets main and contains the baseline conventions
+and regenerated evidence.
 
-The two stale cell-margin tests now reconcile independent CSV calculations with
-the matching generated check rather than hard-code main’s old score. They pass
-against the existing complete baseline outputs; this fixes a test inconsistency,
-not a strategy result. The report/artifact alignment and same-baseline reruns of
-Tables 6, 9A and 9B remain outstanding. Hao’s independent same-input comparison
-is **243.0/481 versus main’s 261.0/481**; the baseline is not a uniformly better
-replication. The full historical evidence below remains tied to its named runs.
+Both reported integration blockers are addressed: the committed check, aggregate
+outputs, SCORE_LOG row 18 and tests match the new baseline; Tables 6, 7, 9A and 9B
+were evaluated on that same full specification. The new independent validator
+requires matching source settings, full calendars, the isolated size screen and
+exact controls before publishing. [BASELINE_CLAIMS.md](BASELINE_CLAIMS.md) records
+the final results and reproduction commands. The earlier experiments below remain
+preserved historical evidence, not substitutes for these new baseline claim runs.
+
+Hao’s independent same-input comparison is **243.0/481 versus main’s 261.0/481**.
+The baseline is not a uniformly better replication; numerical and data limitations
+remain disclosed even after the integration checks pass.
 
 The comparison starts from PR #8 at `5d137c3`. No old experiment or restricted
-observation is discarded. New generated results remain local in `results/`.
-The previously committed main artifacts are retained and labeled historical.
+observation is discarded. Complete experiment directories remain local in `results/`.
+The previous main check is retained in `archive/`; other old artifacts remain in
+Git history. Current aggregate artifacts are refreshed at the user’s request.
 
 ## Decisions and paper evidence
 
@@ -76,8 +81,8 @@ within 25%, and 185 outside 25%. Main’s 261.0/481 uses a different input/cell 
 (24 Ibbotson cells here unavailable; 35 daily-risk cells added), so comparing those
 totals as an improvement or deterioration would be misleading. The dated summary
 and numbered ledger use the new build’s numbers, not inherited qualitative tallies.
-The generated check was rebuilt locally; repository policy keeps generated
-outputs out of new commits.
+The generated check and aggregate review outputs are now committed consistently
+at the user’s request. Restricted stock observations and trade-level caches remain local.
 
 Re-aggregating the preserved strict-reference cache gives 479 cohorts, 474 months,
 9,944 dates, and 26,544 monthly rows exactly equal to PR #8 at `5d137c3`. Its
@@ -172,7 +177,8 @@ to ignored `results/replication/reconciliation/validation.json`.
 
 ## Validation of the review split
 
-After integrating tooling PR #13, **395 tests passed and 9 skipped**. This run
+After integrating tooling PR #13 and regenerating all baseline claims,
+**402 tests passed and 9 skipped**. This run
 explicitly pointed the cell-margin checks at the full baseline table directory,
 so the two failures Hao reported were exercised rather than skipped. The tests
 compare all 291 Table 1–3 cells and all 92 tail cells with the matching check;
@@ -180,8 +186,10 @@ they do not assert a desired replication score. A separate filter test confirms
 that other tables and summary marks cannot contaminate those counts.
 
 `python -m project.reconciliation` passed again against the existing three full
-474-cohort runs and the strict-reference Table 6 control. This is revalidation
-of preserved outputs, not a new same-baseline Table 6/9A/9B run. The nine suite
+474-cohort runs and the strict-reference Table 6 control. Separately,
+`python -m project.baseline_claims --publish` passed against the newly completed
+same-baseline Tables 6, 7, 9A and 9B, including all 200 bootstrap replications and
+the 474-cohort recall controls. The nine suite
 skips concern published-PDF checks, unavailable Ibbotson proxy inputs, an opt-in
 full rebuild and the shared-path Table 6 fixture. Local numerical-library warnings
 remain; the independent validator checks the full outputs for finite statistics.

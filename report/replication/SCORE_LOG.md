@@ -4,11 +4,15 @@
 > These 481-cell scores describe the legacy `vol_common` specification, not PR #8’s
 > corrected profile or its 492-cell validation. See [PR_RECONCILIATION.md](PR_RECONCILIATION.md)
 > for the integration and [ACCOUNTING_CORRECTIONS.md](ACCOUNTING_CORRECTIONS.md) for the audit.
-> New runs write to ignored `results/`; this history is preserved rather than overwritten.
+> The historical rows below are preserved. Row 18 records the new baseline;
+> aggregate review artifacts are refreshed from it at the user’s request.
 
-Legacy shipped score: 261.0 weighted points across 481 cells
+Current score: 258.5 weighted points across 492 cells
 
-Cells outside 25% of the paper (✗): 166 = Table 1 24, Table 2 Panel A 0, Table 2 Panel B 11,
+The former 261.0/481 snapshot is preserved in `archive/main_5499701_check.md`.
+The current and historical totals use different factor/cell coverage and are not a direct score delta.
+
+Historical 481-cell snapshot: cells outside 25% of the paper (✗): 166 = Table 1 24, Table 2 Panel A 0, Table 2 Panel B 11,
 Table 3 37, Table 7 2, Table 4 33, Table 5 Panel A 7, Table 8 48, Figure 4 4. By mark: ✓ 207,
 ~ 108, ✗ 166. On the earlier cell sets: Tables 1-3 184.5 of 291 (rows 1-13), Tables 1-3 and 7
 211.0 of 323 (row 14); the check prints both.
@@ -63,6 +67,7 @@ for Table 7, and from row 15 four more for Table 4 / Table 5 A / Table 8 / Figur
 | 15 | 2026-10-27 | #47 | 266.5 | 213 / 107 / 161 | 23 / 0 / 10 / 36 / 2 / 33 / 8 / 45 / 4 | every table and figure the paper prints a number for, and that the cached series can reproduce, joins the scored set: Table 4 (Sharpe ratios, the five-factor regression, the Ibbotson-factor regression, the equity-premium column; 60 cells, 23.0), Table 5 Panel A (20, 9.5), Table 8 (subperiod moments and regressions; 72, 19.5) and Figure 4's six printed correlations (6, 1.0). The total rises 213.5 -> 266.5 and the rate falls 66.1% -> 55.4%: the 158 new cells score 33.5%, mostly because the paper's reversal factor cannot be rebuilt and the five-factor regressions inherit it; the Ibbotson regression, which has no reversal factor, scores 12.0 of 24 (REVIEW_NOTES 49). Tables 1-3 and 7 are byte-identical |
 | 16 | 2026-10-27 | #48 | 267.5 | 214 / 107 / 160 | 23 / 0 / 10 / 36 / 2 / 32 / 8 / 45 / 4 | Table 4's equity-premium column is French's Mkt-RF, the regressions' market factor, which Table 8 names the "U.S. equity risk-premium" and whose SDs it prints, instead of the S&P 500 less the 30-day bill: the serial-correlation cell moves 0.0002 -> 0.0465 against 0.05 (✗ -> ✓), the other three stay ✓ (REVIEW_NOTES 50). The intercepts' Newey-West t-statistics are printed beside the paper's, unscored. Every other cell is byte-identical |
 | 17 | 2026-11-02 | #61 | 261.0 | 207 / 108 / 166 | 24 / 0 / 11 / 37 / 2 / 33 / 7 / 48 / 4 | two readings the paper's own text requires: Tables 1 and 3 compound the long and the short book to monthly returns before subtracting (§2.3, p. 805; Table 1 Panel B equals Table 7 long minus short, pp. 807 and 821), and Table 2 Panel B's "average decile difference for mixed pairs" averages the mixed pairs only (§3.2 and Table 2, p. 809). Table 1 +1.5, Table 5 Panel A +0.5, Table 2 Panel B -0.5, Table 3 -3.5, Table 4 -2.5, Table 8 -2.0. CACHE_FORMAT 6. An independent implementation (public PR #8 at 5d137c3, `--specification legacy --monthly-aggregation books`) gives identical marks on every cell (REVIEW_NOTES 54) |
+| 18 | 2026-11-02 | PR #8 baseline | 258.5 | 210 / 97 / 185 | 22 / 0 / 10 / 55 / 3 / 25 / 7 / 7 / 52 / 4 | Value short weights, next-day entry, formation-end SIC, and opened-cohort idle rule. Full 474-cohort run; 492 available-input cells (24 unavailable Ibbotson cells omitted, 35 daily Table 5B cells added). Miss columns now include Table 5B after Table 5A. Same-cell strict reference 219.0; prior nonconstant sensitivity 263.5. Hao’s separate 481-cell rerun scores 243.0 versus main 261.0. No uniform-fit improvement claimed. |
 
 Other merged PRs (#5, #6, #14, #18 to #21: notes, harness, ledger, tracker, the 1999 scorer; #41,
 Table 5 Panel A and Table 8 as unscored diagnostics) did not change the score. #9 and #17 are the merges that landed rows 3 and 7 on `main`; #22 landed the notes. #49 (the reversal-factor audit) adds an unscored section to the check and does not change the score.

@@ -320,3 +320,17 @@ def test_account_treats_a_missing_return_as_no_change():
     out = eng.account(np.array([0]), np.array([2]), np.array([[1]]), np.array([[0]]), r)
     assert_allclose(out["pay"][:, 0], [0.0, 0.0, 0.0])
     assert_allclose(out["lval"][:, 0], [0.0, 1.0, 1.0])
+
+
+def test_opened_idle_rule_distinguishes_no_trade_from_zero_day_trade():
+    # A recorded opening can have zero accrual days; its employed return is zero.
+    # A never-opened cohort has no employed-capital observation.
+    books = {k: np.zeros((2, 1, 2)) for k in ("pay", "lpay", "lval", "spay", "sval")}
+    keys, employed, committed = eng.portfolio_months(
+        books, [1], np.array([1, 1]), idle_policy="opened", opened=[True, False])
+    assert keys.tolist() == [1]
+    assert employed[0, 0] == 0
+    assert np.isnan(employed[0, 1])
+    assert_allclose(committed, 0)
+    with pytest.raises(ValueError, match="explicit trade-opening masks"):
+        eng.portfolio_months(books, [1], np.array([1, 1]), idle_policy="opened")

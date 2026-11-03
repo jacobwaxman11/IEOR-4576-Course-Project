@@ -82,8 +82,7 @@ replication score). "Ours" averages each statistic over replications.
 ## 5. Effect against our own baseline
 
 The claim test compares our change with the paper's change, because our levels
-differ from the paper's for known reasons (an era split in the stock universe,
-return tails). "Ours true" is our true-pair mean rebuilt from the cached trade
+differ from the paper's; the residual causes are not fully identified. "Ours true" is our true-pair mean rebuilt from the cached trade
 log; "ours random" the bootstrap mean; the difference next to the paper's own
 Table 1 minus Table 6 difference. The last column is our difference over the
 paper's; Table 1 prints no column for the top 120 pairs, so that ratio is n/a.

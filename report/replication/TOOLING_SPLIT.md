@@ -1,8 +1,8 @@
 # Replication PR split — November 2, 2026
 
 The tooling PR is the first review unit. PR #8 contains the separately reviewed
-baseline conventions and their results. Merge the tooling PR first once approved;
-the baseline PR still needs the outstanding specification-wide validations.
+baseline conventions and their results. Tooling PR #13 is merged at `2f5e22c`; PR #8 now targets main. Its full
+same-baseline validation is recorded in [BASELINE_CLAIMS.md](BASELINE_CLAIMS.md).
 
 ## Tooling scope
 
@@ -21,13 +21,13 @@ the baseline PR still needs the outstanding specification-wide validations.
   and trade timing, and the matched Table 6 control. This validator reads existing
   experiment directories; adding it does not adopt their baseline in main.
 
-## Evidence that the team's baseline is preserved
+## Evidence that PR #13 preserved the team's baseline
 
-The driver, trading kernel, portfolio accounting, features, factor estimator,
+In the merged tooling PR, the driver, trading kernel, portfolio accounting, features, factor estimator,
 configuration, Makefile, claims ledger, score log, published check and saved output
 files are **byte-identical to main at `5499701`** (32 files checked). No default
 pair selection, delayed entry, short weighting, idle rule or SIC choice changes.
-The committed check therefore remains **261.0 weighted points over 481 cells**.
+Its committed check therefore remained **261.0 weighted points over 481 cells**.
 This is preservation evidence, not a fresh claim of exact paper replication.
 
 The default formation screen was independently compared with main on real local
@@ -45,9 +45,9 @@ The stock-value short weights, next-day execution, formation-end SIC and idle-ca
 interpretation remain in PR #8. Its improved headline means do not imply a uniformly
 better replication: Hao's rerun with his factor inputs scores 243.0/481 versus main's
 261.0/481; the local run scores 258.5/492 on a different available-input/cell set.
-Before adopting that baseline, reconcile its reported/default outputs and tests,
-and run Tables 6, 9A and 9B on those same selections. No mixed-specification claim
-is presented as a completed baseline replication.
+The baseline check, aggregate outputs, tests, score-log row and claim reports
+are now reconciled, including full same-baseline Tables 6, 7, 9A and 9B. Numerical
+replication gaps remain explicit in the claims ledger.
 
 ## Commands
 

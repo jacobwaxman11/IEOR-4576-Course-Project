@@ -176,7 +176,7 @@ def _summary_lines(text: str) -> list[str]:
     return [line for line in text.splitlines() if re.match(r"- (Figure 1|Table \d)", line)]
 
 
-def test_historical_score_matches_its_documented_specification() -> None:
+def test_current_score_matches_its_documented_specification() -> None:
     score = _check_score(SHIPPED_CHECK.read_text(encoding="utf-8"))
     assert score == SPEC["full_sample"]["threshold"]
 
@@ -230,3 +230,8 @@ def _assert_reconciled_baseline(tables: Path) -> None:
             assert table.loc["mean", (panel, port)] == pytest.approx(expected, abs=1e-10)
     check = (tables / "replication_check.md").read_text()
     assert _check_score(check) == 258.5  # 210 full + 97 half, 492 cells in this input set.
+
+
+def test_legacy_snapshot_remains_exact():
+    legacy = SPEC["legacy_full_sample"]
+    assert _check_score((ROOT / legacy["check"]).read_text()) == legacy["threshold"]

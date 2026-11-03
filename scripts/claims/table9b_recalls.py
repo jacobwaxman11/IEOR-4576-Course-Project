@@ -74,7 +74,7 @@ from project.evaluation import (
 from project.features import normalized_prices
 from project.models import simulate_cohort
 from project.paths import ROOT
-from project.specification import validate_paper_cache, stamp_experiment
+from project.specification import validate_claim_cache, stamp_experiment
 from project.recalls import adjusted_volume, high_volume_days, volume_thresholds
 
 PRIMARY_UNIVERSE = "traded_common"
@@ -280,6 +280,8 @@ class Config:
     force: bool = False
     source_universe: str = "traded_common"
     source_exclude_constant: bool = False
+    specification: str = "paper"
+    idle_policy: str = "zero"
 
 
 def cohort_cache_dir(cfg: Config, year: int, month: int) -> Path:
@@ -333,7 +335,7 @@ def control_check(result, cfg: Config, year: int, month: int) -> dict:
     miss = 0
     for pname, ranks in PORTFOLIOS.items():
         for capital in ("employed", "committed"):
-            monthly = portfolio_monthly(result, ranks, capital, SHORT_WEIGHTS)
+            monthly = portfolio_monthly(result, ranks, capital, SHORT_WEIGHTS, idle_policy=cfg.idle_policy)
             got = pd.Series(monthly.to_numpy(), index=pd.DatetimeIndex(monthly.index))
             part = want[(want["portfolio"] == pname) & (want["capital"] == capital)]
             ref = pd.Series(part["ret"].to_numpy(), index=pd.DatetimeIndex(part["month_end"]))
@@ -380,7 +382,7 @@ def build_cohort(cfg: Config, year: int, month: int) -> dict:
         )
         for pname, ranks in PORTFOLIOS.items():
             for capital in ("employed", "committed"):
-                monthly = portfolio_monthly(result, ranks, capital, SHORT_WEIGHTS)
+                monthly = portfolio_monthly(result, ranks, capital, SHORT_WEIGHTS, idle_policy=cfg.idle_policy)
                 rows += monthly_rows(run, pname, capital, monthly)
         counts[run] = trade_counts(result, no_volume)
         if run == RUN_OFF:
@@ -756,13 +758,16 @@ def config_from_args(args) -> Config:
         end=parse_month(args.end),
         raw_dir=args.raw_dir or "",
         force=args.force,
-        source_universe=args.source_universe,
-        source_exclude_constant=args.source_exclude_constant,
+        source_universe=("vol_common" if args.specification == "baseline" else args.source_universe),
+        source_exclude_constant=(True if args.specification == "baseline" else args.source_exclude_constant),
+        specification=args.specification,
+        idle_policy=("opened" if args.specification == "baseline" else "zero"),
     )
 
 
 def add_common(parser: argparse.ArgumentParser) -> None:
     from project.data import UNIVERSES
+    parser.add_argument("--specification", choices=("paper", "baseline"), default="paper")
     parser.add_argument("--source-universe", choices=sorted(UNIVERSES), default="traded_common",
                         help="explicit expected source-cache universe; never inferred from results")
     parser.add_argument("--source-exclude-constant", action="store_true",
@@ -817,7 +822,7 @@ def main(argv: list[str] | None = None) -> int:
 
     cfg = config_from_args(args)
     source_meta = json.loads((Path(cfg.cache_root) / "cohorts/cache_meta.json").read_text())
-    validate_paper_cache(source_meta, universe=cfg.source_universe,
+    validate_claim_cache(source_meta, specification=cfg.specification, universe=cfg.source_universe,
                          exclude_constant=cfg.source_exclude_constant)
     from project.data import processed_source_identity
     if source_meta.get("data_source") != processed_source_identity():

@@ -136,11 +136,13 @@ def symbol(text: str) -> str:
 
 
 def collect(out_root: Path, reps: int) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
-    from project.fidelity import validate_bootstrap_sample
+    from project.evidence_validation import validate_bootstrap_sample
 
     frames = t6.load_cohort_outputs(out_root)
     series = t6.strategy_series(frames, reps)
-    sample = validate_bootstrap_sample(frames, series, reps)
+    stamp = json.loads((out_root / "accounting_meta.json").read_text())
+    start = "1963-07" if stamp["parameters"].get("specification") == "baseline" else "1963-02"
+    sample = validate_bootstrap_sample(frames, series, reps, start=start)
     (out_root / "sample_validation.json").write_text(json.dumps(sample, indent=2) + "\n")
     stats = t6.summarise(series, reps)
     diffs = t6.difference_stats(series, reps)

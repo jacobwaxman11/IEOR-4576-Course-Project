@@ -275,6 +275,7 @@ def check_cohort(cache_root: Path, cohort: str, top: int = 3) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Table 9 Panel A of GGR (2006).")
+    parser.add_argument("--specification", choices=("paper", "baseline"), default="paper")
     parser.add_argument("--from-pdf", metavar="PDF", default=None,
                         help="parse the paper's Table 1B and Table 9A into "
                              "scripts/claims/table9a_paper.json")
@@ -303,10 +304,10 @@ def main(argv: list[str] | None = None) -> int:
                            args.check_cohort))
 
     if args.screened and args.baseline:
-        from project.specification import validate_paper_cache
+        from project.specification import validate_claim_cache
         for cache, top in ((args.baseline_cache, None), (args.screened_cache, 3)):
             meta = json.loads((Path(cache) / "cohorts/cache_meta.json").read_text())
-            validate_paper_cache(meta, size_deciles_top=top)
+            validate_claim_cache(meta, specification=args.specification, size_deciles_top=top)
         paper = paper_targets()
         screened = panel_b(aggregate_table1(Path(args.screened)))
         baseline = panel_b(aggregate_table1(Path(args.baseline)))

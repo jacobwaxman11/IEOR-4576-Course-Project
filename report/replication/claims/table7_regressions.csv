@@ -1,325 +1,325 @@
 variant,statistic,caption,portfolio,book,ours,paper,mark
-st_rev,mean,Mean monthly return,top5,long,0.012452669013553068,0.01245,✓
-st_rev,mean,Mean monthly return,top5,short,0.005218931282160804,0.00501,✓
-st_rev,mean,Mean monthly return,top20,long,0.013585371990373529,0.0133,✓
-st_rev,mean,Mean monthly return,top20,short,0.004670669545562478,0.00435,✓
-st_rev,mean,Mean monthly return,101-120,long,0.014816670622083842,0.01458,✓
-st_rev,mean,Mean monthly return,101-120,short,0.007173433880101591,0.00663,✓
-st_rev,mean,Mean monthly return,all,long,0.015066893821681695,0.01623,✓
-st_rev,mean,Mean monthly return,all,short,0.008776412195942133,0.00908,✓
-st_rev,nw_se,Standard error (Newey-West),top5,long,0.0018709242199005855,0.00183,✓
-st_rev,nw_se,Standard error (Newey-West),top5,short,0.0019650193320188488,0.00177,~
-st_rev,nw_se,Standard error (Newey-West),top20,long,0.001838677423966758,0.00179,✓
-st_rev,nw_se,Standard error (Newey-West),top20,short,0.0018627335996965484,0.00174,✓
-st_rev,nw_se,Standard error (Newey-West),101-120,long,0.0018765420971653323,0.0017,~
-st_rev,nw_se,Standard error (Newey-West),101-120,short,0.0016817401173485308,0.00165,✓
-st_rev,nw_se,Standard error (Newey-West),all,long,0.002685199041344557,0.00254,✓
-st_rev,nw_se,Standard error (Newey-West),all,short,0.0023813287862212346,0.00231,✓
-st_rev,std,Standard deviation,top5,long,0.03866174366806107,0.03875,✓
-st_rev,std,Standard deviation,top5,short,0.03554062221827736,0.03259,✓
-st_rev,std,Standard deviation,top20,long,0.037013238975775624,0.03653,✓
-st_rev,std,Standard deviation,top20,short,0.034018253237964216,0.03161,✓
-st_rev,std,Standard deviation,101-120,long,0.03796179234023845,0.03437,~
-st_rev,std,Standard deviation,101-120,short,0.035004254088760255,0.03146,~
-st_rev,std,Standard deviation,all,long,0.0566379579938736,0.05157,✓
-st_rev,std,Standard deviation,all,short,0.0498097835423977,0.04601,✓
-st_rev,serial_correlation,Monthly serial correlation,top5,long,0.08365615778075933,0.06,✗
-st_rev,serial_correlation,Monthly serial correlation,top5,short,0.13163879829837064,0.11,~
-st_rev,serial_correlation,Monthly serial correlation,top20,long,0.08889342510662694,0.09,✓
-st_rev,serial_correlation,Monthly serial correlation,top20,short,0.10571314720524273,0.12,~
-st_rev,serial_correlation,Monthly serial correlation,101-120,long,0.13345568436970265,0.13,✓
-st_rev,serial_correlation,Monthly serial correlation,101-120,short,0.07988583862807404,0.12,✗
-st_rev,serial_correlation,Monthly serial correlation,all,long,0.1595943912710047,0.17,✓
-st_rev,serial_correlation,Monthly serial correlation,all,short,0.13608974749340472,0.16,~
-st_rev,intercept,Intercept,top5,long,0.002726439549139774,0.00103,✗
-st_rev,intercept,Intercept,top5,short,-0.004665333450915085,-0.00442,✓
-st_rev,intercept,Intercept,top20,long,0.0035744242995543784,0.00243,✗
-st_rev,intercept,Intercept,top20,short,-0.005287236540599321,-0.00521,✓
-st_rev,intercept,Intercept,101-120,long,0.005085840033856497,0.00287,✗
-st_rev,intercept,Intercept,101-120,short,-0.0031576843889020803,-0.00426,✗
-st_rev,intercept,Intercept,all,long,0.004433845448957913,-0.00101,✗
-st_rev,intercept,Intercept,all,short,-0.002162863754684431,-0.00613,✗
-st_rev,t_intercept,t-Statistic,top5,long,1.512586930595856,0.47,✗
-st_rev,t_intercept,t-Statistic,top5,short,-2.783662401869361,-2.74,✓
-st_rev,t_intercept,t-Statistic,top20,long,2.165336107076693,1.27,✗
-st_rev,t_intercept,t-Statistic,top20,short,-3.5981465689304573,-3.35,✓
-st_rev,t_intercept,t-Statistic,101-120,long,5.025535612124958,2.85,✗
-st_rev,t_intercept,t-Statistic,101-120,short,-3.241014932670826,-4.26,~
-st_rev,t_intercept,t-Statistic,all,long,6.5259223595935305,-1.32,✗
-st_rev,t_intercept,t-Statistic,all,short,-3.5074679764676158,-5.22,✗
-st_rev,market,U.S. equity risk-premium,top5,long,0.49654049689509766,0.37415,✗
-st_rev,market,U.S. equity risk-premium,top5,short,0.5141007302147658,0.44075,~
-st_rev,market,U.S. equity risk-premium,top20,long,0.5475399449483853,0.47617,~
-st_rev,market,U.S. equity risk-premium,top20,short,0.5404442773221856,0.50772,✓
-st_rev,market,U.S. equity risk-premium,101-120,long,0.7343497116823965,0.4852,✗
-st_rev,market,U.S. equity risk-premium,101-120,short,0.7188155865251641,0.56217,✗
-st_rev,market,U.S. equity risk-premium,all,long,1.0344605503655768,0.58571,✗
-st_rev,market,U.S. equity risk-premium,all,short,0.9697709851551608,0.73091,✗
-st_rev,t_market,t-Statistic,top5,long,11.421983088173008,4.6,✗
-st_rev,t_market,t-Statistic,top5,short,12.13827660120329,6.19,✗
-st_rev,t_market,t-Statistic,top20,long,13.532020126617647,6.68,✗
-st_rev,t_market,t-Statistic,top20,short,14.007372838765459,8.44,✗
-st_rev,t_market,t-Statistic,101-120,long,22.366201991640835,10.23,✗
-st_rev,t_market,t-Statistic,101-120,short,21.256752554214692,9.74,✗
-st_rev,t_market,t-Statistic,all,long,54.2897121564266,14.99,✗
-st_rev,t_market,t-Statistic,all,short,49.79335405778243,12.13,✗
-st_rev,smb,SMB,top5,long,-0.03695003844764635,-0.16764,✗
-st_rev,smb,SMB,top5,short,-0.051369499352527805,-0.12532,✗
-st_rev,smb,SMB,top20,long,-0.02538980015638065,-0.06506,✗
-st_rev,smb,SMB,top20,short,-0.044325406290642654,-0.06616,✗
-st_rev,smb,SMB,101-120,long,0.13366089824033986,0.0112,✗
-st_rev,smb,SMB,101-120,short,0.08176190156869376,0.03453,✗
-st_rev,smb,SMB,all,long,0.6031551897414029,0.22192,✗
-st_rev,smb,SMB,all,short,0.5232363530005569,0.29271,✗
-st_rev,t_smb,t-Statistic,top5,long,-0.677997706766682,-1.74,✗
-st_rev,t_smb,t-Statistic,top5,short,-1.0505787172832108,-2.0,✗
-st_rev,t_smb,t-Statistic,top20,long,-0.5230225246234913,-0.8,✗
-st_rev,t_smb,t-Statistic,top20,short,-0.9849185734982756,-1.22,~
-st_rev,t_smb,t-Statistic,101-120,long,3.7661023089325165,0.27,✗
-st_rev,t_smb,t-Statistic,101-120,short,2.19837084165797,0.95,✗
-st_rev,t_smb,t-Statistic,all,long,14.191107955383686,3.45,✗
-st_rev,t_smb,t-Statistic,all,short,13.708733379490388,3.15,✗
-st_rev,hml,HML,top5,long,0.5702151104767691,0.48401,~
-st_rev,hml,HML,top5,short,0.5699947612897117,0.42661,✗
-st_rev,hml,HML,top20,long,0.5891063294360165,0.52539,~
-st_rev,hml,HML,top20,short,0.5613939031313495,0.48025,~
-st_rev,hml,HML,101-120,long,0.5026007951773711,0.39451,✗
-st_rev,hml,HML,101-120,short,0.4877688236207657,0.41175,~
-st_rev,hml,HML,all,long,0.22019496712987754,0.25732,~
-st_rev,hml,HML,all,short,0.19754477223019762,0.31134,✗
-st_rev,t_hml,t-Statistic,top5,long,8.460943184278046,7.12,~
-st_rev,t_hml,t-Statistic,top5,short,9.084168299001044,6.92,✗
-st_rev,t_hml,t-Statistic,top20,long,10.229519278072505,9.36,✓
-st_rev,t_hml,t-Statistic,top20,short,9.678505323935527,9.47,✓
-st_rev,t_hml,t-Statistic,101-120,long,8.615541043754238,9.76,~
-st_rev,t_hml,t-Statistic,101-120,short,7.891096961525051,11.54,✗
-st_rev,t_hml,t-Statistic,all,long,6.234450113390263,7.49,~
-st_rev,t_hml,t-Statistic,all,short,5.392813306219199,8.11,✗
-st_rev,momentum,Momentum,top5,long,-0.029046988174053604,-0.0543,✗
-st_rev,momentum,Momentum,top5,short,0.00918957998147343,-0.02625,✗
-st_rev,momentum,Momentum,top20,long,-0.034638869277639754,-0.04456,~
-st_rev,momentum,Momentum,top20,short,0.008614546771433532,0.00361,✗
-st_rev,momentum,Momentum,101-120,long,-0.15545017164152863,-0.10901,✗
-st_rev,momentum,Momentum,101-120,short,-0.016619917833926856,-0.00589,✗
-st_rev,momentum,Momentum,all,long,-0.18751645160340608,-0.08832,✗
-st_rev,momentum,Momentum,all,short,0.007657376009520055,0.09245,✗
-st_rev,t_momentum,t-Statistic,top5,long,-0.757280853756604,-1.48,✗
-st_rev,t_momentum,t-Statistic,top5,short,0.2371365564444468,-0.65,✗
-st_rev,t_momentum,t-Statistic,top20,long,-0.8919314615254602,-1.21,✗
-st_rev,t_momentum,t-Statistic,top20,short,0.24840797267152465,0.1,✗
-st_rev,t_momentum,t-Statistic,101-120,long,-3.6143779443610407,-3.53,✓
-st_rev,t_momentum,t-Statistic,101-120,short,-0.42958271102763584,-0.21,✗
-st_rev,t_momentum,t-Statistic,all,long,-6.55986709213279,-3.53,✗
-st_rev,t_momentum,t-Statistic,all,short,0.29605966076290996,2.81,✗
-st_rev,reversal,Reversal,top5,long,0.05503850782394181,0.15854,✗
-st_rev,reversal,Reversal,top5,short,0.017700070507347586,0.05662,✗
-st_rev,reversal,Reversal,top20,long,0.05627885264382658,0.09601,✗
-st_rev,reversal,Reversal,top20,short,0.016482541586188462,0.02365,✗
-st_rev,reversal,Reversal,101-120,long,0.07335845864549892,0.17288,✗
-st_rev,reversal,Reversal,101-120,short,0.005047256196994072,0.0783,✗
-st_rev,reversal,Reversal,all,long,0.1139326478810683,0.39208,✗
-st_rev,reversal,Reversal,all,short,-0.034461334195691314,0.19131,✗
-st_rev,t_reversal,t-Statistic,top5,long,1.1881351609979303,1.83,✗
-st_rev,t_reversal,t-Statistic,top5,short,0.4749825235222427,1.13,✗
-st_rev,t_reversal,t-Statistic,top20,long,1.2229223703623024,1.26,✓
-st_rev,t_reversal,t-Statistic,top20,short,0.45712004893899766,0.55,~
-st_rev,t_reversal,t-Statistic,101-120,long,1.9420039463752632,4.33,✗
-st_rev,t_reversal,t-Statistic,101-120,short,0.1442337311419779,1.9,✗
-st_rev,t_reversal,t-Statistic,all,long,3.8042233110943946,10.44,✗
-st_rev,t_reversal,t-Statistic,all,short,-1.236001138751335,2.98,✗
-st_rev,r2,R2,top5,long,0.3400464373388318,0.39,~
-st_rev,r2,R2,top5,short,0.39734611260794983,0.41,✓
-st_rev,r2,R2,top20,long,0.43896053681320135,0.48,✓
-st_rev,r2,R2,top20,short,0.4668934887458446,0.49,✓
-st_rev,r2,R2,101-120,long,0.7905652754278534,0.78,✓
-st_rev,r2,R2,101-120,short,0.7618514145965689,0.75,✓
-st_rev,r2,R2,all,long,0.959573002941873,0.97,✓
-st_rev,r2,R2,all,short,0.9602170745213668,0.93,✓
-losers_only,mean,Mean monthly return,top5,long,0.012452669013553068,0.01245,✓
-losers_only,mean,Mean monthly return,top5,short,0.005218931282160804,0.00501,✓
-losers_only,mean,Mean monthly return,top20,long,0.013585371990373529,0.0133,✓
-losers_only,mean,Mean monthly return,top20,short,0.004670669545562478,0.00435,✓
-losers_only,mean,Mean monthly return,101-120,long,0.014816670622083842,0.01458,✓
-losers_only,mean,Mean monthly return,101-120,short,0.007173433880101591,0.00663,✓
-losers_only,mean,Mean monthly return,all,long,0.015066893821681695,0.01623,✓
-losers_only,mean,Mean monthly return,all,short,0.008776412195942133,0.00908,✓
-losers_only,nw_se,Standard error (Newey-West),top5,long,0.0018709242199005855,0.00183,✓
-losers_only,nw_se,Standard error (Newey-West),top5,short,0.0019650193320188488,0.00177,~
-losers_only,nw_se,Standard error (Newey-West),top20,long,0.001838677423966758,0.00179,✓
-losers_only,nw_se,Standard error (Newey-West),top20,short,0.0018627335996965484,0.00174,✓
-losers_only,nw_se,Standard error (Newey-West),101-120,long,0.0018765420971653323,0.0017,~
-losers_only,nw_se,Standard error (Newey-West),101-120,short,0.0016817401173485308,0.00165,✓
-losers_only,nw_se,Standard error (Newey-West),all,long,0.002685199041344557,0.00254,✓
-losers_only,nw_se,Standard error (Newey-West),all,short,0.0023813287862212346,0.00231,✓
-losers_only,std,Standard deviation,top5,long,0.03866174366806107,0.03875,✓
-losers_only,std,Standard deviation,top5,short,0.03554062221827736,0.03259,✓
-losers_only,std,Standard deviation,top20,long,0.037013238975775624,0.03653,✓
-losers_only,std,Standard deviation,top20,short,0.034018253237964216,0.03161,✓
-losers_only,std,Standard deviation,101-120,long,0.03796179234023845,0.03437,~
-losers_only,std,Standard deviation,101-120,short,0.035004254088760255,0.03146,~
-losers_only,std,Standard deviation,all,long,0.0566379579938736,0.05157,✓
-losers_only,std,Standard deviation,all,short,0.0498097835423977,0.04601,✓
-losers_only,serial_correlation,Monthly serial correlation,top5,long,0.08365615778075933,0.06,✗
-losers_only,serial_correlation,Monthly serial correlation,top5,short,0.13163879829837064,0.11,~
-losers_only,serial_correlation,Monthly serial correlation,top20,long,0.08889342510662694,0.09,✓
-losers_only,serial_correlation,Monthly serial correlation,top20,short,0.10571314720524273,0.12,~
-losers_only,serial_correlation,Monthly serial correlation,101-120,long,0.13345568436970265,0.13,✓
-losers_only,serial_correlation,Monthly serial correlation,101-120,short,0.07988583862807404,0.12,✗
-losers_only,serial_correlation,Monthly serial correlation,all,long,0.1595943912710047,0.17,✓
-losers_only,serial_correlation,Monthly serial correlation,all,short,0.13608974749340472,0.16,~
-losers_only,intercept,Intercept,top5,long,0.003803531190697583,0.00103,✗
-losers_only,intercept,Intercept,top5,short,-0.004140649112502105,-0.00442,✓
-losers_only,intercept,Intercept,top20,long,0.004536965424847477,0.00243,✗
-losers_only,intercept,Intercept,top20,short,-0.004410095265333325,-0.00521,~
-losers_only,intercept,Intercept,101-120,long,0.006291147211555882,0.00287,✗
-losers_only,intercept,Intercept,101-120,short,-0.0019249236726992947,-0.00426,✗
-losers_only,intercept,Intercept,all,long,0.0035861511663722164,-0.00101,✗
-losers_only,intercept,Intercept,all,short,-0.002749074945472917,-0.00613,✗
-losers_only,t_intercept,t-Statistic,top5,long,2.0744903283931784,0.47,✗
-losers_only,t_intercept,t-Statistic,top5,short,-2.487469924477294,-2.74,✓
-losers_only,t_intercept,t-Statistic,top20,long,2.7342683211347025,1.27,✗
-losers_only,t_intercept,t-Statistic,top20,short,-2.9883519666900518,-3.35,~
-losers_only,t_intercept,t-Statistic,101-120,long,6.7418558447544665,2.85,✗
-losers_only,t_intercept,t-Statistic,101-120,short,-2.1317223066191064,-4.26,✗
-losers_only,t_intercept,t-Statistic,all,long,6.736824638789209,-1.32,✗
-losers_only,t_intercept,t-Statistic,all,short,-4.751825756156992,-5.22,✓
-losers_only,market,U.S. equity risk-premium,top5,long,0.6001924575459909,0.37415,✗
-losers_only,market,U.S. equity risk-premium,top5,short,0.574422052594815,0.44075,✗
-losers_only,market,U.S. equity risk-premium,top20,long,0.6325152075902145,0.47617,✗
-losers_only,market,U.S. equity risk-premium,top20,short,0.6554275813440583,0.50772,✗
-losers_only,market,U.S. equity risk-premium,101-120,long,0.8376440802589693,0.4852,✗
-losers_only,market,U.S. equity risk-premium,101-120,short,0.8999629932719982,0.56217,✗
-losers_only,market,U.S. equity risk-premium,all,long,0.7832357998594216,0.58571,✗
-losers_only,market,U.S. equity risk-premium,all,short,0.9182197697532568,0.73091,✗
-losers_only,t_market,t-Statistic,top5,long,7.417687154066865,4.6,✗
-losers_only,t_market,t-Statistic,top5,short,7.072649706060163,6.19,~
-losers_only,t_market,t-Statistic,top20,long,9.442559260456475,6.68,✗
-losers_only,t_market,t-Statistic,top20,short,9.247682815792713,8.44,✓
-losers_only,t_market,t-Statistic,101-120,long,13.473678921383303,10.23,✗
-losers_only,t_market,t-Statistic,101-120,short,17.091719563618152,9.74,✗
-losers_only,t_market,t-Statistic,all,long,17.093640122992824,14.99,~
-losers_only,t_market,t-Statistic,all,short,23.748357141132324,12.13,✗
-losers_only,smb,SMB,top5,long,0.06210728188711718,-0.16764,✗
-losers_only,smb,SMB,top5,short,0.0069125119010634735,-0.12532,✗
-losers_only,smb,SMB,top20,long,0.05532462153273685,-0.06506,✗
-losers_only,smb,SMB,top20,short,0.06753480004631233,-0.06616,✗
-losers_only,smb,SMB,101-120,long,0.23155680075553775,0.0112,✗
-losers_only,smb,SMB,101-120,short,0.25891550189142226,0.03453,✗
-losers_only,smb,SMB,all,long,0.35211396830438335,0.22192,✗
-losers_only,smb,SMB,all,short,0.4742841574029413,0.29271,✗
-losers_only,t_smb,t-Statistic,top5,long,0.7033739380311621,-1.74,✗
-losers_only,t_smb,t-Statistic,top5,short,0.07497465567050339,-2.0,✗
-losers_only,t_smb,t-Statistic,top20,long,0.7238342681817163,-0.8,✗
-losers_only,t_smb,t-Statistic,top20,short,0.8384358756670408,-1.22,✗
-losers_only,t_smb,t-Statistic,101-120,long,3.1327889636062616,0.27,✗
-losers_only,t_smb,t-Statistic,101-120,short,3.3435204424681295,0.95,✗
-losers_only,t_smb,t-Statistic,all,long,6.459039237818336,3.45,✗
-losers_only,t_smb,t-Statistic,all,short,7.766751633785435,3.15,✗
-losers_only,hml,HML,top5,long,0.5897164139159816,0.48401,~
-losers_only,hml,HML,top5,short,0.5819509429038,0.42661,✗
-losers_only,hml,HML,top20,long,0.6046209904995823,0.52539,~
-losers_only,hml,HML,top20,short,0.5849157520723561,0.48025,~
-losers_only,hml,HML,101-120,long,0.5212505211475503,0.39451,✗
-losers_only,hml,HML,101-120,short,0.5257121103815187,0.41175,✗
-losers_only,hml,HML,all,long,0.16244906653665642,0.25732,✗
-losers_only,hml,HML,all,short,0.1881461475189602,0.31134,✗
-losers_only,t_hml,t-Statistic,top5,long,9.053936790115964,7.12,✗
-losers_only,t_hml,t-Statistic,top5,short,9.555631333146756,6.92,✗
-losers_only,t_hml,t-Statistic,top20,long,10.800927378225511,9.36,~
-losers_only,t_hml,t-Statistic,top20,short,10.600121915924005,9.47,~
-losers_only,t_hml,t-Statistic,101-120,long,9.602643241304577,9.76,✓
-losers_only,t_hml,t-Statistic,101-120,short,9.76737187751689,11.54,~
-losers_only,t_hml,t-Statistic,all,long,4.444948371954642,7.49,✗
-losers_only,t_hml,t-Statistic,all,short,5.24039469488503,8.11,✗
-losers_only,momentum,Momentum,top5,long,-0.07085284720118776,-0.0543,✗
-losers_only,momentum,Momentum,top5,short,-0.011917921294761916,-0.02625,✗
-losers_only,momentum,Momentum,top20,long,-0.07142042201429404,-0.04456,✗
-losers_only,momentum,Momentum,top20,short,-0.02774026635931727,0.00361,✗
-losers_only,momentum,Momentum,101-120,long,-0.20127336704094492,-0.10901,✗
-losers_only,momentum,Momentum,101-120,short,-0.0691907661837508,-0.00589,✗
-losers_only,momentum,Momentum,all,long,-0.14179766777205108,-0.08832,✗
-losers_only,momentum,Momentum,all,short,0.030043074533356733,0.09245,✗
-losers_only,t_momentum,t-Statistic,top5,long,-1.6071539255374636,-1.48,✓
-losers_only,t_momentum,t-Statistic,top5,short,-0.27663232731811066,-0.65,✗
-losers_only,t_momentum,t-Statistic,top20,long,-1.5792646603823037,-1.21,✗
-losers_only,t_momentum,t-Statistic,top20,short,-0.6825273044785822,0.1,✗
-losers_only,t_momentum,t-Statistic,101-120,long,-4.834210234001673,-3.53,✗
-losers_only,t_momentum,t-Statistic,101-120,short,-1.8754544431762303,-0.21,✗
-losers_only,t_momentum,t-Statistic,all,long,-6.216691926658625,-3.53,✗
-losers_only,t_momentum,t-Statistic,all,short,1.4652820861097877,2.81,✗
-losers_only,reversal,Reversal,top5,long,-0.0919825273298672,0.15854,✗
-losers_only,reversal,Reversal,top5,short,-0.05546683355976557,0.05662,✗
-losers_only,reversal,Reversal,top20,long,-0.07390061135906024,0.09601,✗
-losers_only,reversal,Reversal,top20,short,-0.1080619795388724,0.02365,✗
-losers_only,reversal,Reversal,101-120,long,-0.08916367139909025,0.17288,✗
-losers_only,reversal,Reversal,101-120,short,-0.17307059887749868,0.0783,✗
-losers_only,reversal,Reversal,all,long,0.25636690031875575,0.39208,✗
-losers_only,reversal,Reversal,all,short,0.04478952323000195,0.19131,✗
-losers_only,t_reversal,t-Statistic,top5,long,-1.3212448862171338,1.83,✗
-losers_only,t_reversal,t-Statistic,top5,short,-0.8242917297881537,1.13,✗
-losers_only,t_reversal,t-Statistic,top20,long,-1.2435660580065957,1.26,✗
-losers_only,t_reversal,t-Statistic,top20,short,-1.811020581429244,0.55,✗
-losers_only,t_reversal,t-Statistic,101-120,long,-1.7210305386808893,4.33,✗
-losers_only,t_reversal,t-Statistic,101-120,short,-3.8460171181570266,1.9,✗
-losers_only,t_reversal,t-Statistic,all,long,6.733642735487811,10.44,✗
-losers_only,t_reversal,t-Statistic,all,short,1.208734674294963,2.98,✗
-losers_only,r2,R2,top5,long,0.34142178727633754,0.39,~
-losers_only,r2,R2,top5,short,0.39844384564512936,0.41,✓
-losers_only,r2,R2,top20,long,0.43919636614884616,0.48,✓
-losers_only,r2,R2,top20,short,0.47210366905152423,0.49,✓
-losers_only,r2,R2,101-120,long,0.7904482700946521,0.78,✓
-losers_only,r2,R2,101-120,short,0.7749304344887175,0.75,✓
-losers_only,r2,R2,all,long,0.9672156498048177,0.97,✓
-losers_only,r2,R2,all,short,0.9602562965389788,0.93,✓
-control,intercept,intercept,top5,pair,0.007391773000054855,0.00739,✓
-control,intercept,intercept,top20,pair,0.008861660840153704,0.00886,✓
-control,intercept,intercept,101-120,pair,0.008243524422758578,0.008239999999999999,✓
-control,intercept,intercept,all,pair,0.006596709203642348,0.0066,✓
-control,market,market,top5,pair,-0.017560233319668005,,
-control,market,market,top20,pair,0.007095667626199847,,
-control,market,market,101-120,pair,0.015534125157231954,,
-control,market,market,all,pair,0.06468956521041642,,
-control,smb,smb,top5,pair,0.014419460904881418,,
-control,smb,smb,top20,pair,0.018935606134261842,,
-control,smb,smb,101-120,pair,0.05189899667164604,,
-control,smb,smb,all,pair,0.07991883674084553,,
-control,hml,hml,top5,pair,0.00022034918705741716,,
-control,hml,hml,top20,pair,0.0277124263046673,,
-control,hml,hml,101-120,pair,0.01483197155660526,,
-control,hml,hml,all,pair,0.022650194899679895,,
-control,momentum,momentum,top5,pair,-0.03823656815552717,,
-control,momentum,momentum,top20,pair,-0.04325341604907327,,
-control,momentum,momentum,101-120,pair,-0.13883025380760192,,
-control,momentum,momentum,all,pair,-0.19517382761292623,,
-control,reversal,reversal,top5,pair,0.037338437316594295,,
-control,reversal,reversal,top20,pair,0.03979631105763809,,
-control,reversal,reversal,101-120,pair,0.06831120244850476,,
-control,reversal,reversal,all,pair,0.1483939820767595,,
-control,r2,r2,top5,pair,0.013023041359578547,,
-control,r2,r2,top20,pair,0.03547899506668761,,
-control,r2,r2,101-120,pair,0.24283205107315542,,
-control,r2,r2,all,pair,0.5981136389164019,,
-control,t_intercept,t_intercept,top5,pair,6.193614083516871,6.19,✓
-control,t_intercept,t_intercept,top20,pair,8.711293130937591,8.71,✓
-control,t_intercept,t_intercept,101-120,pair,11.035426230541807,11.04,✓
-control,t_intercept,t_intercept,all,pair,10.039151156595565,10.04,✓
-control,t_market,t_market,top5,pair,-0.6478494487311869,,
-control,t_market,t_market,top20,pair,0.3888581172468547,,
-control,t_market,t_market,101-120,pair,0.9616239760853991,,
-control,t_market,t_market,all,pair,4.545587519848872,,
-control,t_smb,t_smb,top5,pair,0.46667078136996226,,
-control,t_smb,t_smb,top20,pair,0.8615943876029201,,
-control,t_smb,t_smb,101-120,pair,2.5381038473053117,,
-control,t_smb,t_smb,all,pair,4.342442591537249,,
-control,t_hml,t_hml,top5,pair,0.0053542440979486615,,
-control,t_hml,t_hml,top20,pair,0.8613369163607003,,
-control,t_hml,t_hml,101-120,pair,0.6210880117201178,,
-control,t_hml,t_hml,all,pair,0.8295454257415243,,
-control,t_momentum,t_momentum,top5,pair,-1.3990539195297251,,
-control,t_momentum,t_momentum,top20,pair,-2.1966677733067344,,
-control,t_momentum,t_momentum,101-120,pair,-7.8506434802024705,,
-control,t_momentum,t_momentum,all,pair,-12.246861123037855,,
-control,t_reversal,t_reversal,top5,pair,0.9536003663655392,,
-control,t_reversal,t_reversal,top20,pair,1.1161116130875963,,
-control,t_reversal,t_reversal,101-120,pair,2.853819556924097,,
-control,t_reversal,t_reversal,all,pair,5.421310525786005,,
+st_rev,mean,Mean monthly return,top5,long,0.012544661809367332,0.01245,✓
+st_rev,mean,Mean monthly return,top5,short,0.004696707408618644,0.00501,✓
+st_rev,mean,Mean monthly return,top20,long,0.013577666247142326,0.0133,✓
+st_rev,mean,Mean monthly return,top20,short,0.003979591653757481,0.00435,✓
+st_rev,mean,Mean monthly return,101-120,long,0.014770973719799,0.01458,✓
+st_rev,mean,Mean monthly return,101-120,short,0.006560577933248948,0.00663,✓
+st_rev,mean,Mean monthly return,all,long,0.015065351736142825,0.01623,✓
+st_rev,mean,Mean monthly return,all,short,0.007092619513555914,0.00908,~
+st_rev,nw_se,Standard error (Newey-West),top5,long,0.0018596597051976312,0.00183,✓
+st_rev,nw_se,Standard error (Newey-West),top5,short,0.001991268674940204,0.00177,~
+st_rev,nw_se,Standard error (Newey-West),top20,long,0.0018362586319679844,0.00179,✓
+st_rev,nw_se,Standard error (Newey-West),top20,short,0.001887388963059015,0.00174,✓
+st_rev,nw_se,Standard error (Newey-West),101-120,long,0.0018759816051006648,0.0017,~
+st_rev,nw_se,Standard error (Newey-West),101-120,short,0.0016978046902397952,0.00165,✓
+st_rev,nw_se,Standard error (Newey-West),all,long,0.0026828544055723874,0.00254,✓
+st_rev,nw_se,Standard error (Newey-West),all,short,0.002499200094384837,0.00231,✓
+st_rev,std,Standard deviation,top5,long,0.03839371715655095,0.03875,✓
+st_rev,std,Standard deviation,top5,short,0.035652470424301634,0.03259,✓
+st_rev,std,Standard deviation,top20,long,0.03699648931132786,0.03653,✓
+st_rev,std,Standard deviation,top20,short,0.034109662692336305,0.03161,✓
+st_rev,std,Standard deviation,101-120,long,0.03791702440260702,0.03437,~
+st_rev,std,Standard deviation,101-120,short,0.035124250307513656,0.03146,~
+st_rev,std,Standard deviation,all,long,0.056644862201956594,0.05157,✓
+st_rev,std,Standard deviation,all,short,0.05130642347883213,0.04601,~
+st_rev,serial_correlation,Monthly serial correlation,top5,long,0.0899983092170614,0.06,✗
+st_rev,serial_correlation,Monthly serial correlation,top5,short,0.1423928143400293,0.11,✗
+st_rev,serial_correlation,Monthly serial correlation,top20,long,0.08985645664401148,0.09,✓
+st_rev,serial_correlation,Monthly serial correlation,top20,short,0.11165315524253654,0.12,✓
+st_rev,serial_correlation,Monthly serial correlation,101-120,long,0.13491659538741635,0.13,✓
+st_rev,serial_correlation,Monthly serial correlation,101-120,short,0.07505182818314637,0.12,✗
+st_rev,serial_correlation,Monthly serial correlation,all,long,0.1596515124260391,0.17,✓
+st_rev,serial_correlation,Monthly serial correlation,all,short,0.14245680674213534,0.16,~
+st_rev,intercept,Intercept,top5,long,0.002860212724258303,0.00103,✗
+st_rev,intercept,Intercept,top5,short,-0.005223266628202851,-0.00442,~
+st_rev,intercept,Intercept,top20,long,0.003562105534354795,0.00243,✗
+st_rev,intercept,Intercept,top20,short,-0.006036521669083848,-0.00521,~
+st_rev,intercept,Intercept,101-120,long,0.005055319910655023,0.00287,✗
+st_rev,intercept,Intercept,101-120,short,-0.0038908303647979614,-0.00426,✓
+st_rev,intercept,Intercept,all,long,0.004432236008036871,-0.00101,✗
+st_rev,intercept,Intercept,all,short,-0.003803699847707159,-0.00613,✗
+st_rev,t_intercept,t-Statistic,top5,long,1.5957135411876084,0.47,✗
+st_rev,t_intercept,t-Statistic,top5,short,-3.0851977754637376,-2.74,~
+st_rev,t_intercept,t-Statistic,top20,long,2.1631850815085336,1.27,✗
+st_rev,t_intercept,t-Statistic,top20,short,-4.0513504483528,-3.35,~
+st_rev,t_intercept,t-Statistic,101-120,long,4.989487787121654,2.85,✗
+st_rev,t_intercept,t-Statistic,101-120,short,-3.9164509780595145,-4.26,✓
+st_rev,t_intercept,t-Statistic,all,long,6.5218943559371265,-1.32,✗
+st_rev,t_intercept,t-Statistic,all,short,-5.845179909558022,-5.22,~
+st_rev,market,U.S. equity risk-premium,top5,long,0.4981446891509915,0.37415,✗
+st_rev,market,U.S. equity risk-premium,top5,short,0.5186824254770954,0.44075,~
+st_rev,market,U.S. equity risk-premium,top20,long,0.5475718367052647,0.47617,~
+st_rev,market,U.S. equity risk-premium,top20,short,0.5429576241531145,0.50772,✓
+st_rev,market,U.S. equity risk-premium,101-120,long,0.7328701071723257,0.4852,✗
+st_rev,market,U.S. equity risk-premium,101-120,short,0.7208799512705015,0.56217,✗
+st_rev,market,U.S. equity risk-premium,all,long,1.0346434290037247,0.58571,✗
+st_rev,market,U.S. equity risk-premium,all,short,0.9681898070820005,0.73091,✗
+st_rev,t_market,t-Statistic,top5,long,11.476657754542254,4.6,✗
+st_rev,t_market,t-Statistic,top5,short,12.089184337686508,6.19,✗
+st_rev,t_market,t-Statistic,top20,long,13.568735966872469,6.68,✗
+st_rev,t_market,t-Statistic,top20,short,13.812875589095642,8.44,✗
+st_rev,t_market,t-Statistic,101-120,long,22.24917568767097,10.23,✗
+st_rev,t_market,t-Statistic,101-120,short,20.935288013454233,9.74,✗
+st_rev,t_market,t-Statistic,all,long,54.30458461096871,14.99,✗
+st_rev,t_market,t-Statistic,all,short,54.30236307952378,12.13,✗
+st_rev,smb,SMB,top5,long,-0.04090403970373569,-0.16764,✗
+st_rev,smb,SMB,top5,short,-0.04596211529880971,-0.12532,✗
+st_rev,smb,SMB,top20,long,-0.024414688164004817,-0.06506,✗
+st_rev,smb,SMB,top20,short,-0.04101750077172154,-0.06616,✗
+st_rev,smb,SMB,101-120,long,0.1332384516029081,0.0112,✗
+st_rev,smb,SMB,101-120,short,0.08565794654838949,0.03453,✗
+st_rev,smb,SMB,all,long,0.6033047995563525,0.22192,✗
+st_rev,smb,SMB,all,short,0.6238426096016746,0.29271,✗
+st_rev,t_smb,t-Statistic,top5,long,-0.7656168732127735,-1.74,✗
+st_rev,t_smb,t-Statistic,top5,short,-0.9339983711755784,-2.0,✗
+st_rev,t_smb,t-Statistic,top20,long,-0.5048728396257709,-0.8,✗
+st_rev,t_smb,t-Statistic,top20,short,-0.9063333984191699,-1.22,✗
+st_rev,t_smb,t-Statistic,101-120,long,3.777070733076407,0.27,✗
+st_rev,t_smb,t-Statistic,101-120,short,2.2917603449289543,0.95,✗
+st_rev,t_smb,t-Statistic,all,long,14.192848744195825,3.45,✗
+st_rev,t_smb,t-Statistic,all,short,24.571812904206624,3.15,✗
+st_rev,hml,HML,top5,long,0.5653140092055486,0.48401,~
+st_rev,hml,HML,top5,short,0.5677894568323609,0.42661,✗
+st_rev,hml,HML,top20,long,0.5909967193833197,0.52539,~
+st_rev,hml,HML,top20,short,0.5639249156541979,0.48025,~
+st_rev,hml,HML,101-120,long,0.501733681106502,0.39451,✗
+st_rev,hml,HML,101-120,short,0.4891937851549573,0.41175,~
+st_rev,hml,HML,all,long,0.22017058603717857,0.25732,~
+st_rev,hml,HML,all,short,0.16371152960473845,0.31134,✗
+st_rev,t_hml,t-Statistic,top5,long,8.43118493420191,7.12,~
+st_rev,t_hml,t-Statistic,top5,short,8.946511599577795,6.92,✗
+st_rev,t_hml,t-Statistic,top20,long,10.2314153069915,9.36,✓
+st_rev,t_hml,t-Statistic,top20,short,9.59795367505281,9.47,✓
+st_rev,t_hml,t-Statistic,101-120,long,8.740168964159208,9.76,~
+st_rev,t_hml,t-Statistic,101-120,short,7.9301944921700285,11.54,✗
+st_rev,t_hml,t-Statistic,all,long,6.237365700627184,7.49,~
+st_rev,t_hml,t-Statistic,all,short,4.758645743704043,8.11,✗
+st_rev,momentum,Momentum,top5,long,-0.03227587557160717,-0.0543,✗
+st_rev,momentum,Momentum,top5,short,0.011364712177617267,-0.02625,✗
+st_rev,momentum,Momentum,top20,long,-0.03635524043123609,-0.04456,~
+st_rev,momentum,Momentum,top20,short,0.01301042244206898,0.00361,✗
+st_rev,momentum,Momentum,101-120,long,-0.15696693547296667,-0.10901,✗
+st_rev,momentum,Momentum,101-120,short,-0.00029290822367995393,-0.00589,✗
+st_rev,momentum,Momentum,all,long,-0.18745303263748458,-0.08832,✗
+st_rev,momentum,Momentum,all,short,0.07075491068174011,0.09245,~
+st_rev,t_momentum,t-Statistic,top5,long,-0.8305145480254208,-1.48,✗
+st_rev,t_momentum,t-Statistic,top5,short,0.28756820257734544,-0.65,✗
+st_rev,t_momentum,t-Statistic,top20,long,-0.9322532606352921,-1.21,~
+st_rev,t_momentum,t-Statistic,top20,short,0.3706168716787546,0.1,✗
+st_rev,t_momentum,t-Statistic,101-120,long,-3.612551303162728,-3.53,✓
+st_rev,t_momentum,t-Statistic,101-120,short,-0.007446609601107578,-0.21,✗
+st_rev,t_momentum,t-Statistic,all,long,-6.555073729662472,-3.53,✗
+st_rev,t_momentum,t-Statistic,all,short,3.0095368678990857,2.81,✓
+st_rev,reversal,Reversal,top5,long,0.05692940273423244,0.15854,✗
+st_rev,reversal,Reversal,top5,short,0.016952712158808673,0.05662,✗
+st_rev,reversal,Reversal,top20,long,0.05776986247610061,0.09601,✗
+st_rev,reversal,Reversal,top20,short,0.014674133747894148,0.02365,✗
+st_rev,reversal,Reversal,101-120,long,0.07492481079653593,0.17288,✗
+st_rev,reversal,Reversal,101-120,short,-0.0033426246781781415,0.0783,✗
+st_rev,reversal,Reversal,all,long,0.11369822627524932,0.39208,✗
+st_rev,reversal,Reversal,all,short,-0.1395890765151944,0.19131,✗
+st_rev,t_reversal,t-Statistic,top5,long,1.216196545722018,1.83,✗
+st_rev,t_reversal,t-Statistic,top5,short,0.449203950895009,1.13,✗
+st_rev,t_reversal,t-Statistic,top20,long,1.2503265692026493,1.26,✓
+st_rev,t_reversal,t-Statistic,top20,short,0.4016063181517189,0.55,✗
+st_rev,t_reversal,t-Statistic,101-120,long,1.9861315792060277,4.33,✗
+st_rev,t_reversal,t-Statistic,101-120,short,-0.09425965967411677,1.9,✗
+st_rev,t_reversal,t-Statistic,all,long,3.7975244985728893,10.44,✗
+st_rev,t_reversal,t-Statistic,all,short,-3.7387308781286985,2.98,✗
+st_rev,r2,R2,top5,long,0.3461852091461187,0.39,~
+st_rev,r2,R2,top5,short,0.39901256546623765,0.41,✓
+st_rev,r2,R2,top20,long,0.4411123363474776,0.48,✓
+st_rev,r2,R2,top20,short,0.46741623203968763,0.49,✓
+st_rev,r2,R2,101-120,long,0.7912634736742596,0.78,✓
+st_rev,r2,R2,101-120,short,0.7555627184765389,0.75,✓
+st_rev,r2,R2,all,long,0.9595922160833976,0.97,✓
+st_rev,r2,R2,all,short,0.9630785899765595,0.93,✓
+losers_only,mean,Mean monthly return,top5,long,0.012544661809367332,0.01245,✓
+losers_only,mean,Mean monthly return,top5,short,0.004696707408618644,0.00501,✓
+losers_only,mean,Mean monthly return,top20,long,0.013577666247142326,0.0133,✓
+losers_only,mean,Mean monthly return,top20,short,0.003979591653757481,0.00435,✓
+losers_only,mean,Mean monthly return,101-120,long,0.014770973719799,0.01458,✓
+losers_only,mean,Mean monthly return,101-120,short,0.006560577933248948,0.00663,✓
+losers_only,mean,Mean monthly return,all,long,0.015065351736142825,0.01623,✓
+losers_only,mean,Mean monthly return,all,short,0.007092619513555914,0.00908,~
+losers_only,nw_se,Standard error (Newey-West),top5,long,0.0018596597051976312,0.00183,✓
+losers_only,nw_se,Standard error (Newey-West),top5,short,0.001991268674940204,0.00177,~
+losers_only,nw_se,Standard error (Newey-West),top20,long,0.0018362586319679844,0.00179,✓
+losers_only,nw_se,Standard error (Newey-West),top20,short,0.001887388963059015,0.00174,✓
+losers_only,nw_se,Standard error (Newey-West),101-120,long,0.0018759816051006648,0.0017,~
+losers_only,nw_se,Standard error (Newey-West),101-120,short,0.0016978046902397952,0.00165,✓
+losers_only,nw_se,Standard error (Newey-West),all,long,0.0026828544055723874,0.00254,✓
+losers_only,nw_se,Standard error (Newey-West),all,short,0.002499200094384837,0.00231,✓
+losers_only,std,Standard deviation,top5,long,0.03839371715655095,0.03875,✓
+losers_only,std,Standard deviation,top5,short,0.035652470424301634,0.03259,✓
+losers_only,std,Standard deviation,top20,long,0.03699648931132786,0.03653,✓
+losers_only,std,Standard deviation,top20,short,0.034109662692336305,0.03161,✓
+losers_only,std,Standard deviation,101-120,long,0.03791702440260702,0.03437,~
+losers_only,std,Standard deviation,101-120,short,0.035124250307513656,0.03146,~
+losers_only,std,Standard deviation,all,long,0.056644862201956594,0.05157,✓
+losers_only,std,Standard deviation,all,short,0.05130642347883213,0.04601,~
+losers_only,serial_correlation,Monthly serial correlation,top5,long,0.0899983092170614,0.06,✗
+losers_only,serial_correlation,Monthly serial correlation,top5,short,0.1423928143400293,0.11,✗
+losers_only,serial_correlation,Monthly serial correlation,top20,long,0.08985645664401148,0.09,✓
+losers_only,serial_correlation,Monthly serial correlation,top20,short,0.11165315524253654,0.12,✓
+losers_only,serial_correlation,Monthly serial correlation,101-120,long,0.13491659538741635,0.13,✓
+losers_only,serial_correlation,Monthly serial correlation,101-120,short,0.07505182818314637,0.12,✗
+losers_only,serial_correlation,Monthly serial correlation,all,long,0.1596515124260391,0.17,✓
+losers_only,serial_correlation,Monthly serial correlation,all,short,0.14245680674213534,0.16,~
+losers_only,intercept,Intercept,top5,long,0.003975821434381114,0.00103,✗
+losers_only,intercept,Intercept,top5,short,-0.004685749824078716,-0.00442,✓
+losers_only,intercept,Intercept,top20,long,0.00453755049712329,0.00243,✗
+losers_only,intercept,Intercept,top20,short,-0.0051383621842281055,-0.00521,✓
+losers_only,intercept,Intercept,101-120,long,0.00625995609833118,0.00287,✗
+losers_only,intercept,Intercept,101-120,short,-0.002690311446322689,-0.00426,✗
+losers_only,intercept,Intercept,all,long,0.0035836652539553856,-0.00101,✗
+losers_only,intercept,Intercept,all,short,-0.00440774607580516,-0.00613,✗
+losers_only,t_intercept,t-Statistic,top5,long,2.177721979305026,0.47,✗
+losers_only,t_intercept,t-Statistic,top5,short,-2.7845023610133257,-2.74,✓
+losers_only,t_intercept,t-Statistic,top20,long,2.7426710694453473,1.27,✗
+losers_only,t_intercept,t-Statistic,top20,short,-3.4268602838897784,-3.35,✓
+losers_only,t_intercept,t-Statistic,101-120,long,6.711477791482343,2.85,✗
+losers_only,t_intercept,t-Statistic,101-120,short,-2.887982951243169,-4.26,✗
+losers_only,t_intercept,t-Statistic,all,long,6.736821092945484,-1.32,✗
+losers_only,t_intercept,t-Statistic,all,short,-6.861496588870047,-5.22,✗
+losers_only,market,U.S. equity risk-premium,top5,long,0.6055866609261243,0.37415,✗
+losers_only,market,U.S. equity risk-premium,top5,short,0.5817523790050283,0.44075,✗
+losers_only,market,U.S. equity risk-premium,top20,long,0.6328916671216596,0.47617,✗
+losers_only,market,U.S. equity risk-premium,top20,short,0.6630732812589709,0.50772,✗
+losers_only,market,U.S. equity risk-premium,101-120,long,0.8343730526373364,0.4852,✗
+losers_only,market,U.S. equity risk-premium,101-120,short,0.906198621140285,0.56217,✗
+losers_only,market,U.S. equity risk-premium,all,long,0.7835389204051526,0.58571,✗
+losers_only,market,U.S. equity risk-premium,all,short,1.0273562483506558,0.73091,✗
+losers_only,t_market,t-Statistic,top5,long,7.421545555423729,4.6,✗
+losers_only,t_market,t-Statistic,top5,short,7.071793283000374,6.19,~
+losers_only,t_market,t-Statistic,top20,long,9.431809886948782,6.68,✗
+losers_only,t_market,t-Statistic,top20,short,9.24889534357123,8.44,✓
+losers_only,t_market,t-Statistic,101-120,long,13.475834596203988,10.23,✗
+losers_only,t_market,t-Statistic,101-120,short,16.79580394028501,9.74,✗
+losers_only,t_market,t-Statistic,all,long,17.093769999757093,14.99,~
+losers_only,t_market,t-Statistic,all,short,37.89441714629457,12.13,✗
+losers_only,smb,SMB,top5,long,0.06178067353442501,-0.16764,✗
+losers_only,smb,SMB,top5,short,0.015044414205138018,-0.12532,✗
+losers_only,smb,SMB,top20,long,0.05657110278277771,-0.06506,✗
+losers_only,smb,SMB,top20,short,0.07594831915180521,-0.06616,✗
+losers_only,smb,SMB,101-120,long,0.2293108533567101,0.0112,✗
+losers_only,smb,SMB,101-120,short,0.26726752361962486,0.03453,✗
+losers_only,smb,SMB,all,long,0.3523916983512954,0.22192,✗
+losers_only,smb,SMB,all,short,0.6879590642436887,0.29271,✗
+losers_only,t_smb,t-Statistic,top5,long,0.6993656289993192,-1.74,✗
+losers_only,t_smb,t-Statistic,top5,short,0.1621913613751058,-2.0,✗
+losers_only,t_smb,t-Statistic,top20,long,0.7376902556703391,-0.8,✗
+losers_only,t_smb,t-Statistic,top20,short,0.9290371032924358,-1.22,✗
+losers_only,t_smb,t-Statistic,101-120,long,3.1369204637612533,0.27,✗
+losers_only,t_smb,t-Statistic,101-120,short,3.4095036814280277,0.95,✗
+losers_only,t_smb,t-Statistic,all,long,6.4618357992117526,3.45,✗
+losers_only,t_smb,t-Statistic,all,short,18.241728067818997,3.15,✗
+losers_only,hml,HML,top5,long,0.5855335249363386,0.48401,~
+losers_only,hml,HML,top5,short,0.580356281150759,0.42661,✗
+losers_only,hml,HML,top20,long,0.6065207835624463,0.52539,~
+losers_only,hml,HML,top20,short,0.5886044767394144,0.48025,~
+losers_only,hml,HML,101-120,long,0.5199396896032922,0.39451,✗
+losers_only,hml,HML,101-120,short,0.5283712091584243,0.41175,✗
+losers_only,hml,HML,all,long,0.16245994629425892,0.25732,✗
+losers_only,hml,HML,all,short,0.1820891080635012,0.31134,✗
+losers_only,t_hml,t-Statistic,top5,long,9.01820945893546,7.12,✗
+losers_only,t_hml,t-Statistic,top5,short,9.385643911601946,6.92,✗
+losers_only,t_hml,t-Statistic,top20,long,10.789339788825032,9.36,~
+losers_only,t_hml,t-Statistic,top20,short,10.538339199174683,9.47,~
+losers_only,t_hml,t-Statistic,101-120,long,9.735721269404918,9.76,✓
+losers_only,t_hml,t-Statistic,101-120,short,9.842439858598235,11.54,~
+losers_only,t_hml,t-Statistic,all,long,4.448189666892637,7.49,✗
+losers_only,t_hml,t-Statistic,all,short,5.089444200340578,8.11,✗
+losers_only,momentum,Momentum,top5,long,-0.0755830227053371,-0.0543,✗
+losers_only,momentum,Momentum,top5,short,-0.0103552232829796,-0.02625,✗
+losers_only,momentum,Momentum,top20,long,-0.07356985542604624,-0.04456,✗
+losers_only,momentum,Momentum,top20,short,-0.02439511740513155,0.00361,✗
+losers_only,momentum,Momentum,101-120,long,-0.202633626358177,-0.10901,✗
+losers_only,momentum,Momentum,101-120,short,-0.052161873580232186,-0.00589,✗
+losers_only,momentum,Momentum,all,long,-0.14171568601747067,-0.08832,✗
+losers_only,momentum,Momentum,all,short,0.08533864059462266,0.09245,✓
+losers_only,t_momentum,t-Statistic,top5,long,-1.6797583705797319,-1.48,~
+losers_only,t_momentum,t-Statistic,top5,short,-0.2366188513967401,-0.65,✗
+losers_only,t_momentum,t-Statistic,top20,long,-1.6179839544788934,-1.21,✗
+losers_only,t_momentum,t-Statistic,top20,short,-0.598221885130096,0.1,✗
+losers_only,t_momentum,t-Statistic,101-120,long,-4.831367132888292,-3.53,✗
+losers_only,t_momentum,t-Statistic,101-120,short,-1.4048250637187012,-0.21,✗
+losers_only,t_momentum,t-Statistic,all,long,-6.212237871076898,-3.53,✗
+losers_only,t_momentum,t-Statistic,all,short,3.776796009835478,2.81,✗
+losers_only,reversal,Reversal,top5,long,-0.09536227866017735,0.15854,✗
+losers_only,reversal,Reversal,top5,short,-0.05820426391189172,0.05662,✗
+losers_only,reversal,Reversal,top20,long,-0.07402960992880529,0.09601,✗
+losers_only,reversal,Reversal,top20,short,-0.11322922112776969,0.02365,✗
+losers_only,reversal,Reversal,101-120,long,-0.08723369106560551,0.17288,✗
+losers_only,reversal,Reversal,101-120,short,-0.1782054408673767,0.0783,✗
+losers_only,reversal,Reversal,all,long,0.2562198858005575,0.39208,✗
+losers_only,reversal,Reversal,all,short,-0.07561603698143363,0.19131,✗
+losers_only,t_reversal,t-Statistic,top5,long,-1.3554764112200266,1.83,✗
+losers_only,t_reversal,t-Statistic,top5,short,-0.8640211803966428,1.13,✗
+losers_only,t_reversal,t-Statistic,top20,long,-1.2409802699916328,1.26,✗
+losers_only,t_reversal,t-Statistic,top20,short,-1.8878108437125491,0.55,✗
+losers_only,t_reversal,t-Statistic,101-120,long,-1.703240200874282,4.33,✗
+losers_only,t_reversal,t-Statistic,101-120,short,-3.868894100826208,1.9,✗
+losers_only,t_reversal,t-Statistic,all,long,6.72672100197596,10.44,✗
+losers_only,t_reversal,t-Statistic,all,short,-3.0163320707790247,2.98,✗
+losers_only,r2,R2,top5,long,0.3476923655580585,0.39,~
+losers_only,r2,R2,top5,short,0.40025083309659437,0.41,✓
+losers_only,r2,R2,top20,long,0.4412527903286658,0.48,✓
+losers_only,r2,R2,top20,short,0.4731644020328588,0.49,✓
+losers_only,r2,R2,101-120,long,0.7908852777566826,0.78,✓
+losers_only,r2,R2,101-120,short,0.7693559836032973,0.75,✓
+losers_only,r2,R2,all,long,0.9672340974856201,0.97,✓
+losers_only,r2,R2,all,short,0.9581701380379155,0.93,✓
+control,intercept,intercept,top5,pair,0.008083479352461153,,
+control,intercept,intercept,top20,pair,0.009598627203438643,,
+control,intercept,intercept,101-120,pair,0.00894615027545299,,
+control,intercept,intercept,all,pair,0.008235935855744031,,
+control,market,market,top5,pair,-0.020537736326103416,,
+control,market,market,top20,pair,0.004614212552150346,,
+control,market,market,101-120,pair,0.01199015590182391,,
+control,market,market,all,pair,0.06645362192172485,,
+control,smb,smb,top5,pair,0.005058075595073982,,
+control,smb,smb,top20,pair,0.016602812607716604,,
+control,smb,smb,101-120,pair,0.04758050505451855,,
+control,smb,smb,all,pair,-0.02053781004532212,,
+control,hml,hml,top5,pair,-0.002475447626812082,,
+control,hml,hml,top20,pair,0.02707180372912146,,
+control,hml,hml,101-120,pair,0.012539895951544634,,
+control,hml,hml,all,pair,0.05645905643243971,,
+control,momentum,momentum,top5,pair,-0.04364058774922429,,
+control,momentum,momentum,top20,pair,-0.04936566287330484,,
+control,momentum,momentum,101-120,pair,-0.15667402724928653,,
+control,momentum,momentum,all,pair,-0.2582079433192245,,
+control,reversal,reversal,top5,pair,0.039976690575423975,,
+control,reversal,reversal,top20,pair,0.04309572872820651,,
+control,reversal,reversal,101-120,pair,0.07826743547471393,,
+control,reversal,reversal,all,pair,0.25328730279044376,,
+control,r2,r2,top5,pair,0.015182563295150331,,
+control,r2,r2,top20,pair,0.04013890957652044,,
+control,r2,r2,101-120,pair,0.27422734681711536,,
+control,r2,r2,all,pair,0.6661853491944107,,
+control,t_intercept,t_intercept,top5,pair,6.791599045231217,,
+control,t_intercept,t_intercept,top20,pair,9.261723187517578,,
+control,t_intercept,t_intercept,101-120,pair,11.83555300815524,,
+control,t_intercept,t_intercept,all,pair,12.050847879476665,,
+control,t_market,t_market,top5,pair,-0.7446640074090549,,
+control,t_market,t_market,top20,pair,0.2505608018845336,,
+control,t_market,t_market,101-120,pair,0.7077366019630705,,
+control,t_market,t_market,all,pair,3.6747529486128183,,
+control,t_smb,t_smb,top5,pair,0.1638787627195198,,
+control,t_smb,t_smb,top20,pair,0.7286885084814089,,
+control,t_smb,t_smb,101-120,pair,2.262440945014456,,
+control,t_smb,t_smb,all,pair,-0.4031423384625994,,
+control,t_hml,t_hml,top5,pair,-0.060271883856639855,,
+control,t_hml,t_hml,top20,pair,0.8194010029982584,,
+control,t_hml,t_hml,101-120,pair,0.5194186491065942,,
+control,t_hml,t_hml,all,pair,1.5455242042512503,,
+control,t_momentum,t_momentum,top5,pair,-1.5678053637316283,,
+control,t_momentum,t_momentum,top20,pair,-2.5142098053586515,,
+control,t_momentum,t_momentum,101-120,pair,-8.77510235965109,,
+control,t_momentum,t_momentum,all,pair,-11.774802910544336,,
+control,t_reversal,t_reversal,top5,pair,0.9836166716822721,,
+control,t_reversal,t_reversal,top20,pair,1.17002566340063,,
+control,t_reversal,t_reversal,101-120,pair,3.13010496683933,,
+control,t_reversal,t_reversal,all,pair,5.8687308586915545,,
