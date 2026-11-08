@@ -321,3 +321,20 @@ def test_account_treats_a_missing_return_as_no_change():
     out = eng.account(np.array([0]), np.array([2]), np.array([[1]]), np.array([[0]]), r)
     assert_allclose(out["pay"][:, 0], [0.0, 0.0, 0.0])
     assert_allclose(out["lval"][:, 0], [0.0, 1.0, 1.0])
+
+
+def test_one_output_directory_holds_one_run(tmp_path):
+    # A resumed run skips cohorts already written, so a different close rule, seed or
+    # replication count in the same directory must be refused, not mixed in.
+    (tmp_path / "cohorts").mkdir()
+    primary = {"close_rule": "true", "seed": 1, "reps": 200}
+    t6.check_run_stamp(tmp_path, primary)
+    t6.check_run_stamp(tmp_path, primary)  # resuming the same run is fine
+    for other in ({**primary, "close_rule": "own"}, {**primary, "seed": 2}, {**primary, "reps": 10}):
+        with pytest.raises(SystemExit, match="use a new --out-root"):
+            t6.check_run_stamp(tmp_path, other)
+    unstamped = tmp_path / "old"
+    (unstamped / "cohorts").mkdir(parents=True)
+    (unstamped / "cohorts" / "1990-01.npz").write_bytes(b"")
+    with pytest.raises(SystemExit, match="without run_params.json"):
+        t6.check_run_stamp(unstamped, primary)

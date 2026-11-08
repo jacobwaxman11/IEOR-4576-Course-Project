@@ -650,9 +650,37 @@ def cohort_output_path(out_root: Path, year: int, month: int) -> Path:
     return out_root / "cohorts" / f"{year:04d}-{month:02d}.npz"
 
 
+#: One output directory holds one run; this file records its close rule and draws.
+RUN_STAMP = "run_params.json"
+
+
+def run_params(args) -> dict:
+    return {"close_rule": args.close, "seed": int(args.seed), "reps": int(args.reps)}
+
+
+def check_run_stamp(out_root: Path, params: dict) -> None:
+    """Refuse to mix close rules, seeds or replication counts in one output directory.
+
+    A resumed run skips the cohorts already written, so outputs of a different run
+    would otherwise be reused silently. Writes the stamp for a new directory.
+    """
+    path = out_root / RUN_STAMP
+    if path.exists():
+        found = json.loads(path.read_text())
+        if found != params:
+            raise SystemExit(f"{out_root} holds a run with {found}, not {params}; "
+                             "use a new --out-root")
+        return
+    if any((out_root / "cohorts").glob("*.npz")):
+        raise SystemExit(f"{out_root} holds cohort outputs without {RUN_STAMP}; "
+                         "use a new --out-root")
+    path.write_text(json.dumps(params, sort_keys=True) + "\n")
+
+
 def run_shard(args, cohorts: list[tuple[int, int]], shard: int, shards: int) -> int:
     out_root = Path(args.out_root).resolve()
     (out_root / "cohorts").mkdir(parents=True, exist_ok=True)
+    check_run_stamp(out_root, run_params(args))
     cache_root = Path(args.cache_root).resolve()
     mine = [c for i, c in enumerate(cohorts) if i % shards == shard]
     done = 0
@@ -677,7 +705,8 @@ def run_shard(args, cohorts: list[tuple[int, int]], shard: int, shards: int) -> 
 def run_all(args, cohorts: list[tuple[int, int]]) -> int:
     workers = max(1, int(args.workers))
     out_root = Path(args.out_root).resolve()
-    out_root.mkdir(parents=True, exist_ok=True)
+    (out_root / "cohorts").mkdir(parents=True, exist_ok=True)
+    check_run_stamp(out_root, run_params(args))
     script = str(Path(__file__).resolve())
     started = time.time()
     procs = []
@@ -818,7 +847,14 @@ def main() -> int:
         return run_all(args, cohorts)
     if args.mode == "report":
         import table6_report as report
-        return report.main(Path(args.out_root).resolve(), args.reps)
+        out_root = Path(args.out_root).resolve()
+        stamp = out_root / RUN_STAMP
+        if not stamp.exists() or json.loads(stamp.read_text()) != run_params(args):
+            raise SystemExit(f"{out_root} was not run with {run_params(args)} ({RUN_STAMP})")
+        if args.close != "true":
+            # t6_template.md describes the primary design (REVIEW_NOTES section 54).
+            raise SystemExit("the report describes --close true; summarise other runs separately")
+        return report.main(out_root, args.reps)
     raise SystemExit(f"unknown mode {args.mode}")
 
 

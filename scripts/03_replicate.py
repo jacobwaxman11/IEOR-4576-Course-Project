@@ -68,6 +68,7 @@ from project.data import (
     issuer_map,
     load_daily,
     pin_arrow_threads,
+    processed_source_identity,
     trading_calendar,
 )
 from project.evaluation import (
@@ -530,7 +531,8 @@ def verify_cache(universe: str, continued: bool) -> None:
             f"pass --normalization {meta.get('normalization')} or rebuild with --force"
         )
     for key in ("exclude_same_issuer", "max_stale_share", "telephone_sic", "trigger_sigma",
-                "short_weights", "size_deciles_top", "long_delisting_loss", "waste_sic"):
+                "short_weights", "size_deciles_top", "long_delisting_loss", "waste_sic",
+                "processed_source"):
         if meta.get(key) != want.get(key):
             built = f"{key}={meta[key]}" if key in meta else f"no {key} stamp"
             now = f"{key}={want[key]}" if key in want else f"no {key}"
@@ -2299,6 +2301,11 @@ def formation_options(args: argparse.Namespace) -> dict:
         options["long_delisting_loss"] = True
     if getattr(args, "waste_sic", "industrials") != "industrials":
         options["waste_sic"] = args.waste_sic
+    # A panel chosen with GGR_PROCESSED_DIR (another data vintage) is stamped by its
+    # provenance file, so its cohorts never share a cache with the default panel's.
+    source = processed_source_identity()
+    if source is not None:
+        options["processed_source"] = source
     return options
 
 
