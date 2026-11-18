@@ -3,7 +3,12 @@
 import argparse
 from pathlib import Path
 
-from project.import_ui import import_calendar, import_daily_csv, import_monthly_csv, import_volume_csv
+from project.import_ui import (
+    import_calendar,
+    import_daily_csv,
+    import_monthly_csv,
+    import_volume_csv,
+)
 from project.paths import ROOT, WRDS_API_DIR
 
 

@@ -1,0 +1,274 @@
+{
+  "factor_vintage": "2005",
+  "factor_sd": {
+    "pre": {
+      "printed": [
+        0.0458,
+        0.02923,
+        0.02597,
+        0.03506,
+        0.07228
+      ],
+      "measured": [
+        0.04579641550487841,
+        0.029196868668415723,
+        0.026098422166072714,
+        0.03500424048641007,
+        0.02588372039869688
+      ],
+      "matches_at_three_dp": [
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    "post": {
+      "printed": [
+        0.0439,
+        0.03856,
+        0.03641,
+        0.04926,
+        0.04448
+      ],
+      "measured": [
+        0.0440726079339838,
+        0.0388748911935742,
+        0.03644112954397589,
+        0.049370779726371036,
+        0.04032226755218918
+      ],
+      "matches_at_three_dp": [
+        true,
+        true,
+        true,
+        true
+      ]
+    }
+  },
+  "sigma_y_control": {
+    "top5": {
+      "mean_gap_bp": 0.44,
+      "sd_gap_rel": 0.00074
+    },
+    "top20": {
+      "mean_gap_bp": -0.47,
+      "sd_gap_rel": -0.00182
+    },
+    "101-120": {
+      "mean_gap_bp": -0.5,
+      "sd_gap_rel": -0.00141
+    },
+    "all": {
+      "mean_gap_bp": 0.55,
+      "sd_gap_rel": -0.00143
+    }
+  },
+  "variance_identity": {
+    "Table 4 (full sample)": {
+      "top5": {
+        "r2_printed": 0.05,
+        "sigma_y": 0.021,
+        "r2_from_four_loadings": 0.0537,
+        "reversal_variance_term": 0.0239,
+        "required_rho": -0.3852,
+        "feasible": true
+      },
+      "top20": {
+        "r2_printed": 0.09,
+        "sigma_y": 0.0153,
+        "r2_from_four_loadings": 0.0414,
+        "reversal_variance_term": 0.0226,
+        "required_rho": 0.4232,
+        "feasible": true
+      },
+      "101-120": {
+        "r2_printed": 0.18,
+        "sigma_y": 0.0144,
+        "r2_from_four_loadings": 0.1366,
+        "reversal_variance_term": 0.0436,
+        "required_rho": -0.0017,
+        "feasible": true
+      },
+      "all": {
+        "r2_printed": 0.54,
+        "sigma_y": 0.0158,
+        "r2_from_four_loadings": 0.3818,
+        "reversal_variance_term": 0.1637,
+        "required_rho": -0.011,
+        "feasible": true
+      }
+    },
+    "Table 8 Panel A (pre-1989)": {
+      "top5": {
+        "r2_printed": 0.19,
+        "sigma_y": 0.0226,
+        "r2_from_four_loadings": 1.5278,
+        "reversal_variance_term": 1.9439,
+        "required_rho": -0.9521,
+        "feasible": true
+      },
+      "top20": {
+        "r2_printed": 0.23,
+        "sigma_y": 0.0169,
+        "r2_from_four_loadings": 1.4628,
+        "reversal_variance_term": 2.0276,
+        "required_rho": -0.9466,
+        "feasible": true
+      },
+      "101-120": {
+        "r2_printed": 0.26,
+        "sigma_y": 0.0153,
+        "r2_from_four_loadings": 1.3292,
+        "reversal_variance_term": 1.8539,
+        "required_rho": -0.9311,
+        "feasible": true
+      },
+      "all": {
+        "r2_printed": 0.7,
+        "sigma_y": 0.0165,
+        "r2_from_four_loadings": 2.601,
+        "reversal_variance_term": 3.9196,
+        "required_rho": -0.9115,
+        "feasible": true
+      }
+    },
+    "Table 8 Panel B (post-1988)": {
+      "top5": {
+        "r2_printed": 0.02,
+        "sigma_y": 0.0166,
+        "r2_from_four_loadings": 0.0291,
+        "reversal_variance_term": 0.0281,
+        "required_rho": 0.6505,
+        "feasible": true
+      },
+      "top20": {
+        "r2_printed": 0.04,
+        "sigma_y": 0.0099,
+        "r2_from_four_loadings": 0.0692,
+        "reversal_variance_term": 0.0061,
+        "required_rho": 0.8609,
+        "feasible": true
+      },
+      "101-120": {
+        "r2_printed": 0.19,
+        "sigma_y": 0.0112,
+        "r2_from_four_loadings": 0.1531,
+        "reversal_variance_term": 0.0091,
+        "required_rho": 0.3721,
+        "feasible": true
+      },
+      "all": {
+        "r2_printed": 0.64,
+        "sigma_y": 0.0129,
+        "r2_from_four_loadings": 0.2602,
+        "reversal_variance_term": 0.4173,
+        "required_rho": -0.0569,
+        "feasible": true
+      }
+    }
+  },
+  "joint_test": {
+    "Table 8 Panel A (pre-1989)": {
+      "cov_with_factors": [
+        0.0027,
+        0.0017,
+        -0.0003,
+        -0.0004
+      ],
+      "r2_of_reversal_on_four": 0.943,
+      "feasible": true,
+      "cond": 102.7997,
+      "round_share_feasible": 0.9983,
+      "round_p01": 0.9284,
+      "round_p50": 0.9446,
+      "round_p99": 0.9891,
+      "french_st_rev_span": 0.2592
+    },
+    "Table 8 Panel B (post-1988)": {
+      "cov_with_factors": [
+        0.0014,
+        0.0009,
+        -0.0006,
+        -0.0007
+      ],
+      "r2_of_reversal_on_four": 0.7841,
+      "feasible": true,
+      "cond": 9.3246,
+      "round_share_feasible": 0.844,
+      "round_p01": 0.5987,
+      "round_p50": 0.8064,
+      "round_p99": 1.1757,
+      "french_st_rev_span": 0.1297
+    }
+  },
+  "mean_identity": {
+    "Table 4 (full sample)": {
+      "implied_reversal_premium_pct": [
+        2.2835,
+        2.4008,
+        2.3793,
+        2.3046
+      ],
+      "spread_pp": 0.1173
+    },
+    "Table 8 Panel A (pre-1989)": {
+      "implied_reversal_premium_pct": [
+        2.1807,
+        2.1816,
+        2.1841,
+        2.1849
+      ],
+      "spread_pp": 0.0042
+    },
+    "Table 8 Panel B (post-1988)": {
+      "implied_reversal_premium_pct": [
+        2.5962,
+        2.5643,
+        2.6555,
+        2.6022
+      ],
+      "spread_pp": 0.0912
+    }
+  },
+  "ibbotson_control": {
+    "available": true,
+    "worst_gap_bp": 0.9,
+    "factor_means": {
+      "market": 0.004253199194964861,
+      "small_premium": 0.002775621413602782,
+      "default_premium": 0.00018383081983896175,
+      "horizon_premium": 0.0015631906167568287
+    }
+  },
+  "table1_tail": {
+    "top5": {
+      "sd": 0.022799999999999997,
+      "max_in_sd": 5.88,
+      "min_in_sd": -5.21
+    },
+    "top20": {
+      "sd": 0.0169,
+      "max_in_sd": 7.02,
+      "min_in_sd": -4.78
+    },
+    "101-120": {
+      "sd": 0.0154,
+      "max_in_sd": 7.53,
+      "min_in_sd": -3.21
+    },
+    "all": {
+      "sd": 0.0167,
+      "max_in_sd": 9.63,
+      "min_in_sd": -2.29
+    }
+  },
+  "table2_panelB": {
+    "avg_decile_diff_mixed_pairs": [
+      0.97,
+      0.97,
+      0.97,
+      0.98
+    ]
+  }
+}

@@ -79,9 +79,9 @@ def test_formation_options_stamp_every_value():
     }
 
 
-_BASE_OPTIONS = dict(same_issuer="exclude", max_stale_share=None, telephone_sic="4811",
-                     trigger_sigma="rms", short_weights="position", size_deciles_top=None,
-                     long_delisting_loss=False, waste_sic="industrials")
+_BASE_OPTIONS = {"same_issuer": "exclude", "max_stale_share": None, "telephone_sic": "4811",
+                 "trigger_sigma": "rms", "short_weights": "position", "size_deciles_top": None,
+                 "long_delisting_loss": False, "waste_sic": "industrials"}
 
 
 def test_long_delisting_loss_is_stamped_only_when_on(tmp_path, monkeypatch):
@@ -229,7 +229,8 @@ def test_cohort_job_caches_everything_the_tables_need(tmp_path, monkeypatch):
                                                                    & (dates <= pd.Timestamp(e))])
     monkeypatch.setattr(
         rep, "formation_universe",
-        lambda s, e, universe, max_stale_share=None, panel=None: [1, 2, 3, 4, 5, 6],
+        lambda s, e, universe, max_stale_share=None, panel=None, extra_permnos=None:
+        [1, 2, 3, 4, 5, 6],
     )
     rep.init_worker((pd.Series(dtype="int64"), pd.Series(dtype="int64")))
 
@@ -266,6 +267,98 @@ def test_cohort_job_caches_everything_the_tables_need(tmp_path, monkeypatch):
     assert counts["Utilities"].item() == 2
     trades = pd.read_parquet(tmp_path / "vol_common" / "cohorts" / "2020-07" / "w0_trades.parquet")
     assert {"open_day", "close_day"} <= set(trades.columns)
+
+
+def _build_synthetic_cohort(base: Path, monkeypatch, month: int = 7) -> Path:
+    """Build one cohort of the synthetic panel into ``base`` and return its folder."""
+    panel = _synthetic_panel()
+    dates = pd.DatetimeIndex(sorted(panel["date"].unique()))
+
+    def load_daily(start, end, columns=None, permnos=None):
+        sel = panel[(panel["date"] >= pd.Timestamp(start)) & (panel["date"] <= pd.Timestamp(end))]
+        if permnos is not None:
+            sel = sel[sel["permno"].isin(list(permnos))]
+        return sel[list(columns)].reset_index(drop=True)
+
+    monkeypatch.setattr(rep, "cohort_dir", lambda universe: base / universe / "cohorts")
+    monkeypatch.setattr(rep, "load_daily", load_daily)
+    monkeypatch.setattr(rep, "trading_calendar", lambda s, e: dates[(dates >= pd.Timestamp(s))
+                                                                   & (dates <= pd.Timestamp(e))])
+    monkeypatch.setattr(
+        rep, "formation_universe",
+        lambda s, e, universe, max_stale_share=None, panel=None, extra_permnos=None:
+        [1, 2, 3, 4, 5, 6],
+    )
+    rep.init_worker((pd.Series(dtype="int64"), pd.Series(dtype="int64")))
+    assert rep.build_cohort(rep.Job(2020, month, (2020, 12), (0, 1), "vol_common", True)) \
+        == (2020, month)
+    return base / "vol_common" / "cohorts" / f"2020-{month:02d}"
+
+
+def test_daily_rows_do_not_change_the_monthly_cache(tmp_path, monkeypatch):
+    """Format 7 adds daily.parquet; the monthly rows are the same bytes either way."""
+    with_daily = _build_synthetic_cohort(tmp_path / "with", monkeypatch)
+    monkeypatch.setattr(rep, "_daily_rows", lambda pname, daily: [])
+    without_daily = _build_synthetic_cohort(tmp_path / "without", monkeypatch)
+    for fname in ("monthly.parquet", "summary.json", "pairs.parquet",
+                  "w1_trades.parquet", "w1_opened.parquet"):
+        assert (with_daily / fname).read_bytes() == (without_daily / fname).read_bytes(), fname
+    daily = pd.read_parquet(with_daily / "daily.parquet")
+    assert (without_daily / "daily.parquet").exists()
+    assert len(daily) > 0 and len(pd.read_parquet(without_daily / "daily.parquet")) == 0
+
+
+def test_daily_cache_holds_the_four_one_day_wait_portfolios(tmp_path, monkeypatch):
+    coh = _build_synthetic_cohort(tmp_path, monkeypatch)
+    daily = pd.read_parquet(coh / "daily.parquet")
+    assert list(daily.columns) == ["date", "portfolio", "ret"]
+    # the four portfolios the paper prints; this synthetic panel has too few pairs for
+    # 101-120, whose series is NaN on every day and so caches no row at all
+    assert set(daily["portfolio"]) <= set(rep.PORTFOLIOS) and "top5" in set(daily["portfolio"])
+    assert daily["ret"].notna().all(), "a day with no open position is dropped, not cached"
+    # the cached days are trading days of the cohort's six-month trading window
+    days = pd.DatetimeIndex(daily["date"])
+    assert days.min() >= pd.Timestamp("2020-07-01") and days.max() <= pd.Timestamp("2020-12-31")
+    opens = pd.DatetimeIndex(pd.read_parquet(coh / "w1_trades.parquet")["open_date"])
+    assert days.min() >= opens.min()
+    # the daily series is the wait-1 fully-invested return: it compounds to the
+    # monthly 'employed' rows the same cohort caches for Table 1
+    monthly = pd.read_parquet(coh / "monthly.parquet")
+    employed = monthly[(monthly.table == "t1") & (monthly.wait == 1)
+                       & (monthly.portfolio == "all") & (monthly.capital == "employed")]
+    assert len(employed) > 0
+
+
+def test_aggregate_daily_overlap_average_is_the_equal_weighted_mean(tmp_path, monkeypatch):
+    """Two synthetic cohorts: each day is the mean over the cohorts trading that day."""
+    base = tmp_path / "cache"
+    first = _build_synthetic_cohort(base, monkeypatch, month=7)   # trades 2020-07..2020-12
+    second = _build_synthetic_cohort(base, monkeypatch, month=8)  # trades 2020-08..2020-12
+    cohorts = [(2020, 7), (2020, 8)]
+    monkeypatch.setattr(rep, "cohort_dir", lambda universe: base / universe / "cohorts")
+    monthly, summaries = rep.load_summaries(cohorts, "vol_common")
+    daily = rep.load_daily_returns(cohorts, "vol_common")
+    strategy, *_ = rep.aggregate(monthly, summaries, (0, 1), (2020, 12), cohorts, daily=daily)
+    ours = strategy[1]["top5"][rep.DAILY_CAPITAL]
+    frames = []
+    for coh in (first, second):
+        frame = pd.read_parquet(coh / "daily.parquet")
+        sel = frame[frame["portfolio"] == "top5"]
+        frames.append(pd.Series(sel["ret"].to_numpy(), index=pd.DatetimeIndex(sel["date"])))
+    both = pd.concat(frames, axis=1, keys=[0, 1])
+    expected = both.mean(axis=1)  # skipna: the cohorts trading that day, equally weighted
+    assert list(ours.index) == list(expected.index)
+    assert ours.to_numpy() == pytest.approx(expected.to_numpy())
+    # a day on which only one cohort trades carries that cohort's own return
+    solo = both[both.isna().sum(axis=1) == 1].dropna(axis=1)
+    assert len(solo) > 0
+    for ts, row in solo.iterrows():
+        assert ours.loc[ts] == pytest.approx(row.iloc[0])
+    # the monthly series is untouched by the daily rows: the same aggregate without
+    # them gives the identical monthly series, and an empty daily entry
+    without_daily, *_ = rep.aggregate(monthly, summaries, (0, 1), (2020, 12), cohorts)
+    assert strategy[1]["top5"]["employed"].equals(without_daily[1]["top5"]["employed"])
+    assert without_daily[1]["top5"][rep.DAILY_CAPITAL].empty
 
 
 @pytest.mark.parametrize(
@@ -406,9 +499,12 @@ def test_risk_tables_take_the_equity_premium_from_mkt_rf_and_print_alpha_t(tmp_p
     t4 = pd.read_csv(tmp_path / "table4.csv", index_col=0)
     want = rep.factor_tstats(series["top20"], factors)
     assert t4.loc["t_intercept", "top20"] == pytest.approx(want["intercept"])
-    rows = rep._alpha_t_rows(t4, "Table 4 (systematic risk, one-day wait)")
-    assert len(rows) == 1 and " / " not in rows[0]  # unscored: the scorer skips rows without " / "
-    assert f"{t4.loc['t_intercept', 'top5']:.2f} vs 3.81" in rows[0]
+    t_keys = [rep._t_key(s) for s in rep.PAPER_TABLE4["top5"] if s in rep.PAPER_TABLE4_T]
+    frame = t4.reindex(list(rep.PAPER_TABLE4["top5"]) + t_keys)
+    block = rep._coefficient_table(frame, rep.PAPER_TABLE4, rep.PAPER_TABLE4_T,
+                                   "Table 4", rep.TABLE4_PCT, [])
+    row = next(line for line in block if line.startswith("| t: intercept |"))
+    assert " / 3.81" in row.strip("|").split("|")[1]  # top 5, scored
 
 
 def test_reversal_alternative_is_reported_but_not_scored(tmp_path):
@@ -422,7 +518,10 @@ def test_reversal_alternative_is_reported_but_not_scored(tmp_path):
     rep.write_risk_tables(series, factors, tmp_path)
     rep.write_reversal_alternative(series, factors, losers, tmp_path)
     alt = pd.read_csv(tmp_path / "reversal_alternative.csv", index_col=0)
-    assert {f"{h}_{r}" for h in ("full", "pre", "post") for r in rep.FACTOR_ROWS} == set(alt.index)
+    assert set(alt.index) == (
+        {f"{h}_{r}" for h in ("full", "pre", "post") for r in rep.FACTOR_ROWS}
+        | {f"{h}_t_{r}" for h in ("full", "pre", "post")
+           for r in rep.FACTOR_ROWS if r != "r2"})
     want = rep.factor_regression(series["top5"], factors.assign(reversal=losers))
     assert alt.loc["full_reversal", "top5"] == pytest.approx(want["reversal"])
     frame = pd.DataFrame(rep.PAPER_TABLE8)
@@ -434,7 +533,7 @@ def test_reversal_alternative_is_reported_but_not_scored(tmp_path):
     assert not [line for line in lines if line.startswith("|") and " / " in line]
     # the closing line sets the alternative's total against the scored total passed in
     tail = lines[-2]
-    assert tail.startswith("With this series the 84 regression cells would score")
+    assert tail.startswith("With this series the 108 regression cells would score")
     assert "instead of 1.5." in tail
 
 

@@ -40,7 +40,7 @@ import os
 import subprocess
 import sys
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import ClassVar
 
@@ -76,7 +76,12 @@ from project.evaluation import (
 from project.features import normalized_prices
 from project.models import simulate_cohort
 from project.paths import ROOT
-from project.recalls import adjusted_volume, high_volume_days, volume_thresholds
+from project.recalls import (
+    adjusted_volume,
+    high_volume_days,
+    rolling_volume_thresholds,
+    volume_thresholds,
+)
 
 PRIMARY_UNIVERSE = "vol_common"
 WAIT = 1
@@ -117,6 +122,31 @@ RUN_LABELS = {
     RUN_WINDOW: "recalls, re-arm plus the 12 formation month volume window (variant)",
     SHIPPED: "our shipped Table 1 Panel B (no recalls)",
 }
+
+#: Recall readings measured for REVIEW_NOTES section 74. R0 is the shipped one.
+READING_CONTROL = "R0"
+READINGS = ("R0", "R1", "R2", "R3", "R4", "R5")
+READING_LABELS = {
+    "R0": "shipped reading (control): threshold over the cohort's 18 months, "
+          "flag on t closes at the close of t+1, short leg only",
+    "R1": "a flag on day t closes the pair at day t's close, under the one-day wait too",
+    "R2": "the threshold over the 18 months ending the day before t (rolling)",
+    "R3": "R1 and R2 together",
+    "R4": "a flag counts only on a day the short leg's price falls (sensitivity)",
+    "R5": "a flag on either leg (sensitivity; the rule says the short positions)",
+}
+
+
+def reading_features(reading: str) -> dict[str, bool]:
+    """The four switches a reading sets, all False on the shipped reading."""
+    if reading not in READINGS:
+        raise ValueError(f"unknown reading {reading!r}; choose from {READINGS}")
+    return {
+        "immediate": reading in ("R1", "R3"),
+        "rolling": reading in ("R2", "R3"),
+        "fall_only": reading == "R4",
+        "either": reading == "R5",
+    }
 
 REPORT_DIR = _ROOT / "report" / "replication" / "claims"
 PAPER_TARGETS_FILE = _ROOT / "scripts" / "claims" / "table9b_paper.json"
@@ -252,6 +282,9 @@ def recall_flags(
     permnos: list[int],
     trading_days: pd.DatetimeIndex,
     stats_end: dt.date | None = None,
+    sd_multiple: float = 1.0,
+    rolling: bool = False,
+    returns: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Wide (trading dates x permno) bool: the short leg's high-volume days.
 
@@ -260,13 +293,30 @@ def recall_flags(
     ``stats_end`` days when the alternative "formation months" window is asked
     for. Days with no recorded volume (every Nasdaq row before November 1982,
     every day a stock has no row) are False: there is no average to exceed.
+
+    ``rolling`` replaces that single threshold with the mean and standard
+    deviation of the eighteen months ending the day before each day flagged
+    (``project.recalls.rolling_volume_thresholds``), which needs ``volume`` to
+    reach back eighteen months before the first trading day. ``returns``, when
+    given, keeps a flag only on a day that stock's price falls.
     """
     wide = volume_wide(volume, permnos)
     if wide.empty:
         return pd.DataFrame(False, index=trading_days, columns=permnos)
-    stats = wide if stats_end is None else wide.loc[wide.index <= pd.Timestamp(stats_end)]
-    flags = high_volume_days(wide.reindex(index=trading_days), thresholds=volume_thresholds(stats))
-    return flags.astype(bool)
+    days = wide.reindex(index=trading_days)
+    if rolling:
+        limits = rolling_volume_thresholds(wide, trading_days, sd_multiple)
+        flags = high_volume_days(days, thresholds=limits)
+    else:
+        stats = wide if stats_end is None else wide.loc[wide.index <= pd.Timestamp(stats_end)]
+        flags = high_volume_days(days, thresholds=volume_thresholds(stats, sd_multiple))
+    flags = flags.astype(bool)
+    if returns is not None:
+        falls = pd.DataFrame(returns).astype("float64").reindex(
+            index=trading_days, columns=permnos
+        ).lt(0.0)
+        flags = flags & falls.fillna(False)
+    return flags
 
 
 # --------------------------------------------------------------------------- #
@@ -279,6 +329,10 @@ class Config:
     end: tuple[int, int] = (2002, 12)
     raw_dir: str = ""
     force: bool = False
+    #: the paper's "more than one standard deviation"; other multiples are a sensitivity
+    sd_multiple: float = 1.0
+    #: the recall reading of REVIEW_NOTES section 74; R0 is the shipped one
+    reading: str = READING_CONTROL
 
 
 def cohort_cache_dir(cfg: Config, year: int, month: int) -> Path:
@@ -347,35 +401,56 @@ def control_check(result, cfg: Config, year: int, month: int) -> dict:
 
 def build_cohort(cfg: Config, year: int, month: int) -> dict:
     """Re-simulate one cohort under every run and cache its monthly returns."""
+    features = reading_features(cfg.reading)
     pairs = pd.read_parquet(cohort_cache_dir(cfg, year, month) / "pairs.parquet")
     permnos = sorted(set(pairs["permno_1"]) | set(pairs["permno_2"]))
     form_start, form_end, trade_start, trade_end = cohort_class(year, month, cfg.end)
 
     levels = formation_levels(permnos, form_start, form_end)
     days, rets, term = trading_inputs(permnos, trade_start, trade_end)
-    volume = VolumeSource(cfg.raw_dir).window(permnos, form_start, trade_end)
+    # The rolling reading compares a day with the 18 months before it, so its
+    # volume has to reach back 18 months from the first trading day; on the
+    # shipped reading that start is exactly the formation start, as before.
+    vol_year, vol_month = shift_month(trade_start.year, trade_start.month,
+                                      -18 if features["rolling"] else -12)
+    volume = VolumeSource(cfg.raw_dir).window(
+        permnos, dt.date(vol_year, vol_month, 1), trade_end)
 
     wide = volume_wide(volume, permnos)
-    thresholds = volume_thresholds(wide)
+    own = wide.loc[(wide.index >= pd.Timestamp(form_start))
+                   & (wide.index <= pd.Timestamp(trade_end))]
+    thresholds = volume_thresholds(own, cfg.sd_multiple)
     no_volume = {int(p) for p in thresholds.index[thresholds.isna()]}
-    rearm_flags = recall_flags(volume, permnos, days)
-    flags = {
-        RUN_OFF: None,
-        RUN_REARM: rearm_flags,
-        RUN_IMMEDIATE: rearm_flags,
-        RUN_LOCK: rearm_flags,
-        RUN_WINDOW: recall_flags(volume, permnos, days, stats_end=form_end),
-    }
+    rearm_flags = recall_flags(
+        volume, permnos, days, sd_multiple=cfg.sd_multiple,
+        rolling=features["rolling"], returns=rets if features["fall_only"] else None,
+    )
+    if cfg.reading == READING_CONTROL:
+        runs = RUNS
+        flags = {
+            RUN_OFF: None,
+            RUN_REARM: rearm_flags,
+            RUN_IMMEDIATE: rearm_flags,
+            RUN_LOCK: rearm_flags,
+            RUN_WINDOW: recall_flags(volume, permnos, days, stats_end=form_end,
+                                     sd_multiple=cfg.sd_multiple),
+        }
+    else:
+        # a reading moves the primary run only; the shipped alternatives stay out
+        runs = (RUN_OFF, RUN_REARM)
+        flags = {RUN_OFF: None, RUN_REARM: rearm_flags}
     rearm_runs = (RUN_REARM, RUN_WINDOW)
     lock_runs = (RUN_LOCK,)
 
     rows: list[dict] = []
     counts: dict[str, dict] = {}
     control: dict = {}
-    for run in RUNS:
+    for run in runs:
         result = simulate_cohort(
             pairs, rets, term, wait=WAIT, start_levels=levels, recall=flags[run],
             recall_rearm=run in rearm_runs, recall_lock=run in lock_runs,
+            recall_immediate=features["immediate"] and run == RUN_REARM,
+            recall_either=features["either"] and run == RUN_REARM,
         )
         for pname, ranks in PORTFOLIOS.items():
             for capital in ("employed", "committed"):
@@ -399,8 +474,11 @@ def build_cohort(cfg: Config, year: int, month: int) -> dict:
         "formation": [str(form_start), str(form_end)],
         "trading": [str(trade_start), str(trade_end)],
         "volume_rows": len(volume),
+        "reading": cfg.reading,
+        "reading_features": features,
         "recall_days": {
             run: int(flags[run].to_numpy().sum()) for run in (RUN_REARM, RUN_WINDOW)
+            if flags.get(run) is not None
         },
         "trades": counts,
         "control": control,
@@ -976,7 +1054,8 @@ def write_report(
         "cache without rebuilding.",
         "",
     ]
-    path = REPORT_DIR / "TABLE9B.md"
+    # a threshold other than the paper's is a sensitivity run: its report stays in its out-root
+    path = (REPORT_DIR if cfg.sd_multiple == 1.0 else Path(cfg.out_root)) / "TABLE9B.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
@@ -984,6 +1063,136 @@ def write_report(
 
 def _bp_list_row(panel1: dict, panel9: dict, row: str) -> str:
     return ", ".join(f"{(panel1[p][row] - panel9[p][row]) * 1e4:.1f}" for p in PORTFOLIOS)
+
+
+def reading_metrics(
+    root: str,
+    cohorts: list[tuple[int, int]],
+    cfg: Config,
+    paper: dict,
+    shipped: pd.DataFrame | None,
+) -> dict:
+    """Score one finished reading run against Table 9 Panel B and Table 1 Panel B.
+
+    The 44 cells are the eleven statistics of the table times the four
+    portfolios, marked with this script's ``mark`` -- the replication check's
+    ``_mark`` rule: a check mark within 10% of the paper's cell, a tilde within
+    25%, score = check marks + half the tildes. ``declines`` gives the change
+    against our own Table 1 Panel B in bp, beside the paper's own change.
+    """
+    run_cfg = replace(cfg, out_root=str(root))
+    end_ts = pd.Timestamp(month_end(*cfg.end))
+    frame = load_run_frame(run_cfg, cohorts)
+    ours = panel_stats(frame[frame["run"] == RUN_REARM], end_ts)
+    summaries = load_summaries(run_cfg, cohorts)
+    marks: list[str] = []
+    for key, _ in STAT_ROWS:
+        for pname in PORTFOLIOS:
+            marks.append(mark(float(ours.loc[key, pname]),
+                              paper["table9_panel_b"][pname][key]))
+    hits = sum(s["trades"][RUN_REARM].get("n_recalled", 0) for s in summaries)
+    total = sum(s["trades"][RUN_REARM]["trades"] for s in summaries)
+    return {
+        "reading": summaries[0].get("reading", "?"),
+        "root": str(root),
+        "cohorts": len(cohorts),
+        "table": ours,
+        "marks": marks,
+        "score": marks.count("✓") + 0.5 * marks.count("~"),
+        "counts": (marks.count("✓"), marks.count("~"), marks.count("✗")),
+        "declines": declines(shipped, ours, paper, "mean") if shipped is not None else {},
+        "committed": (declines(shipped, ours, paper, "committed_mean")
+                      if shipped is not None else {}),
+        "recall_share": hits / total if total else float("nan"),
+        "trades": total,
+        "recalled": hits,
+    }
+
+
+def write_readings_report(metrics: list[dict], paper: dict, path: Path) -> Path:
+    """Write the reading comparison page (TABLE9B_READINGS.md) from finished runs."""
+    paper_bp = {p: (paper["table9_panel_b"][p]["mean"]
+                    - paper["table1_panel_b"][p]["mean"]) * 1e4 for p in PORTFOLIOS}
+    lines = [
+        "# Table 9 Panel B: the recall readings of REVIEW_NOTES section 74",
+        "",
+        "Every reading below is a finished 474-cohort run of",
+        "`scripts/claims/table9b_recalls.py run --reading <id>`; the run directory",
+        "is named in the last column. The cells are the paper's own statistics",
+        "marked with the replication check's rule (`_mark`): a check mark within",
+        "10% of the printed cell, a tilde within 25%, score = check marks + half",
+        "the tildes over the table's 44 cells. The shipped reading (R0) is the",
+        "control and must reproduce the shipped 10 / 16 / 18 = 18.0.",
+        "",
+        "| id | reading | ✓ | ~ | ✗ | score of 44 | recall share | run |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for m in metrics:
+        lines.append(
+            f"| {m['reading']} | {READING_LABELS.get(m['reading'], '')} | "
+            f"{m['counts'][0]} | {m['counts'][1]} | {m['counts'][2]} | "
+            f"{m['score']:.1f} | {m['recall_share']:.1%} | `{m['root']}` |")
+    lines += [
+        "",
+        "## The change against our own Table 1 Panel B (fully invested, bp)",
+        "",
+        "Each row is a reading minus our own Table 1 Panel B for the same four",
+        "portfolios; the paper row is its Table 9 Panel B minus its Table 1 Panel B:",
+        "",
+        "| id | " + " | ".join(PORTFOLIOS) + " |",
+        "|---|" + "---|" * len(PORTFOLIOS),
+        "| paper | " + " | ".join(f"{paper_bp[p]:+.1f}" for p in PORTFOLIOS) + " |",
+    ]
+    for m in metrics:
+        if not m["declines"]:
+            continue
+        cells = " | ".join(f"{-m['declines'][p][0]:+.1f}" for p in PORTFOLIOS)
+        lines.append(f"| {m['reading']} | {cells} |")
+    lines += [
+        "",
+        "Both rows are reading minus baseline, in bp, so a negative number is",
+        "a decline once recalls are on -- the sign the paper reports.",
+        "",
+        "## Committed capital (bp), for reference",
+        "",
+        "| id | " + " | ".join(PORTFOLIOS) + " |",
+        "|---|" + "---|" * len(PORTFOLIOS),
+        "| paper | " + " | ".join(f"{m_bp:+.1f}" for m_bp in
+                                  ((paper["table9_panel_b"][p]["committed_mean"]
+                                    - paper["table1_panel_b"][p]["committed_mean"]) * 1e4
+                                    for p in PORTFOLIOS)) + " |",
+    ]
+    for m in metrics:
+        if not m["committed"]:
+            continue
+        cells = " | ".join(f"{-m['committed'][p][0]:+.1f}" for p in PORTFOLIOS)
+        lines.append(f"| {m['reading']} | {cells} |")
+    lines += ["", ("Reproduce with `python scripts/claims/table9b_recalls.py readings"
+                " --roots <root,R0>,<root,R1>,...` and `run --reading <id>`."), ""]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def readings_command(args) -> int:
+    """Rebuild the reading page from finished per-reading out-roots."""
+    cfg = config_from_args(args)
+    stop = parse_month(args.stop) if args.stop else cfg.end
+    cohorts = cohort_months(parse_month(args.start), stop)
+    paper = json.loads(PAPER_TARGETS_FILE.read_text())
+    missing = [(root, y, m) for root in args.roots for y, m in cohorts
+               if not (Path(root) / "cohorts" / f"{y:04d}-{m:02d}" / "summary.json").exists()]
+    if missing:
+        raise SystemExit(f"{len(missing)} cohorts missing (first: {missing[0]})")
+    shipped = panel_stats(load_shipped_frame(cfg, cohorts), pd.Timestamp(month_end(*cfg.end)))
+    metrics = [reading_metrics(root, cohorts, cfg, paper, shipped) for root in args.roots]
+    path = write_readings_report(metrics, paper, Path(args.report))
+    for m in metrics:
+        print(f"{m['reading']:3s} score {m['score']:5.1f} of 44  "
+              f"({m['counts'][0]} / {m['counts'][1]} / {m['counts'][2]})  "
+              f"recall share {m['recall_share']:.1%}  {m['root']}")
+    print(f"wrote {path}")
+    return 0
 
 
 def handcheck(cfg: Config, year: int, month: int, rank: int | None = None) -> str:
@@ -1042,7 +1251,7 @@ def build_tables(cfg: Config, cohorts: list[tuple[int, int]]) -> dict[str, pd.Da
     end_ts = pd.Timestamp(month_end(*cfg.end))
     frames = load_run_frame(cfg, cohorts)
     tables = {run: panel_stats(frames[frames["run"] == run], end_ts)
-              for run in RUNS}
+              for run in RUNS if bool((frames["run"] == run).any())}
     tables[SHIPPED] = panel_stats(load_shipped_frame(cfg, cohorts), end_ts)
     return tables
 
@@ -1077,8 +1286,16 @@ def write_outputs(
     tables = build_tables(cfg, cohorts)
     summaries = load_summaries(cfg, cohorts)
     paper = json.loads(PAPER_TARGETS_FILE.read_text())
-    csv_path = write_csv(tables, REPORT_DIR / "table9b_results.csv")
-    report_path = write_report(cfg, cohorts, tables, summaries, paper, runtime, workers)
+    # only the shipped reading writes the shipped page; every other reading is
+    # a sensitivity whose tables and page stay in its own out-root
+    scored = cfg.sd_multiple == 1.0 and cfg.reading == READING_CONTROL
+    report_dir = REPORT_DIR if scored else Path(cfg.out_root)
+    csv_path = write_csv(tables, report_dir / "table9b_results.csv")
+    if scored:
+        report_path = write_report(cfg, cohorts, tables, summaries, paper, runtime, workers)
+    else:
+        metrics = [reading_metrics(str(cfg.out_root), cohorts, cfg, paper, tables[SHIPPED])]
+        report_path = write_readings_report(metrics, paper, report_dir / "READING.md")
     for run, frame in tables.items():
         print(f"{run:9s} " + " ".join(f"{p}={100 * float(frame.loc['mean', p]):.3f}%"
                                       for p in PORTFOLIOS))
@@ -1098,6 +1315,8 @@ def config_from_args(args) -> Config:
         end=parse_month(args.end),
         raw_dir=args.raw_dir or "",
         force=args.force,
+        sd_multiple=float(args.sd_multiple),
+        reading=args.reading,
     )
 
 
@@ -1117,6 +1336,14 @@ def add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--raw-dir", default=None,
                         help="raw daily_stocks directory (default data/raw/wrds_api/daily_stocks)")
     parser.add_argument("--force", action="store_true", help="rebuild cached cohorts")
+    parser.add_argument("--sd-multiple", type=float, default=1.0,
+                        help="high-volume threshold: mean + this many standard deviations "
+                             "(the paper's rule is 1.0; other values are a sensitivity whose "
+                             "report and CSV are written under --out-root)")
+    parser.add_argument("--reading", default=READING_CONTROL, choices=READINGS,
+                        help="the recall reading of REVIEW_NOTES section 74 (default R0, the "
+                             "shipped one; any other reading moves the primary run only and "
+                             "writes its tables under --out-root)")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1134,6 +1361,14 @@ def main(argv: list[str] | None = None) -> int:
     table_parser.add_argument("--start", default="1963-07")
     table_parser.add_argument("--workers", type=int, default=8)
 
+    readings_parser = sub.add_parser(
+        "readings", help="score several finished reading runs and write the page")
+    add_common(readings_parser)
+    readings_parser.add_argument("--roots", required=True,
+                                 help="comma-separated finished out-root dirs, one reading each")
+    readings_parser.add_argument("--report", required=True, help="the markdown page to write")
+    readings_parser.add_argument("--start", default="1963-07", help="first cohort month")
+
     check_parser = sub.add_parser("handcheck", help="print one recall close with its volume")
     add_common(check_parser)
     check_parser.add_argument("cohort", help="cohort month YYYY-MM")
@@ -1145,6 +1380,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "shard":
         return build_shard(Path(args.path))
+
+    if args.command == "readings":
+        args.roots = [r.strip() for r in args.roots.split(",") if r.strip()]
+        return readings_command(args)
 
     cfg = config_from_args(args)
     if args.command == "handcheck":

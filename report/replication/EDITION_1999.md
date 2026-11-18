@@ -55,7 +55,7 @@ top-5 and top-20 sector weights the right way for Utilities (top 5: 0.67 to 0.83
 wrong way for Industrials (top 20: 0.127 to 0.081, draft 0.13) and mixed-sector pairs (top 20: 0.152
 to 0.129, draft 0.172). They also push the size decile away from the draft's (top 5: 3.35 to 2.55,
 draft 3.1), while that decile matches the RFS's 2.54. The two editions therefore disagree about what
-the exclusions should do to the composition rows. See `OPEN_QUESTIONS.md` (Q5).
+the exclusions should do to the composition rows. See `GAPS.md` (Q5, section 8).
 
 Row 9 lowers the draft score 91.5 -> 86.5, all in Table I (46.5 -> 41.5): ten cells move from
 ✓ to ~ and none to ✗. The draft's Table I means and medians were already 5-9% low and the RMS

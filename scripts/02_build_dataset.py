@@ -9,8 +9,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
 
-from project.data import build_daily_panel
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from project.data import build_daily_panel  # after the sys.path line above
 
 
 def parse_years(spec: str) -> range:

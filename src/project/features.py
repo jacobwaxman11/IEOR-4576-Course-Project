@@ -1,6 +1,6 @@
 """Pair formation for the GGR (2006) replication.
 
-Implements the formation-stage mechanics of INTERFACES.md / paper §2.1:
+Implements the formation-stage mechanics of METHOD.md / paper §2.1:
 normalized cumulative total-return prices, the pairwise sum-of-squared-deviations
 matrix, and exhaustive minimum-distance pairing.
 
@@ -18,7 +18,7 @@ def normalized_prices(returns: pd.DataFrame) -> pd.DataFrame:
 
     ``P_t = prod_{s <= t} (1 + r_s)`` with ``P_0 = 1``: the first row of the
     window is the rebasing day, so its own return is not applied. NaN returns
-    are treated as 0 (price unchanged) for compounding, per INTERFACES.md
+    are treated as 0 (price unchanged) for compounding, per METHOD.md
     ("missing return inside the trading period").
     """
     if returns.empty:
@@ -181,6 +181,32 @@ def select_pairs(
     ).reset_index(drop=True)
     pairs.insert(0, "rank", np.arange(1, len(pairs) + 1))
     return pairs
+
+
+def demote_frozen_pairs(pairs: pd.DataFrame, frozen, mode: str = "both") -> pd.DataFrame:
+    """Move pairs with a frozen-quote leg to the end of the ranking.
+
+    REVIEW_NOTES section 40's third lever: a stock whose quote barely moves is a
+    stock that cannot be traded around, and its pair reaches rank 1 on a distance
+    of almost zero. The pool is left intact -- every pair keeps its distance and
+    its place in the "all" portfolio -- but the pairs whose legs are ``frozen``
+    are ranked after the rest, each group in the original distance order, so the
+    top ranks hold tradeable pairs. ``mode="one"`` demotes a pair when either leg
+    is frozen, ``"both"`` only when both are.
+
+    Returns the same columns as ``select_pairs``, renumbered from 1.
+    """
+    if mode not in ("one", "both"):
+        raise ValueError(f"mode must be 'one' or 'both', got {mode!r}")
+    if pairs.empty:
+        return pairs
+    frozen_set = set(pd.Index(frozen).tolist())
+    leg1 = pairs["permno_1"].isin(frozen_set)
+    leg2 = pairs["permno_2"].isin(frozen_set)
+    hit = (leg1 & leg2) if mode == "both" else (leg1 | leg2)
+    out = pd.concat([pairs[~hit], pairs[hit]], ignore_index=True)
+    out["rank"] = np.arange(1, len(out) + 1)
+    return out
 
 
 def select_pairs_within_groups(

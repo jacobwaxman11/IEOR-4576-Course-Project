@@ -54,13 +54,14 @@ from __future__ import annotations
 
 import argparse
 import calendar
+import hashlib
 import json
 import os
 import subprocess
 import sys
 import time
-from dataclasses import dataclass
-from datetime import date
+from dataclasses import dataclass, field, replace
+from datetime import date, timedelta
 from pathlib import Path
 
 for _var in (
@@ -84,10 +85,12 @@ from project.features import normalized_prices
 from project.models import CohortResult
 
 SHARED_CACHE = Path(os.environ.get(
-    "GGR_SHARED_REPLICATION", str(_ROOT / "data" / "processed" / "replication")
+    "GGR_SHARED_REPLICATION",
+    str(_ROOT / "data" / "processed" / "replication"),
 )) / "vol_common"
 SHARED_MONTHLY = Path(os.environ.get(
-    "GGR_SHARED_DATA_RAW", str(_ROOT / "data" / "raw")
+    "GGR_SHARED_DATA_RAW",
+    str(_ROOT / "data" / "raw"),
 )) / "wrds_api" / "monthly_stocks.parquet"
 PAPER_TARGETS = Path(__file__).resolve().parent / "table6_paper.json"
 
@@ -112,7 +115,26 @@ END = (2002, 12)
 UNIVERSE = "vol_common"
 MAX_STALE_SHARE = 0.95
 #: Table 6 close rules: with the true trade (primary) or the drawn stocks' own crossing.
-CLOSE_RULES = ("true", "own")
+CLOSE_RULES = ("true", "own", "own-rebase")
+#: Table 6's four open readings (CONTRACT_J): the committed-capital definition, the
+#: pool the random stocks come from, which "last month" ranks them, and whether the
+#: statistics are averaged over replications or pooled across them. The first value
+#: is the shipped behaviour every earlier run used.
+COMMITTED_MODES = ("literal", "book-share")
+POOL_MODES = ("formation", "panel")
+PRIOR_MODES = ("calendar", "trading")
+STAT_MODES = ("replication", "pooled")
+#: Table 6's draw readings (CONTRACT_M): where the decile breakpoints come from.
+#: ``universe`` (shipped) ranks the formation universe on its own; ``panel``
+#: takes them from every common CRSP stock with a prior-month return.
+DECILE_MODES = ("universe", "panel")
+#: Table 6's decile matching (CONTRACT_R10D R-C): ``own`` replaces each true leg
+#: with a security from that leg's own decile (the text's "replace the actual
+#: stocks"); ``long``/``short`` draw both legs from one decile, the caption's
+#: singular "within the same last-month performance decile".
+PAIR_DECILE_MODES = ("own", "long", "short")
+#: Trading days in the "previous month" when it is read as the 21 days before the open.
+PRIOR_DAYS = 21
 DEFAULT_SEED = 20060101
 #: The pipeline's eq. (3) short weight (``--short-weights position``).
 SHORT_WEIGHTS = "position"
@@ -122,6 +144,31 @@ DECILES = 10
 REPORT_CSV = _ROOT / "report" / "replication" / "claims" / "TABLE6.csv"
 
 _MONTHLY: pd.DataFrame | None = None
+_SHARE_CLASSES: dict[str, pd.Index] = {}
+
+
+def share_class_permnos(path: str | None) -> pd.Index | None:
+    """The permnos a wide share-class run adds to the formation universe (None: nobody).
+
+    The same map ``scripts/03_replicate.py --share-classes wide --share-classes-file``
+    reads (REVIEW_NOTES sections 77 and 87), so a bootstrap over a wide cohort cache
+    draws its random legs from the universe the true pairs were formed in. Without it
+    a true leg of an added share class is missing from the draw pool.
+    """
+    if path is None or str(path).strip().lower() in ("", "none"):
+        return None
+    key = str(Path(path).resolve())
+    if key not in _SHARE_CLASSES:
+        frame = pd.read_parquet(key, columns=["permno"])
+        _SHARE_CLASSES[key] = pd.Index(frame["permno"].to_numpy(dtype=np.int64))
+    return _SHARE_CLASSES[key]
+
+
+def share_class_stamp(path: str | None) -> str | None:
+    """The map's identity in the run stamp (12 hex digits, as the driver stamps it)."""
+    if path is None or str(path).strip().lower() in ("", "none"):
+        return None
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()[:12]
 
 
 # ---------------------------------------------------------------------------
@@ -242,6 +289,19 @@ def leg_returns(calendar_index: pd.DatetimeIndex, permnos: list[int]) -> pd.Data
     )
 
 
+def monthly_series(result, ranks, capital: str, committed: str = "literal"):
+    """``portfolio_monthly`` with Table 6's two committed-capital readings.
+
+    ``literal`` (default, shipped since SCORE_LOG row 18) scales the daily payoffs
+    by the number of pairs selected; ``book-share`` is the value-weighted book
+    scaled by the share of pairs holding a position, which is what
+    ``portfolio_daily`` computes for a result that carries no trade log.
+    """
+    if capital == "committed" and committed == "book-share":
+        result = replace(result, trades=result.trades.iloc[0:0])
+    return portfolio_monthly(result, ranks, capital, SHORT_WEIGHTS)
+
+
 # ---------------------------------------------------------------------------
 # Control: rebuild the true-pair series from the cached trade log
 # ---------------------------------------------------------------------------
@@ -359,9 +419,14 @@ class CohortPanel:
     deciles: dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]]
     dates: pd.DatetimeIndex
     month_of_day: np.ndarray
+    #: Per opening day, the (sorted columns, decile edges, rank of each column)
+    #: table of the ``--prior-month trading`` reading; empty for the calendar one.
+    prior_tables: dict = field(default_factory=dict)
 
 
-def cohort_panel(cache_root: Path, year: int, month: int) -> CohortPanel:
+def cohort_panel(cache_root: Path, year: int, month: int, pool: str = "formation",
+                 prior: str = "calendar", decile_breaks: str = "universe",
+                 share_classes_file: str | None = None) -> CohortPanel:
     """Formation universe, formation levels and trading-window data for a cohort.
 
     The universe is the cohort's own formation universe (the pipeline's
@@ -371,24 +436,49 @@ def cohort_panel(cache_root: Path, year: int, month: int) -> CohortPanel:
     every universe member, so any drawn security can be priced.  ``deciles`` maps
     a month code to that month's universe members sorted by ``mthret`` and the
     ten decile edges.
-    """
-    form_start = month_start(*shift_month(year, month, -12))
-    form_end = month_end(*shift_month(year, month, -1))
-    panel = load_daily(form_start, form_end,
-                       [*formation_columns(UNIVERSE, MAX_STALE_SHARE), "date"])
-    universe = formation_universe(form_start, form_end, universe=UNIVERSE,
-                                  max_stale_share=MAX_STALE_SHARE, panel=panel)
-    form = panel.loc[panel["permno"].isin(set(universe)), ["permno", "date", "ret"]]
-    levels = normalized_prices(
-        form.pivot(index="date", columns="permno", values="ret").sort_index()
-    ).iloc[-1].reindex(universe)
-    del form, panel
 
+    ``share_classes_file`` (default None: the shipped share filter) names the
+    permno map of a ``--share-classes wide`` cache; its permnos join the formation
+    universe on the same day rule, and the ``panel`` pool's common stocks.
+    """
+    extra = share_class_permnos(share_classes_file)
+    if pool not in POOL_MODES:
+        raise ValueError(f"pool must be one of {POOL_MODES}, got {pool!r}")
+    if prior not in PRIOR_MODES:
+        raise ValueError(f"prior must be one of {PRIOR_MODES}, got {prior!r}")
+    if decile_breaks not in DECILE_MODES:
+        raise ValueError(f"decile_breaks must be one of {DECILE_MODES}")
     start, end = trade_window(year, month)
     dates = trading_calendar(start, end)
-    permnos = np.asarray(universe, dtype=np.int64)
-    trd = load_daily(dates[0], dates[-1], ["permno", "date", "ret", "terminal"],
-                     permnos=[int(p) for p in permnos])
+    if pool == "panel":
+        # Every common CRSP stock with rows in the trading window: no formation
+        # screen and no stale-quote screen. Levels start at 1 because a stock the
+        # screen excludes has no formation normalization; the primary close rule
+        # (close with the true trade) never reads them.
+        trd = load_daily(dates[0], dates[-1],
+                         ["permno", "date", "ret", "terminal", "common"])
+        keep = trd["common"].eq(True)
+        if extra is not None:
+            keep |= trd["permno"].isin(set(extra.tolist()))
+        trd = trd[keep]
+        permnos = np.sort(trd["permno"].unique().astype(np.int64))
+        levels = np.ones(permnos.size)
+    else:
+        form_start = month_start(*shift_month(year, month, -12))
+        form_end = month_end(*shift_month(year, month, -1))
+        panel = load_daily(form_start, form_end,
+                           [*formation_columns(UNIVERSE, MAX_STALE_SHARE), "date"])
+        universe = formation_universe(form_start, form_end, universe=UNIVERSE,
+                                      max_stale_share=MAX_STALE_SHARE, panel=panel,
+                                      extra_permnos=extra)
+        form = panel.loc[panel["permno"].isin(set(universe)), ["permno", "date", "ret"]]
+        levels = normalized_prices(
+            form.pivot(index="date", columns="permno", values="ret").sort_index()
+        ).iloc[-1].reindex(universe)
+        del form, panel
+        permnos = np.asarray(universe, dtype=np.int64)
+        trd = load_daily(dates[0], dates[-1], ["permno", "date", "ret", "terminal"],
+                         permnos=[int(p) for p in permnos])
     returns = (trd.pivot(index="date", columns="permno", values="ret")
                .reindex(index=dates, columns=permnos))
     terminal = (trd.pivot(index="date", columns="permno", values="terminal")
@@ -405,33 +495,85 @@ def cohort_panel(cache_root: Path, year: int, month: int) -> CohortPanel:
     monthly = monthly[monthly["month_code"].isin(months)
                       & monthly["permno"].isin(set(permnos.tolist()))]
     col_of = {int(p): i for i, p in enumerate(permnos)}
+    all_monthly = monthly_frame()
+    all_monthly = all_monthly[all_monthly["month_code"].isin(months)]
+    all_monthly = all_monthly.dropna(subset=["mthret"])
     deciles: dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
     for code, group in monthly.groupby("month_code", sort=True):
         group = group.dropna(subset=["mthret"]).sort_values(["mthret", "permno"])
         cols = np.array([col_of[int(p)] for p in group["permno"]], dtype=np.int64)
         n = cols.size
-        # decile d holds the rank positions [d*n/10, (d+1)*n/10)
-        edges = (np.arange(DECILES + 1) * n) // DECILES
+        if decile_breaks == "panel":
+            # Breakpoints from every common CRSP stock with a prior-month
+            # return; the draws stay in the formation universe (D4).
+            every = all_monthly.loc[all_monthly["month_code"].eq(int(code)), "mthret"]
+            cuts = np.quantile(every.to_numpy(float),
+                               np.arange(1, DECILES) / DECILES)
+            values = group["mthret"].to_numpy(float)
+            dec = np.searchsorted(cuts, values, side="right")
+            order = np.lexsort((values, dec))
+            cols = cols[order]
+            counts = np.bincount(dec, minlength=DECILES)
+            edges = np.concatenate(([0], np.cumsum(counts))).astype(np.int64)
+        else:
+            # decile d holds the rank positions [d*n/10, (d+1)*n/10)
+            edges = (np.arange(DECILES + 1) * n) // DECILES
         # where each stock sits in the sorted order (-1: no return that month)
         rank_of = np.full(permnos.size, -1, dtype=np.int64)
         rank_of[cols] = np.arange(n, dtype=np.int64)
         deciles[int(code)] = (cols, edges, rank_of)
 
+    prior_tables: dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+    if prior == "trading":
+        # "on the day the position is opened": rank on the 21 trading days before
+        # the open rather than on the previous calendar month's mthret.
+        lead = trading_calendar(start - timedelta(days=90),
+                                start - timedelta(days=1))[-(PRIOR_DAYS + 1):]
+        ext = lead.append(dates)
+        pre = load_daily(ext[0], ext[-1], ["permno", "date", "ret"],
+                         permnos=[int(p) for p in permnos])
+        pre = (pre.pivot(index="date", columns="permno", values="ret")
+               .reindex(index=ext, columns=permnos))
+        lvl = np.cumprod(1.0 + np.nan_to_num(pre.to_numpy(float), nan=0.0), axis=0)
+        for day in range(len(dates)):
+            row = PRIOR_DAYS + day
+            if row < PRIOR_DAYS + 1:
+                continue
+            values = lvl[row - 1] / lvl[row - PRIOR_DAYS - 1] - 1.0
+            order = np.argsort(values, kind="stable")
+            cols = order[np.isfinite(values[order])].astype(np.int64)
+            n = cols.size
+            edges = (np.arange(DECILES + 1) * n) // DECILES
+            rank_of = np.full(permnos.size, -1, dtype=np.int64)
+            rank_of[cols] = np.arange(n, dtype=np.int64)
+            prior_tables[day] = (cols, edges, rank_of)
+
     return CohortPanel(
-        year=year, month=month, permnos=permnos, levels=levels.to_numpy(float),
+        year=year, month=month, permnos=permnos,
+        levels=levels.to_numpy(float) if hasattr(levels, "to_numpy") else np.asarray(levels, float),
         returns=R, terminal=term, last_valid=eng.last_valid_rows(R, term),
         deciles=deciles, dates=dates,
         month_of_day=np.array([month_of(d) for d in dates]),
+        prior_tables=prior_tables,
     )
 
 
-def decile_range(panel: CohortPanel, code: int, col: int) -> tuple[int, int] | None:
+def prior_entry(panel: CohortPanel, prior: str, open_day: int, code: int):
+    """The decile table a draw reads: the calendar month's or the day's 21-day one."""
+    if prior == "trading":
+        return panel.prior_tables.get(int(open_day))
+    return panel.deciles.get(code)
+
+
+def decile_range(panel: CohortPanel, code: int, col: int,
+                 entry: tuple | None = None) -> tuple[int, int] | None:
     """Position range of ``col``'s decile in month ``code``'s sorted universe.
 
     ``None`` when the stock has no return in that month, i.e. it cannot be put in
     a decile ("previous month's performance" is undefined).
     """
-    entry = panel.deciles.get(code)
+    if entry is None:
+        entry = panel.deciles.get(code)
     if entry is None:
         return None
     _, edges, rank_of = entry
@@ -444,15 +586,25 @@ def decile_range(panel: CohortPanel, code: int, col: int) -> tuple[int, int] | N
 
 
 def draw_legs(rng: np.random.Generator, events: pd.DataFrame, panel: CohortPanel,
-              reps: int) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
+              reps: int, prior: str = "calendar", near: int = 0,
+              complete: bool = False, pair_decile: str = "own",
+              ) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
     """Draw two random universe stocks per opening, one per true leg's decile.
 
     Each leg of a true pair is replaced by a stock drawn uniformly from the decile
     of the previous month's return that the leg itself occupies, from the cohort's
     formation universe, excluding the pair's two true legs and the other drawn
-    stock (rejection sampling).
+    stock (rejection sampling).  ``pair_decile`` "long"/"short" draws both legs
+    from the long (short) true leg's decile instead (CONTRACT_R10D R-C).
     """
+    if pair_decile not in PAIR_DECILE_MODES:
+        raise ValueError(f"pair_decile must be one of {PAIR_DECILE_MODES}, "
+                         f"got {pair_decile!r}")
     n = len(events)
+    if near > 0 or complete:
+        import t6_draws
+        return t6_draws.draw_general(rng, events, panel, reps, prior, near, complete,
+                                     prior_entry, pair_decile)
     stats = {"events": n, "no_decile": 0, "bucket_too_small": 0}
     col_of = {int(p): i for i, p in enumerate(panel.permnos)}
     long_ids = np.array([col_of[int(p)] for p in events["long_permno"]], dtype=np.int64)
@@ -466,21 +618,32 @@ def draw_legs(rng: np.random.Generator, events: pd.DataFrame, panel: CohortPanel
     usable = np.zeros(n, dtype=bool)
     for i in range(n):
         code = int(events["prior_month"].iloc[i])
-        r1 = decile_range(panel, code, int(long_ids[i]))
-        r2 = decile_range(panel, code, int(short_ids[i]))
+        entry = prior_entry(panel, prior, int(events["open_day"].iloc[i]), code)
+        if entry is None:
+            stats["no_decile"] += 1
+            continue
+        r1 = decile_range(panel, code, int(long_ids[i]), entry)
+        r2 = decile_range(panel, code, int(short_ids[i]), entry)
         if r1 is None or r2 is None:
             stats["no_decile"] += 1
             continue
         # the decile bounds live in the month's return-sorted position space, so
         # the true legs are excluded by position, not by column
-        pos_a[i] = int(panel.deciles[code][2][long_ids[i]])
-        pos_b[i] = int(panel.deciles[code][2][short_ids[i]])
+        pos_a[i] = int(entry[2][long_ids[i]])
+        pos_b[i] = int(entry[2][short_ids[i]])
+        # the pool each leg is drawn from: its own decile (shipped) or one decile
+        # for both legs (CONTRACT_R10D R-C)
+        src1, src2 = r1, r2
+        if pair_decile == "long":
+            src2 = r1
+        elif pair_decile == "short":
+            src1 = r2
         # the first draw needs one candidate left after the two true legs, the
         # second one after those plus the first draw
-        if (r1[1] - r1[0]) <= 2 or (r2[1] - r2[0]) <= 3:
+        if (src1[1] - src1[0]) <= 2 or (src2[1] - src2[0]) <= 3:
             stats["bucket_too_small"] += 1
             continue
-        lo1[i], hi1[i], lo2[i], hi2[i] = r1[0], r1[1], r2[0], r2[1]
+        lo1[i], hi1[i], lo2[i], hi2[i] = src1[0], src1[1], src2[0], src2[1]
         usable[i] = True
 
     c1 = np.full((n, reps), -1, dtype=np.int64)
@@ -508,13 +671,16 @@ def draw_legs(rng: np.random.Generator, events: pd.DataFrame, panel: CohortPanel
         # the draws are positions in the month's return-sorted universe; map them
         # back to columns of panel.returns / panel.permnos
         for j, event in enumerate(rows):
-            cols = panel.deciles[int(events["prior_month"].iloc[event])][0]
+            entry = prior_entry(panel, prior, int(events["open_day"].iloc[event]),
+                                int(events["prior_month"].iloc[event]))
+            cols = entry[0]
             c1[event] = cols[first[j]]
             c2[event] = cols[second[j]]
     return c1, c2, usable, stats
 
 
-def true_pair_series(cache_root: Path, panel: CohortPanel, wait: int) -> tuple[np.ndarray, int]:
+def true_pair_series(cache_root: Path, panel: CohortPanel, wait: int,
+                     committed: str = "literal") -> tuple[np.ndarray, int]:
     """The true pairs' monthly series for Table 6's four portfolios.
 
     Rebuilt from the cached trade log with the same accounting as the bootstrap
@@ -540,22 +706,32 @@ def true_pair_series(cache_root: Path, panel: CohortPanel, wait: int) -> tuple[n
         if w != wait:
             continue
         lo, hi = PORTFOLIOS[portfolio]
-        monthly = portfolio_monthly(result, list(range(lo, hi + 1)), capital, SHORT_WEIGHTS)
+        monthly = monthly_series(result, list(range(lo, hi + 1)), capital, committed)
         block[:, j] = monthly.reindex(index).to_numpy()
     return block, len(keep)
 
 
 def run_cohort(cache_root: Path, year: int, month: int, reps: int, seed: int,
-               chunk: int = 25, close_rule: str = "true") -> dict:
+               chunk: int = 25, close_rule: str = "true", pool: str = "formation",
+               prior: str = "calendar", committed: str = "literal", near: int = 0,
+               complete: bool = False, decile_breaks: str = "universe",
+               share_classes_file: str | None = None,
+               pair_decile: str = "own") -> dict:
     """Bootstrap and true-pair series of one cohort, both panels.
 
     ``close_rule`` "true" closes each random position with the true trade it
     replaces (capped by the drawn legs' forced exits); "own" closes it on the drawn
-    stocks' own next crossing.
+    stocks' own next crossing.  ``pool``, ``prior`` and ``committed`` select the
+    Table 6 readings documented in CONTRACT_J; their defaults are the shipped ones.
     """
     if close_rule not in CLOSE_RULES:
         raise ValueError(f"close_rule must be one of {CLOSE_RULES}, got {close_rule!r}")
-    panel = cohort_panel(cache_root, year, month)
+    for name, value, allowed in (("pool", pool, POOL_MODES), ("prior", prior, PRIOR_MODES),
+                                 ("committed", committed, COMMITTED_MODES)):
+        if value not in allowed:
+            raise ValueError(f"{name} must be one of {allowed}, got {value!r}")
+    panel = cohort_panel(cache_root, year, month, pool=pool, prior=prior,
+                         decile_breaks=decile_breaks, share_classes_file=share_classes_file)
     months = np.unique(panel.month_of_day)
     month_index = pd.DatetimeIndex([month_timestamp(int(k)) for k in months])
     random = np.full((reps, months.size, len(SERIES)), np.nan)
@@ -571,9 +747,12 @@ def run_cohort(cache_root: Path, year: int, month: int, reps: int, seed: int,
             "long_permno": trades["long_permno"].to_numpy(np.int64),
             "short_permno": trades["short_permno"].to_numpy(np.int64),
             "prior_month": [month_of(d) - 1 for d in pd.to_datetime(trades["open_date"])],
+            "close_day": trades["close_day"].to_numpy(np.int64),
         })
         rng = np.random.default_rng(np.random.SeedSequence([seed, year * 12 + month, wait]))
-        c1, c2, usable, draw_stats = draw_legs(rng, events, panel, reps)
+        c1, c2, usable, draw_stats = draw_legs(rng, events, panel, reps, prior=prior,
+                                               near=near, complete=complete,
+                                               pair_decile=pair_decile)
         open_all = np.repeat(events["open_day"].to_numpy(np.int64),
                             reps).reshape(len(events), reps)
         can_trade = usable[:, None] & (c1 >= 0) & (c2 >= 0)
@@ -586,7 +765,7 @@ def run_cohort(cache_root: Path, year: int, month: int, reps: int, seed: int,
             "no_data_after_open": int((usable[:, None] & (c1 >= 0) & (c2 >= 0)).sum()
                                       - can_trade.sum()),
         }
-        block, n_true = true_pair_series(cache_root, panel, wait)
+        block, n_true = true_pair_series(cache_root, panel, wait, committed=committed)
         cols = [j for j, s in enumerate(SERIES) if s[0] == wait]
         true[:, cols] = block[:, cols]
         stats["waits"][str(wait)]["true_trades"] = n_true
@@ -602,7 +781,12 @@ def run_cohort(cache_root: Path, year: int, month: int, reps: int, seed: int,
                                         panel.levels[ids_l.ravel()])
             ps = eng.prices_from_returns(panel.returns[:, ids_s.ravel()],
                                         panel.levels[ids_s.ravel()])
-            if close_rule == "own":
+            if close_rule in ("own", "own-rebase"):
+                if close_rule == "own-rebase":
+                    base_l = pl[opens, np.arange(pl.shape[1])]
+                    base_s = ps[opens, np.arange(ps.shape[1])]
+                    pl = pl / np.where(base_l == 0, 1.0, base_l)[None, :]
+                    ps = ps / np.where(base_s == 0, 1.0, base_s)[None, :]
                 close, reason = eng.resolve_closes(
                     opens, pl, ps, panel.terminal[:, ids_l.ravel()],
                     panel.terminal[:, ids_s.ravel()], panel.last_valid[ids_l.ravel()],
@@ -639,8 +823,8 @@ def run_cohort(cache_root: Path, year: int, month: int, reps: int, seed: int,
                     if w != wait:
                         continue
                     lo, hi = PORTFOLIOS[portfolio]
-                    monthly = portfolio_monthly(result, list(range(lo, hi + 1)), capital,
-                                                SHORT_WEIGHTS)
+                    monthly = monthly_series(result, list(range(lo, hi + 1)), capital,
+                                             committed)
                     random[start + rep, :, j] = monthly.reindex(month_index).to_numpy()
     return {"months": months, "random": random, "true": true,
             "stats": np.array(json.dumps(stats))}
@@ -654,8 +838,27 @@ def cohort_output_path(out_root: Path, year: int, month: int) -> Path:
 RUN_STAMP = "run_params.json"
 
 
+STAMP_DEFAULTS = {"near": 0, "complete_legs": False, "decile_breaks": "universe",
+                  "share_classes_map": None, "pair_decile": "own"}
+
+
+def stamp_key(params: dict) -> dict:
+    """Fill in the draw-reading keys a pre-CONTRACT_M stamp does not carry."""
+    return {**STAMP_DEFAULTS, **params}
+
+
 def run_params(args) -> dict:
-    return {"close_rule": args.close, "seed": int(args.seed), "reps": int(args.reps)}
+    params = {"close_rule": args.close, "seed": int(args.seed), "reps": int(args.reps),
+              "pool": args.pool, "prior": args.prior_month,
+              "committed": args.committed_capital, "near": int(args.draw_near),
+              "complete_legs": bool(args.complete_legs),
+              "decile_breaks": args.decile_breaks,
+              "pair_decile": getattr(args, "pair_decile", "own")}
+    # Stamped only when set, so a shipped run's stamp is unchanged.
+    digest = share_class_stamp(getattr(args, "share_classes_file", None))
+    if digest:
+        params["share_classes_map"] = digest
+    return params
 
 
 def check_run_stamp(out_root: Path, params: dict) -> None:
@@ -667,7 +870,7 @@ def check_run_stamp(out_root: Path, params: dict) -> None:
     path = out_root / RUN_STAMP
     if path.exists():
         found = json.loads(path.read_text())
-        if found != params:
+        if stamp_key(found) != stamp_key(params):
             raise SystemExit(f"{out_root} holds a run with {found}, not {params}; "
                              "use a new --out-root")
         return
@@ -691,7 +894,12 @@ def run_shard(args, cohorts: list[tuple[int, int]], shard: int, shards: int) -> 
             continue
         started = time.time()
         payload = run_cohort(cache_root, year, month, args.reps, args.seed,
-                             close_rule=args.close)
+                             close_rule=args.close, pool=args.pool, prior=args.prior_month,
+                             committed=args.committed_capital,
+                             near=args.draw_near, complete=args.complete_legs,
+                             decile_breaks=args.decile_breaks,
+                             share_classes_file=args.share_classes_file,
+                             pair_decile=args.pair_decile)
         tmp = path.with_suffix(".npz.tmp")
         with open(tmp, "wb") as handle:
             np.savez_compressed(handle, **payload)
@@ -714,9 +922,18 @@ def run_all(args, cohorts: list[tuple[int, int]]) -> int:
         cmd = [sys.executable, script, "--mode", "shard",
                "--cache-root", str(Path(args.cache_root).resolve()), "--out-root", str(out_root),
                "--reps", str(args.reps), "--seed", str(args.seed), "--close", args.close,
+               "--pool", args.pool, "--prior-month", args.prior_month,
+               "--committed-capital", args.committed_capital,
+               "--draw-near", str(args.draw_near),
+               "--decile-breaks", args.decile_breaks,
+               "--pair-decile", args.pair_decile,
                "--shard", str(shard), "--shards", str(workers)]
         if args.force:
             cmd.append("--force")
+        if args.complete_legs:
+            cmd.append("--complete-legs")
+        if args.share_classes_file:
+            cmd += ["--share-classes-file", str(Path(args.share_classes_file).resolve())]
         if args.limit_cohorts is not None:
             cmd += ["--limit-cohorts", str(args.limit_cohorts)]
         procs.append(subprocess.Popen(cmd))
@@ -774,12 +991,21 @@ def strategy_series(frames: list[dict], reps: int) -> dict:
     return out
 
 
-def summarise(series: dict, reps: int) -> pd.DataFrame:
+def summarise(series: dict, reps: int, stats: str = "replication") -> pd.DataFrame:
+    """The 48-cell table: per-cell true and random statistics.
+
+    ``stats`` "replication" (default, shipped) averages each replication's
+    statistic; "pooled" takes the statistic of all replications' months stacked,
+    the other reading of "computed over 200 replications".
+    """
+    if stats not in STAT_MODES:
+        raise ValueError(f"stats must be one of {STAT_MODES}, got {stats!r}")
     rows = []
     for (wait, portfolio, capital) in SERIES:
         block = series[f"w{wait}|{portfolio}|{capital}"]
         truth = summary_stats(block["true"])
         per_rep = pd.DataFrame([summary_stats(block["reps"][r]) for r in range(reps)])
+        pooled = summary_stats(pd.concat(block["reps"])) if stats == "pooled" else None
         rows.append({
             "wait": wait, "portfolio": portfolio, "capital": capital,
             "n_months": len(block["true"]),
@@ -790,6 +1016,9 @@ def summarise(series: dict, reps: int) -> pd.DataFrame:
             "rep_mean_sd": float(per_rep["mean"].std(ddof=1)),
             "rep_std_sd": float(per_rep["std"].std(ddof=1)),
             "rep_median_sd": float(per_rep["median"].std(ddof=1)),
+            "pooled_mean": float(pooled["mean"]) if pooled is not None else np.nan,
+            "pooled_std": float(pooled["std"]) if pooled is not None else np.nan,
+            "pooled_median": float(pooled["median"]) if pooled is not None else np.nan,
         })
     return pd.DataFrame(rows)
 
@@ -832,6 +1061,37 @@ def main() -> int:
     parser.add_argument("--close", choices=CLOSE_RULES, default="true",
                         help="close each random position with its true trade (default) or on the "
                              "drawn stocks' own next crossing")
+    parser.add_argument("--committed-capital", choices=COMMITTED_MODES, default="literal",
+                        help="committed capital as the shipped payoffs over the selected pairs "
+                             "(default) or the value-weighted book scaled by the share of pairs "
+                             "holding a position (the pre-#64 hybrid)")
+    parser.add_argument("--pool", choices=POOL_MODES, default="formation",
+                        help="draw the random stocks from the cohort's formation universe "
+                             "(default) or from every common CRSP stock in the trading window")
+    parser.add_argument("--prior-month", choices=PRIOR_MODES, default="calendar",
+                        help="rank the pool on the previous calendar month's mthret (default) or "
+                             f"on the {PRIOR_DAYS} trading days before the opening day")
+    parser.add_argument("--stats", choices=STAT_MODES, default="replication",
+                        help="average each replication's statistic (default) or take the "
+                             "statistic of all replications' months pooled")
+    parser.add_argument("--draw-near", type=int, default=0, metavar="K",
+                        help="draw each leg from the K stocks nearest the true leg's rank "
+                             "inside its decile (CONTRACT_M D2); 0 draws from the decile")
+    parser.add_argument("--complete-legs", action="store_true",
+                        help="draw only stocks with a return on every day of the true trade's "
+                             "holding window (CONTRACT_M D3)")
+    parser.add_argument("--decile-breaks", choices=DECILE_MODES, default="universe",
+                        help="take the decile breakpoints from the formation universe (default) "
+                             "or from every common CRSP stock with a prior-month return (D4)")
+    parser.add_argument("--pair-decile", choices=PAIR_DECILE_MODES, default="own",
+                        help="match each drawn leg to its own true stock's decile (default, the "
+                             "text's 'replace the actual stocks') or draw both legs from the "
+                             "long true leg's decile or the short leg's (one decile per pair, "
+                             "the caption's singular 'the same decile'; CONTRACT_R10D R-C)")
+    parser.add_argument("--share-classes-file", default=None, metavar="PARQUET",
+                        help="permno map of a --share-classes wide cohort cache "
+                             "(scripts/experiments/share_class_map.py): its permnos join the "
+                             "draw pool on the same day rule; default none, the shipped filter")
     args = parser.parse_args()
 
     cache_root = Path(args.cache_root).resolve()
@@ -849,7 +1109,8 @@ def main() -> int:
         import table6_report as report
         out_root = Path(args.out_root).resolve()
         stamp = out_root / RUN_STAMP
-        if not stamp.exists() or json.loads(stamp.read_text()) != run_params(args):
+        if not stamp.exists() or stamp_key(json.loads(stamp.read_text())) != stamp_key(
+            run_params(args)):
             raise SystemExit(f"{out_root} was not run with {run_params(args)} ({RUN_STAMP})")
         if args.close != "true":
             # t6_template.md describes the primary design (REVIEW_NOTES section 54).

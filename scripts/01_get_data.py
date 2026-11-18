@@ -11,7 +11,7 @@ Existing outputs are skipped, so an interrupted run resumes where it stopped.
 A manifest with row counts, date bounds, SHA-256 and the exact SQL is written to
 ``data/raw/wrds_api/manifest.json`` and copied to ``data/metadata/``.
 
-Choices informed by report/data_review/ (A_FINDINGS.md, B_FINDINGS.md):
+Choices informed by report/archive/data_review/ (A_FINDINGS.md, B_FINDINGS.md):
 - Stock data come from the quarterly library ``crsp_q_stock``; the annual
   ``crsp`` library ends a quarter or two earlier.
 - The daily/monthly WRDS views append distribution columns, which repeats a

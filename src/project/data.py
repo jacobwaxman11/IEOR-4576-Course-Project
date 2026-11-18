@@ -200,6 +200,17 @@ def universe_flags(panel: pd.DataFrame, universe: str) -> pd.Series:
     return _DAY_RULES[day_rule](panel) & _SHARE_FILTERS[share_filter](panel)
 
 
+def day_rule_flags(panel: pd.DataFrame, universe: str) -> pd.Series:
+    """Row-level bool Series: the day rule of ``universe`` alone, no share filter.
+
+    Used by the share-class reading (REVIEW_NOTES section 77), which widens the
+    share filter and must give the added classes exactly the day rule the
+    shipped universe gives its own.
+    """
+    day_rule, _share_filter = UNIVERSES[universe]
+    return _DAY_RULES[day_rule](panel)
+
+
 def _universe_panel_columns(universe: str) -> list[str]:
     """The processed columns needed to evaluate ``universe`` row flags."""
     day_rule, share_filter = UNIVERSES[universe]
@@ -230,7 +241,7 @@ def _clean_year(raw: pd.DataFrame) -> pd.DataFrame:
     Pure function of a raw frame (columns of ``_RAW_COLUMNS``); unit-tested in
     isolation so tests do not need files. The share filters are deferred to
     `universe_flags`/`formation_universe` so the panel can serve all four
-    universe variants (INTERFACES.md stage 2).
+    universe variants (METHOD.md, stage 2).
 
     CIZ dates a stock's delisting row (``dlydelflg == 'Y'``) after its last
     trade and gives it ``primaryexch == 'X'``; it carries the delisting return.
@@ -420,9 +431,9 @@ def trading_calendar(start, end) -> pd.DatetimeIndex:
 
 def formation_universe(
     start, end, universe: str = "vol_common", max_stale_share: float | None = None,
-    panel: pd.DataFrame | None = None,
+    panel: pd.DataFrame | None = None, extra_permnos=None,
 ) -> pd.Index:
-    """PERMNOs eligible per INTERFACES.md §2.1 over [start, end].
+    """PERMNOs eligible per METHOD.md §2.1 over [start, end].
 
     A stock qualifies when it has a row on every calendar date of the window,
     and that row passes the share filter and the day rule of ``universe``;
@@ -440,6 +451,11 @@ def formation_universe(
     near-frozen quotes: a stock is also excluded when more than that share of
     the window's days carry no recorded volume (neither zero nor positive) and
     an unchanged price.
+
+    ``extra_permnos`` (default ``None``: nobody) admits stocks the share filter
+    of ``universe`` rejects, on the same day rule and the same frozen-quote
+    rules: the share-class reading of REVIEW_NOTES section 77 adds CRSP's
+    shares-of-beneficial-interest and ADR classes to ``common``.
     """
     n_days = len(trading_calendar(start, end))
     if n_days == 0:
@@ -452,6 +468,9 @@ def formation_universe(
         if missing:
             raise KeyError(f"preloaded panel lacks {missing} needed by universe {universe!r}")
     flags = universe_flags(panel, universe)
+    if extra_permnos is not None and len(extra_permnos):
+        extra = panel["permno"].isin(set(pd.Index(extra_permnos).tolist()))
+        flags = flags | (extra & day_rule_flags(panel, universe))
     # The preloaded frame is the driver's formation window, the biggest object a
     # cohort holds; narrowing it with ``panel[columns]`` first would copy it
     # whole, which is what this path exists to avoid. ``universe_flags`` only

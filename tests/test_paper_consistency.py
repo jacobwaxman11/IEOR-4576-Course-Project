@@ -1,6 +1,6 @@
 """Pin what the paper's printed statistics imply about its unnamed reversal factor.
 
-`report/replication/PAPER_CONSISTENCY.md` records diagnostics rather than verdicts: the
+`report/replication/GAPS.md` (section 11) records diagnostics rather than verdicts: the
 paper's Tables 1, 2, 4 and 8 constrain each other, and the gap that matters is in the
 factor we cannot observe. Numbers like that rot silently, so the headline figures are
 asserted here and a changed data vintage, factor vintage or edit fails the test instead of
@@ -18,10 +18,12 @@ Pinned claims:
    full-sample ones by exact sample pooling (the control that makes ``sigma_y``
    trustworthy).
 3. Table 8 Panel A is feasible column by column, with |required rho| just inside [-1, 1]
-   (0.952 / 0.947 / 0.932 / 0.911), and feasible jointly: one reversal factor fits all
-   four columns at R^2(r | f) = 0.950, well-conditioned, robust to print rounding. That
+   (0.952 / 0.947 / 0.931 / 0.911), and feasible jointly: one reversal factor fits all
+   four columns at R^2(r | f) = 0.943, well-conditioned, robust to print rounding. That
    R^2 is the finding — the reversal factor the paper describes is one the other four
-   factors already mostly span, where French ST_Rev is 26% spanned.
+   factors already mostly span, where French ST_Rev is 26% spanned. It is read at the
+   print's five decimals (`PAPER_TABLE8`), not at `paper_cells.json`'s three significant
+   figures, which give 0.950 (REVIEW_NOTES 99's finding 1 and 102's fix).
 4. Table 8 Panel B is feasible on the same tests, with a much lower joint span.
 5. The Table 4 Ibbotson block reproduces its printed means to under 5 basis points.
 
@@ -63,6 +65,7 @@ from paper_consistency import (
     load_paper,
     rounding_sensitivity,
     sample_pooled_mean_sd,
+    typed_table8,
     variance_check,
 )
 
@@ -78,11 +81,17 @@ def paper() -> dict:
 
 @pytest.fixture(scope="module")
 def factors():
-    """The four-factor panel, or skip when the public files are absent."""
+    """The four-factor panel at the vintage the script reads, or skip when files are absent.
+
+    The scored vintage, French's 2005 archives: `paper_consistency.py` reads it since R12
+    (REVIEW_NOTES 102), and this file pins what that script prints. On today's files one
+    printed factor sd misses (post-1988 HML), which is the seven-of-eight this file used
+    to assert (REVIEW_NOTES 99's vintage table).
+    """
     from project.factors import load_factors
 
     try:
-        return load_factors()
+        return load_factors(vintage="2005")
     except FileNotFoundError as exc:  # LFS pointer or missing file
         pytest.skip(f"public factor files unavailable: {exc}")
 
@@ -135,8 +144,8 @@ def test_seven_of_eight_printed_factor_sds_reproduce(paper, samples):
     for half in ("pre", "post"):
         hits += factor_sd_matches(PAPER_FACTOR_SD[half][:4], samples["measured_sd"][half])
     assert hits == THREE_DP_MATCHES, (
-        f"{hits} of 8 printed FF/momentum sds match at three decimals; "
-        "PAPER_CONSISTENCY.md says 7")
+        f"{hits} of 8 printed FF/momentum sds match at three decimals on the 2005 "
+        f"archives; GAPS.md section 11 says {THREE_DP_MATCHES}")
 
 
 def test_reversal_factor_is_not_french_st_rev(paper, samples):
@@ -188,36 +197,37 @@ def test_panel_a_reversal_term_is_large(paper, samples):
         assert res["reversal_variance_term"] > 1.0, (port, res)
 
 
-def test_panel_a_joint_reversal_factor_is_feasible_but_implausible(paper, samples):
-    """One reversal factor fits all four columns at once, at R^2(r|f) = 0.950.
+def test_panel_a_joint_reversal_factor_is_feasible_but_implausible(samples):
+    """One reversal factor fits all four columns at once, at R^2(r|f) = 0.943.
 
     Feasible (<= 1) and robust to print rounding, so the document's claim is about
-    plausibility: the four factors would have to explain 95% of the reversal factor's
-    variance, where French ST_Rev is 26% explained.
+    plausibility: the four factors would have to explain 94% of the reversal factor's
+    variance, where French ST_Rev is 26% explained. The inputs are the script's own - the
+    print's five decimals, `typed_table8()` - so this test moves with the script.
     """
-    implied = _implied(paper, samples, "pre")
+    table8 = typed_table8()
     joint = joint_reversal_r2(
-        [[cell(paper[T8], f"pre_{c}", i) for c in FF] for i in range(1, 5)],
-        [cell(paper[T8], "pre_reversal", i) for i in range(1, 5)],
-        [cell(paper[T8], "pre_r2", i) for i in range(1, 5)],
-        [cell(paper[T8], "pre_std", i) / 100.0 for i in range(1, 5)],
+        [[cell(table8, f"pre_{c}", i) for c in FF] for i in range(1, 5)],
+        [cell(table8, "pre_reversal", i) for i in range(1, 5)],
+        [cell(table8, "pre_r2", i) for i in range(1, 5)],
+        [cell(table8, "pre_std", i) / 100.0 for i in range(1, 5)],
         PAPER_FACTOR_SD["pre"], samples["corr"]["pre"])
     assert joint["feasible"] is True
-    assert joint["r2_of_reversal_on_four"] == pytest.approx(0.950, abs=0.005)
+    assert joint["r2_of_reversal_on_four"] == pytest.approx(0.943, abs=0.005)
     assert joint["cond"] == pytest.approx(103, abs=5)
     spread = rounding_sensitivity(
-        [[cell(paper[T8], f"pre_{c}", i) for c in FF] for i in range(1, 5)],
-        [cell(paper[T8], "pre_reversal", i) for i in range(1, 5)],
-        [cell(paper[T8], "pre_r2", i) for i in range(1, 5)],
-        [cell(paper[T8], "pre_std", i) / 100.0 for i in range(1, 5)],
+        [[cell(table8, f"pre_{c}", i) for c in FF] for i in range(1, 5)],
+        [cell(table8, "pre_reversal", i) for i in range(1, 5)],
+        [cell(table8, "pre_r2", i) for i in range(1, 5)],
+        [cell(table8, "pre_std", i) / 100.0 for i in range(1, 5)],
         PAPER_FACTOR_SD["pre"], samples["corr"]["pre"], trials=500)
-    assert spread["share_feasible"] == pytest.approx(0.982, abs=0.04)
+    assert spread["share_feasible"] == pytest.approx(0.998, abs=0.04)
     assert spread["p01"] < spread["p50"] < spread["p99"]
     # the contrast the document rests on
     real = explained_by_four_factors(samples["factors"], samples["pre"])
-    assert real == pytest.approx(0.256, abs=0.02)
+    assert real == pytest.approx(0.259, abs=0.02)
     assert joint["r2_of_reversal_on_four"] > 3 * real
-    assert len(implied) == 4
+    assert len(_implied(load_paper(), samples, "pre")) == 4
 
 
 def test_rounding_widths_follow_each_printed_value():

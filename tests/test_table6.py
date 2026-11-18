@@ -314,7 +314,7 @@ def test_control_rebuilds_a_shipped_cohort_exactly():
         assert row["payoff_max_diff"] < 1e-12
 
 def test_account_treats_a_missing_return_as_no_change():
-    # INTERFACES.md: a missing return inside the trading period is no change, so
+    # METHOD.md: a missing return inside the trading period is no change, so
     # a NaN day must not poison the run (the engine paths that carry NaN arrays
     # rely on this).
     r = np.array([[0.0, 0.0], [np.nan, np.nan], [0.0, 0.0]])
@@ -338,3 +338,25 @@ def test_one_output_directory_holds_one_run(tmp_path):
     (unstamped / "cohorts" / "1990-01.npz").write_bytes(b"")
     with pytest.raises(SystemExit, match="without run_params.json"):
         t6.check_run_stamp(unstamped, primary)
+
+
+def test_share_class_map_is_off_by_default_and_stamped_when_set(tmp_path):
+    # The wide-universe pass-through (REVIEW_NOTES section 87) must leave a shipped
+    # run's stamp unchanged and refuse to resume a run made under another map.
+    import argparse
+
+    base = {"close": "true", "seed": 1, "reps": 200, "pool": "formation",
+            "prior_month": "calendar", "committed_capital": "book-share", "draw_near": 0,
+            "complete_legs": False, "decile_breaks": "universe", "share_classes_file": None}
+    shipped = t6.run_params(argparse.Namespace(**base))
+    assert "share_classes_map" not in shipped
+    assert t6.share_class_permnos(None) is None and t6.share_class_permnos("none") is None
+    path = tmp_path / "map.parquet"
+    pd.DataFrame({"permno": [10, 20]}).to_parquet(path, index=False)
+    wide = t6.run_params(argparse.Namespace(**{**base, "share_classes_file": str(path)}))
+    assert wide["share_classes_map"] == t6.share_class_stamp(str(path))
+    assert list(t6.share_class_permnos(str(path))) == [10, 20]
+    (tmp_path / "run" / "cohorts").mkdir(parents=True)
+    t6.check_run_stamp(tmp_path / "run", shipped)
+    with pytest.raises(SystemExit, match="use a new --out-root"):
+        t6.check_run_stamp(tmp_path / "run", wide)

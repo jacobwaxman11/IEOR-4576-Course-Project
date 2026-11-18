@@ -4,7 +4,7 @@ The paper restricts sector pairs to "the same broad industry categories defined
 by Standard & Poors: Utilities, Transportation, Financial and Industrials. Each
 stock is assigned to one of these four groups, based on the stock's SIC code."
 It gives no SIC ranges and does not say which CRSP SIC field it used. The map
-below is our reading of the S&P groups; see report/replication/PAIR_FORMATION.md.
+below is our reading of the S&P groups; see report/replication/METHOD.md.
 
 CRSP codes an unknown SIC as 0. About 106 stocks per cohort (mostly 1970s-80s
 Nasdaq listings) have a dated SIC of 0 on the formation-end day, so

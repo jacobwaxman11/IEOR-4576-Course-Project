@@ -5,7 +5,7 @@ whose legs are bought and held (eqs. 2-3), portfolio returns that divide the
 payoffs by a pair count, the overlapping cohort aggregation, and the summary
 statistics of Table 1 and Table 2 Panel A.
 
-Conventions (see ``report/replication/INTERFACES.md``):
+Conventions (see ``report/replication/METHOD.md``):
 
 * ``simulate_cohort`` reports ``r_p,t = pi_p,t / w_p,t-1`` with
   ``w_p,t-1 = prod_{s<=t-1}(1 + r_p,s)``, so the dollar payoff is recovered
@@ -14,8 +14,12 @@ Conventions (see ``report/replication/INTERFACES.md``):
   actual employed capital): eq. (2) applied across the portfolio, the
   value-weighted return of all long positions minus that of all short
   positions, each weighted by its value since the trade opened (paper §2.3,
-  PDF p. 14). "committed" scales it by the share of selected pairs holding a
-  position that day. ``short_weights`` picks the eq. (3) weight of a short
+  PDF p. 14). "committed" is the paper's own sentence read literally on the
+  engine path: "scales the portfolio payoffs by the number of pairs that are
+  selected for trading", sum_p pi_p,t / N selected (§2.3, PDF p. 14; the same
+  series as "committed_count"); results without a trade log keep the
+  historical hybrid, the employed return scaled by the share of selected
+  pairs holding a position that day. ``short_weights`` picks the eq. (3) weight of a short
   position: "value", the shorted stock's value since the trade opened, or
   "position", the position's own compounded return, prod (1 - r) (the
   pipeline default since 2026-10-24; REVIEW_NOTES section 29). Their
@@ -154,8 +158,15 @@ CAPITAL_CHOICES = (
     "employed_literal",
     "committed_account",
     "employed_account",
+    "gross_base",
+    "long_base",
 )
 VW_CAPITALS = frozenset({"employed", "committed"})
+#: The two book-scaling bases of REVIEW_NOTES sections 29 and 76, as capital
+#: names: "gross_base" = 2 (sum dL - sum dS) / (sum L + sum S), the payoff per
+#: dollar of both books held; "long_base" = (sum dL - sum dS) / sum L, the
+#: payoff per dollar of the long book alone.
+BOOK_BASES = frozenset({"gross_base", "long_base"})
 SHORT_WEIGHTS = ("value", "position")
 MASK_CAPITALS = frozenset({"employed_count", "employed_nbar", "employed_account"})
 
@@ -238,6 +249,16 @@ def portfolio_legs(result, ranks, short_weights: str = "value") -> tuple[pd.Seri
             pd.Series(np.where(live, short_ret, np.nan), index=index))
 
 
+def _has_trade_log(result) -> bool:
+    """True when ``result`` carries the engine's trade log.
+
+    ``simulate_cohort`` results always do; the lightweight unit-test stubs pass
+    an empty frame, which keeps their historical hybrid "committed" identity.
+    """
+    trades = getattr(result, "trades", None)
+    return trades is not None and len(trades) > 0
+
+
 def _vw_legs(
     result, sel: list, index: pd.Index, short_weights: str = "value",
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -291,10 +312,14 @@ def portfolio_daily(result, ranks, capital: str, short_weights: str = "value") -
           book, each position weighted by its value since it opened
           (``sum dL / sum L_{t-1} - sum dS / sum S_{t-1}`` over open positions;
           NaN on a day with none, which ``cohort_monthly`` skips).
-        - "committed": "employed" scaled by ``n_t / N``, ``n_t`` the pairs
-          holding a position on day t and N the pairs selected (0 on a day
-          with none). The two are the conventions since 2026-10-19; see the
-          module docstring for their fully-invested/committed ratios.
+        - "committed": on the engine path (a non-empty trade log) the paper's
+          literal ``sum_p pi_p,t / N`` over the N selected pairs (§2.3, PDF
+          p. 14: "scales the portfolio payoffs by the number of pairs that
+          are selected for trading"), identical to "committed_count";
+          lightweight results without a trade log keep the historical hybrid,
+          "employed" scaled by ``n_t / N``, ``n_t`` the pairs holding a
+          position on day t and N the pairs selected (0 on a day with none).
+          See the module docstring for their fully-invested/committed ratios.
         - "committed_count": ``sum_p pi_p,t / N`` over the N selected pairs.
         - "employed_count": ``sum_p pi_p,t / n_t`` (NaN on a day with no
           position), the convention of 2026-10-18.
@@ -330,11 +355,22 @@ def portfolio_daily(result, ranks, capital: str, short_weights: str = "value") -
     index = pr.index
     sel = _resolve_ranks(pr, ranks)
     nan = pd.Series(np.nan, index=index)
+    if capital == "committed" and sel and _has_trade_log(result):
+        # GGR (2006) §2.3 (PDF p. 14): committed capital "scales the portfolio
+        # payoffs by the number of pairs that are selected for trading" -- the
+        # literal sum_p pi_p,t / N selected, the same series as
+        # "committed_count". Engine results carry a non-empty trade log; the
+        # legacy hybrid below remains for lightweight results without one
+        # (an empty log is numerically identical: no payoffs, zero either way).
+        payoff, _ = _payoffs_and_accounts(result, sel, len(index))
+        return pd.Series(np.nansum(payoff, axis=1) / len(sel), index=index)
     if capital in VW_CAPITALS:
         excess, n_open = _vw_legs(result, sel, index, short_weights)
         if capital == "committed":
             excess = np.nan_to_num(excess) * n_open / len(sel) if sel else excess
         return pd.Series(excess, index=index)
+    if capital in BOOK_BASES:
+        return _book_base_series(result, sel, index, capital, short_weights)
     payoff, w_prev = _payoffs_and_accounts(result, sel, len(index))
     num = np.nansum(payoff, axis=1)
     mask = _open_mask(result, index, sel) if capital in MASK_CAPITALS else None
@@ -356,6 +392,50 @@ def portfolio_daily(result, ranks, capital: str, short_weights: str = "value") -
     den = np.nansum(w_prev * mask, axis=1)
     den[den == 0] = np.nan
     return pd.Series(num / den, index=index)
+
+
+def _book_base_series(
+    result, sel: list, index: pd.Index, capital: str, short_weights: str,
+) -> pd.Series:
+    """The gross-book and long-book capital bases (REVIEW_NOTES sections 29, 76).
+
+    Both scale the same daily long-minus-short payoff sum the value-weighted
+    reading produces, by another denominator: ``gross_base`` divides it by half
+    the value of the two books, ``2 (sum dL - sum dS) / (sum L + sum S)``, the
+    return on a dollar held long and a dollar held short; ``long_base`` divides
+    it by the long book alone, ``(sum dL - sum dS) / sum L``. NaN on a day on
+    which no position is open, so ``cohort_monthly`` skips it.
+    """
+    if not sel:
+        return pd.Series(np.nan, index=index)
+    if getattr(result, "long_values", None) is None:
+        raise ValueError("book capital bases need the engine's per-leg values")
+    lp = result.long_payoffs[sel].to_numpy(dtype=float).sum(axis=1)
+    sp_raw = result.short_payoffs[sel].to_numpy(dtype=float)
+    lv = result.long_values[sel].to_numpy(dtype=float)
+    sv_raw = result.short_values[sel].to_numpy(dtype=float)
+    if short_weights == "position":
+        spv = getattr(result, "short_position_values", None)
+        if spv is None or not set(sel) <= set(spv.columns):
+            raise ValueError("short_weights='position' needs the engine's short_position_values")
+        spos = spv[sel].to_numpy(dtype=float)
+        stock_ret = sp_raw / np.where(sv_raw > 0, sv_raw, 1.0)
+        sp = (spos * stock_ret).sum(axis=1)
+        sv = spos
+    else:
+        sp = sp_raw.sum(axis=1)
+        sv = sv_raw
+    live = (lv > 0).any(axis=1) | (sv_raw > 0).any(axis=1)
+    long_sum = lv.sum(axis=1)
+    short_sum = sv.sum(axis=1)
+    excess = lp - sp
+    if capital == "gross_base":
+        den = long_sum + short_sum
+    else:
+        den = long_sum
+    with np.errstate(invalid="ignore", divide="ignore"):
+        out = np.where(live & (den > 0), excess / np.where(den > 0, den, 1.0), np.nan)
+    return pd.Series(out, index=index)
 
 
 def cohort_monthly(daily: pd.Series) -> pd.Series:
@@ -386,12 +466,20 @@ def portfolio_monthly(result, ranks, capital: str, short_weights: str = "value")
 
     For "employed" the two books are the series ``portfolio_legs`` returns (NaN
     on a day with no position, so a month with none has no row); their monthly
-    difference is identically Table 7's long minus short. For "committed" each
-    book's daily return is scaled by ``n_t / N`` before compounding, as
-    ``portfolio_daily`` scales the difference. The count-based capitals keep the
-    compounded daily series of ``portfolio_daily``.
+    difference is identically Table 7's long minus short. On the engine path
+    "committed" is the §2.3 literal daily series of ``portfolio_daily`` (see
+    there) compounded directly; results without a trade log scale each book's
+    daily return by ``n_t / N`` before compounding. The count-based capitals
+    keep the compounded daily series of ``portfolio_daily``.
     """
-    if capital not in VW_CAPITALS:
+    if capital in BOOK_BASES:
+        return cohort_monthly(portfolio_daily(result, ranks, capital, short_weights))
+    if capital not in VW_CAPITALS or (
+        capital == "committed" and _has_trade_log(result)
+    ):
+        # Engine-path "committed" is the §2.3 literal sum_p pi_p,t / N series
+        # (see portfolio_daily), so its monthly return is that daily series
+        # compounded, not the n_t/N-scaled book difference.
         return cohort_monthly(portfolio_daily(result, ranks, capital, short_weights))
     index = result.pair_returns.index
     sel = _resolve_ranks(result.pair_returns, ranks)
@@ -432,6 +520,45 @@ def overlap_average(cohort_months: dict[pd.Timestamp, pd.Series]) -> pd.Series:
         index=pd.DatetimeIndex(idx),
         dtype=float,
     )
+
+
+def weighted_overlap_average(
+    cohort_months: dict[pd.Timestamp, pd.Series],
+    weights: dict[pd.Timestamp, pd.Series | float] | None = None,
+) -> pd.Series:
+    """Overlap average with a weight per cohort, and per cohort month when given.
+
+    The alternative to ``overlap_average`` for the reading in which the six
+    overlapping portfolios are not equal-weighted (REVIEW_NOTES sections 27 and
+    76): ``weights`` maps each cohort to a float (one weight for its whole
+    window, e.g. the number of pairs it selected) or to a Series indexed by its
+    own months (e.g. the number of pairs still holding a position that month).
+    A cohort missing from ``weights``, or a month with no positive weight, is
+    skipped; a month with no weighted cohort is absent from the result, exactly
+    as ``overlap_average`` drops a month with no cohort.
+    """
+    num: dict[pd.Timestamp, float] = defaultdict(float)
+    den: dict[pd.Timestamp, float] = defaultdict(float)
+    for cohort, monthly in cohort_months.items():
+        w = (weights or {}).get(cohort)
+        for ts, val in monthly.items():
+            ts = pd.Timestamp(ts)
+            if pd.isna(val):
+                continue
+            if w is None:
+                ww = 1.0
+            elif isinstance(w, pd.Series):
+                ww = float(w.get(ts, np.nan))
+            else:
+                ww = float(w)
+            if not np.isfinite(ww) or ww <= 0:
+                continue
+            num[ts] += ww * float(val)
+            den[ts] += ww
+    idx = sorted(den)
+    if not idx:
+        return pd.Series(dtype=float)
+    return pd.Series([num[ts] / den[ts] for ts in idx], index=pd.DatetimeIndex(idx), dtype=float)
 
 
 def size_deciles(caps: pd.Series, breakpoint_caps: pd.Series) -> pd.Series:
@@ -595,6 +722,78 @@ def composition_stats(pairs_info: dict, ranks) -> pd.Series:
     return out
 
 
+#: Estimator conventions the paper does not state, one option each, with the
+#: shipped reading first. Every default leaves every output byte-identical;
+#: ``scripts/03_replicate.py`` exposes them as ``--moments``,
+#: ``--quantile-method``, ``--sign-zero`` and ``--nw-correction``, and the
+#: readings they produce are in `report/replication/claims/DEFINITION_AUDIT.md`.
+MOMENT_KINDS = ("raw", "sample")
+QUANTILE_METHODS = ("linear", "lower", "higher", "nearest", "midpoint", "hazen",
+                    "weibull", "median_unbiased", "normal_unbiased")
+SIGN_ZERO_KINDS = ("strict", "nonpositive")
+NW_CORRECTIONS = ("none", "df")
+
+_MOMENT_KIND = "raw"
+_QUANTILE_METHOD = "linear"
+_SIGN_ZERO = "strict"
+_NW_CORRECTION = "none"
+
+
+def set_moments(kind: str) -> None:
+    """Raw Pearson moments (``"raw"``, the shipped reading) or bias-corrected ones.
+
+    ``"sample"`` is the spreadsheet SKEW/KURT convention: G1 = sqrt(n(n-1))/(n-2)
+    times the raw skewness, and G2 + 3 for the absolute kurtosis.
+    """
+    global _MOMENT_KIND
+    if kind not in MOMENT_KINDS:
+        raise ValueError(f"unknown moment kind {kind!r}; choose from {MOMENT_KINDS}")
+    _MOMENT_KIND = kind
+
+
+def set_quantile_method(method: str) -> None:
+    """The percentile method of Table 5's VaR rows (pandas' ``linear`` by default)."""
+    global _QUANTILE_METHOD
+    if method not in QUANTILE_METHODS:
+        raise ValueError(f"unknown quantile method {method!r}; choose from {QUANTILE_METHODS}")
+    _QUANTILE_METHOD = method
+
+
+def set_sign_zero(kind: str) -> None:
+    """The "Observations with excess return < 0" boundary: strict (shipped) or ``<= 0``."""
+    global _SIGN_ZERO
+    if kind not in SIGN_ZERO_KINDS:
+        raise ValueError(f"unknown sign reading {kind!r}; choose from {SIGN_ZERO_KINDS}")
+    _SIGN_ZERO = kind
+
+
+def set_nw_correction(kind: str) -> None:
+    """Newey-West with (``"df"``) or without (``"none"``, shipped) statsmodels' n/(n-k)."""
+    global _NW_CORRECTION
+    if kind not in NW_CORRECTIONS:
+        raise ValueError(f"unknown Newey-West correction {kind!r}; choose from {NW_CORRECTIONS}")
+    _NW_CORRECTION = kind
+
+
+def quantile(series: pd.Series, q: float) -> float:
+    """One quantile under the configured method (Table 5's VaR rows).
+
+    The shipped ``linear`` reading is pandas' own ``Series.quantile``, so an
+    unswitched run is byte-identical; the other methods go through numpy, whose
+    nine ``method=`` names are the Hyndman-Fan types pandas also documents.
+    """
+    s = pd.Series(series).dropna()
+    if _QUANTILE_METHOD == "linear":
+        return float(s.quantile(q))
+    return float(np.quantile(s.to_numpy(dtype=float), q, method=_QUANTILE_METHOD))
+
+
+def share_negative(series: pd.Series) -> float:
+    """The paper's "Observations with excess return < 0", under the configured boundary."""
+    x = pd.Series(series).dropna()
+    return float((x < 0).mean() if _SIGN_ZERO == "strict" else (x <= 0).mean())
+
+
 def summary_stats(monthly: pd.Series, nw_lags: int = 6) -> pd.Series:
     """Table 1 summary statistics for a monthly return series.
 
@@ -609,6 +808,10 @@ def summary_stats(monthly: pd.Series, nw_lags: int = 6) -> pd.Series:
     ``kurtosis`` are raw Pearson central moments (normal kurtosis = 3);
     ``min``; ``max``; ``share_negative`` is the fraction of months < 0.
     NaN months are dropped.
+
+    The four estimator conventions above each have a configuration hook
+    (``set_moments``, ``set_nw_correction``, ``set_sign_zero``) whose default is
+    the reading the check ships.
     """
     x = pd.Series(monthly).dropna().to_numpy(dtype=float)
     if x.size == 0:
@@ -616,13 +819,20 @@ def summary_stats(monthly: pd.Series, nw_lags: int = 6) -> pd.Series:
     n = x.size
     mean = float(x.mean())
     res = sm.OLS(x, np.ones(n)).fit(
-        cov_type="HAC", cov_kwds={"maxlags": int(nw_lags), "use_correction": False}
+        cov_type="HAC",
+        cov_kwds={"maxlags": int(nw_lags), "use_correction": _NW_CORRECTION == "df"},
     )
     se = float(res.bse[0])
     u = x - mean
     m2 = float(np.mean(u**2))
     skew = float(np.mean(u**3) / m2**1.5) if m2 > 0 else np.nan
     kurt = float(np.mean(u**4) / m2**2) if m2 > 0 else np.nan
+    if _MOMENT_KIND == "sample" and n > 3 and m2 > 0:
+        raw_skew = skew
+        skew = float(np.sqrt(n * (n - 1)) / (n - 2) * raw_skew)
+        excess = kurt - 3.0
+        corrected = (n - 1) / ((n - 2) * (n - 3)) * ((n + 1) * excess + 6.0)
+        kurt = float(corrected + 3.0)
     return pd.Series(
         {
             "mean": mean,
@@ -634,7 +844,7 @@ def summary_stats(monthly: pd.Series, nw_lags: int = 6) -> pd.Series:
             "kurtosis": kurt,
             "min": float(x.min()),
             "max": float(x.max()),
-            "share_negative": float((x < 0).mean()),
+            "share_negative": share_negative(pd.Series(x)),
         },
         dtype=float,
     )
@@ -698,7 +908,7 @@ def _month_edges(start: pd.Timestamp, end: pd.Timestamp):
     """First and last trading day of ``[start, end]``, or None if unknown."""
     try:
         cal = trading_calendar(start, end)
-    except Exception:
+    except Exception:  # noqa: BLE001 - an absent or unreadable calendar answers "unknown"
         return None
     if len(cal) == 0:
         return None
@@ -728,7 +938,7 @@ def _window_censored(index) -> bool:
         if head is None or tail is None:
             return False
         return bool(idx[0] == head[0] and idx[-1] == tail[-1])
-    except Exception:
+    except Exception:  # noqa: BLE001 - a series that is not month-indexed reads as uncensored
         return False
 
 
@@ -771,7 +981,7 @@ def _cached_censored_flags(cohorts: list[str]) -> list[bool] | None:
         months = pd.read_parquet(coh / dirs[-1] / "monthly.parquet",
                                  columns=["month_end"])["month_end"]
         sample_end = pd.Period(months.max(), freq="M")
-    except Exception:
+    except Exception:  # noqa: BLE001 - an unreadable cohort cache means "flags unknown"
         return None
     flags = []
     for name in cohorts:
@@ -808,12 +1018,17 @@ def _completed_components(components: list[dict], cohorts: list[str] | None = No
     return keep or components
 
 
-def trading_components(result, sigma, ranks) -> dict[str, float | bool]:
+def trading_components(result, sigma, ranks, trigger_mult: float = 2.0) -> dict[str, float | bool]:
     """One cohort's inputs to ``trading_stats``: mean trigger, pairs opened,
     mean round trips per opened pair, mean total days open / 21, and whether
-    the cohort's trading window was cut short by the sample end."""
+    the cohort's trading window was cut short by the sample end.
+
+    ``trigger_mult`` is the entry band in formation sigmas (default 2.0, the
+    paper's 2-sigma rule): the printed average trigger row is the band times the
+    pairs' sigma, so a run that moves the band moves that row with it.
+    """
     sel = _resolve_ranks(result.pair_returns, ranks)
-    trigger = float((2.0 * pd.Series(sigma, dtype=float).reindex(sel)).mean())
+    trigger = float((float(trigger_mult) * pd.Series(sigma, dtype=float).reindex(sel)).mean())
     opened = [c for c in sel if bool(result.opened.get(c, False))]
     out = {"trigger": trigger, "n_opened": float(len(opened)), "round_trips": 0.0,
            "time_open": 0.0, "censored": _window_censored(result.pair_returns.index)}
@@ -832,7 +1047,7 @@ def trading_components(result, sigma, ranks) -> dict[str, float | bool]:
 
 
 def trading_stats_from_components(
-    components: list[dict], cohorts: list[str] | None = None,
+    components: list[dict], cohorts: list[str] | None = None, completed: bool = True,
 ) -> pd.Series:
     """Table 2 Panel A rows from per-cohort ``trading_components``.
 
@@ -840,11 +1055,15 @@ def trading_stats_from_components(
     the cross-cohort moments (``_completed_components``); components without
     completion information keep the unfiltered aggregation.  ``cohorts``, the
     ``YYYY-MM`` labels in summary order, enables the cache-derived flags for
-    components that predate the stored ``censored`` flag.
+    components that predate the stored ``censored`` flag.  ``completed=False``
+    is the other reading of Panel A's rows ("per six-month period"): every
+    cohort counts, censored windows included (REVIEW_NOTES sections 17 and 23).
     """
     if not components:
         return pd.Series(np.nan, index=TRADING_ROWS, dtype=float)
-    frame = pd.DataFrame(_completed_components(list(components), cohorts))
+    frame = pd.DataFrame(
+        _completed_components(list(components), cohorts) if completed else list(components)
+    )
 
     def _xs_std(values: pd.Series) -> float:
         return float(values.std(ddof=1)) if len(values) > 1 else np.nan

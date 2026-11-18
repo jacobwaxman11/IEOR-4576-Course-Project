@@ -2,10 +2,10 @@
 
 Reviewed 2026-10-15 against live WRDS. The review had two parts:
 
-- **Worker A** (data fit for the paper): `report/data_review/A_FINDINGS.md`.
-- **Worker B** (provenance and gaps): `report/data_review/B_FINDINGS.md`.
+- **Worker A** (data fit for the paper): `report/archive/data_review/A_FINDINGS.md`.
+- **Worker B** (provenance and gaps): `report/archive/data_review/B_FINDINGS.md`.
 
-The contracts the workers ran under, every SQL statement and the aggregate results are in `report/data_review/`. Numbers in this summary trace to a query ID there, or to the download manifest `data/metadata/wrds_api_manifest.json`, which `scripts/01_get_data.py` writes.
+The contracts the workers ran under, every SQL statement and the aggregate results are in `report/archive/data_review/`. Numbers in this summary trace to a query ID there, or to the download manifest `data/metadata/wrds_api_manifest.json`, which `scripts/01_get_data.py` writes.
 
 ## Headline issues (worst first)
 

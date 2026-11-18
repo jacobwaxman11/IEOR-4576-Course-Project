@@ -18,7 +18,7 @@ distribution rows use employed capital ('fully invested').
 | min | -0.13111 / -0.10573 | -0.07247 / -0.06629 | -0.04046 / -0.03857 | -0.03616 / -0.02721 |
 | max | 0.11043 / 0.14716 | 0.09336 / 0.13295 | 0.08054 / 0.12684 | 0.12042 / 0.17178 |
 | share_negative | 0.26582 / 0.26000 | 0.17300 / 0.15000 | 0.23840 / 0.21000 | 0.25316 / 0.17000 |
-| committed_mean | 0.00751 / 0.00784 | 0.00807 / 0.00805 | 0.00597 / 0.00679 | 0.00466 / 0.00614 |
+| committed_mean | 0.00770 / 0.00784 | 0.00844 / 0.00805 | 0.00619 / 0.00679 | 0.00517 / 0.00614 |
 
 ## Table 1 Panel B (1-day waiting)
 
@@ -34,9 +34,9 @@ distribution rows use employed capital ('fully invested').
 | min | -0.13555 / -0.12628 | -0.08206 / -0.08218 | -0.04376 / -0.04266 | -0.03984 / -0.02951 |
 | max | 0.09724 / 0.14350 | 0.07573 / 0.13490 | 0.06585 / 0.10464 | 0.11925 / 0.16325 |
 | share_negative | 0.35865 / 0.35000 | 0.27215 / 0.23000 | 0.28270 / 0.28000 | 0.33755 / 0.32000 |
-| committed_mean | 0.00430 / 0.00463 | 0.00521 / 0.00520 | 0.00467 / 0.00503 | 0.00308 / 0.00396 |
+| committed_mean | 0.00449 / 0.00463 | 0.00560 / 0.00520 | 0.00497 / 0.00503 | 0.00378 / 0.00396 |
 
-'Fully invested' = value-weighted return of the open long positions minus that of the open short positions (eq. 2); 'committed capital' scales it by the share of selected pairs holding a position. `mean_employed_literal` (table1.csv only) uses INTERFACES.md's literal denominator for comparison.
+'Fully invested' = value-weighted return of the open long positions minus that of the open short positions (eq. 2); 'committed capital' scales it by the share of selected pairs holding a position. `mean_employed_literal` (table1.csv only) uses METHOD.md's literal denominator for comparison.
 
 ## Table 2 Panel A (1-day waiting)
 

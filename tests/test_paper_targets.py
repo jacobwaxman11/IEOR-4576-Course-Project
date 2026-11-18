@@ -34,25 +34,29 @@ EXPECTED = {
     "Table 3 Financials": 36,
     "Table 3 Industrials": 36,
     "Table 4": 32,
+    "Table 4 t": 24,
+    "Table 4 Ibbotson t": 20,
     "Table 4 Ibbotson": 24,
     "Table 4 equity premium": 4,
     "Table 5 Panel A": 20,
     "Table 7": 32,
+    "Table 7 t": 48,
     "Table 8 Panel A": 36,
+    "Table 8 Panel A t": 24,
     "Table 8 Panel B": 36,
+    "Table 8 Panel B t": 24,
     "Figure 4": 6,
 }
 #: Unscored references: the intercepts' Newey-West t-statistics, printed beside ours, and Table
 #: 8's factor standard deviations, which identify the factors.
-UNSCORED = {"Table 4 alpha t": 4, "Table 8 Panel A alpha t": 4, "Table 8 Panel B alpha t": 4,
-            "Table 8 Panel A factor SD": 5, "Table 8 Panel B factor SD": 5}
+UNSCORED = {"Table 8 Panel A factor SD": 5, "Table 8 Panel B factor SD": 5}
 TABLE2_VALUES = 16 * 4
 SECTOR_COUNTS = 4
 
 
 def _run(pdf: Path = PDF) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, str(SCRIPT), "--pdf", str(pdf)],
-                          cwd=ROOT, capture_output=True, text=True)
+                          cwd=ROOT, capture_output=True, text=True, check=False)
 
 
 def test_typed_targets_match_the_published_article() -> None:
@@ -62,7 +66,7 @@ def test_typed_targets_match_the_published_article() -> None:
     for name, count in {**EXPECTED, **UNSCORED}.items():
         assert f"{name}: {count} values compared" in out.stdout, name
     # every scored cell of the check has its paper value verified here
-    assert sum(EXPECTED.values()) + TABLE2_VALUES + SECTOR_COUNTS == 481
+    assert sum(EXPECTED.values()) + TABLE2_VALUES + SECTOR_COUNTS == 621
 
 
 def test_the_guard_fails_when_the_tables_are_not_where_it_expects() -> None:

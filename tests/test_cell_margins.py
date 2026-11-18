@@ -50,10 +50,11 @@ class TestCollected:
     def test_table_1_3_totals_reconcile_with_the_check(self, cells):
         # Tables 1-3 are 291 of the check's 323 cells (Table 7 holds the rest).
         assert len(cells) == 291
-        # SCORE_LOG row 17 (book compounding, mixed-pairs decile row): 187.0 -> 184.5
-        assert cells.points.sum() == pytest.approx(184.5)
-        assert (cells.mark == "✓").sum() == 150
-        assert (cells.mark == "~").sum() == 69
+        # SCORE_LOG row 18 (committed capital = literal payoffs/N selected):
+        # 184.5 -> 185.5 (row 17 was the previous pin)
+        assert cells.points.sum() == pytest.approx(185.5)
+        assert (cells.mark == "✓").sum() == 152
+        assert (cells.mark == "~").sum() == 67
         assert (cells.mark == "✗").sum() == 72
 
     def test_every_cell_names_a_known_section(self, cells):

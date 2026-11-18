@@ -16,8 +16,8 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
-import pyarrow.csv as csv
 import pyarrow.parquet as pq
+from pyarrow import csv
 
 from project.data import _RAW_COLUMNS, _clean_year, _write_processed
 from project.recalls import adjusted_volume

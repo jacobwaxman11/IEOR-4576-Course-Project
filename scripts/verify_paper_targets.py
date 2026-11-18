@@ -12,8 +12,8 @@ The check compares our engine with numbers that were typed from the published
 article by hand. This script re-reads those numbers out of the PDF (layout text
 via ``pdftotext``), parses Tables 1-3 positionally and compares them with
 ``PAPER_TABLE1``, ``PAPER_TABLE2A``, ``PAPER_TABLE2B``, ``PAPER_TABLE3``,
-``PAPER_TABLE4``, ``PAPER_EQUITY_PREMIUM``, ``PAPER_TABLE5``, ``PAPER_TABLE7``,
-``PAPER_TABLE8``, ``PAPER_FIGURE4`` and ``PAPER_SECTOR_COUNTS``. It prints every value that differs by more than 0.2%
+``PAPER_TABLE4``, ``PAPER_EQUITY_PREMIUM``, ``PAPER_TABLE5``, ``PAPER_TABLE5B``, ``PAPER_TABLE5B``, ``PAPER_TABLE7``,
+``PAPER_TABLE8``, ``PAPER_TABLE9A``, ``PAPER_TABLE6``, ``PAPER_FIGURE4`` and ``PAPER_SECTOR_COUNTS``. It prints every value that differs by more than 0.2%
 and exits non-zero if there is one, so a mis-typed target cannot silently
 become an unreachable cell.
 
@@ -216,39 +216,60 @@ def table3(lines: list[str], mod) -> int:
 
 
 def table5(lines: list[str], mod) -> int:
-    """Table 5 Panel A: serial correlation and the 1/5/10/25 percentiles.
+    """Table 5 Panels A and B: the moments, the serial correlation and the 1/5/10/25
+    percentiles of the monthly and then the daily series.
 
     The percentile rows begin with their own label ("1%", "25%"), so the four
-    portfolio values are the last four numbers on the line. Only the monthly panel
-    is read; the daily panel below it repeats the same row labels.
+    portfolio values are the last four numbers on the line; "Probability of return
+    below 0" reads as four numbers because its bare "0" is not a decimal. Panel B
+    repeats Panel A's row labels one panel down, so the two are read in one pass
+    with the panel marker deciding which dictionary a row lands in. Panel A's mean,
+    standard deviation, loss probability and minimum repeat Table 1 Panel B and are
+    not typed into ``PAPER_TABLE5``; Panel B's nine rows are all typed into
+    ``PAPER_TABLE5B``, because no monthly table prints daily statistics.
     """
     labels = {"serial_correlation": "serial correlation"}
     labels.update({f"var_{pct}": f"{pct}%" for pct in (1, 5, 10, 25)})
+    labels_b = dict(mean="mean excess return", std="standard deviation", **labels)
+    labels_b.update({"share_negative": "probability of return below 0",
+                     "min": "minimum historical observation"})
     start = next((i for i, l in enumerate(lines) if l.startswith("Table 5")), None)
     if start is None:
         raise SystemExit("no line starting with 'Table 5' in the text layer")
-    rows, monthly = {}, False
+    rows, rows_b, panel = {}, {}, None
     for line in lines[start:]:
         s = line.strip()
-        if s.startswith("B. Daily"):
-            break
         if s.startswith("A. Monthly"):
-            monthly = True
+            panel = "A"
             continue
-        if not monthly:
+        if s.startswith("B. Daily"):
+            panel = "B"
             continue
-        for key, label in labels.items():
+        if s.startswith("Monthly and daily VAR"):
+            break  # the table's own caption; later tables repeat these row labels
+        if panel is None or s.startswith("Table 5"):
+            continue
+        for key, label in (labels if panel == "A" else labels_b).items():
             if s.lower().startswith(label):
                 vals = tokens(s)
                 if len(vals) < 4:
-                    raise SystemExit(f"Table 5 Panel A: {label!r} parsed {len(vals)} values")
-                rows[key] = vals[-4:]
+                    raise SystemExit(f"Table 5 Panel {panel}: {label!r} parsed "
+                                     f"{len(vals)} values")
+                (rows if panel == "A" else rows_b)[key] = vals[-4:]
+    bad = 0
     missing = set(labels) - set(rows)
     if missing:
         raise SystemExit(f"Table 5 Panel A: no row for {sorted(missing)}")
     keys = list(labels)
     typed = [[mod.PAPER_TABLE5[p][k] for p in PORTS] for k in keys]
-    return report("Table 5 Panel A", typed, [rows[k] for k in keys], rows=len(keys), cols=4)
+    bad += report("Table 5 Panel A", typed, [rows[k] for k in keys], rows=len(keys), cols=4)
+    missing = set(labels_b) - set(rows_b)
+    if missing:
+        raise SystemExit(f"Table 5 Panel B: no row for {sorted(missing)}")
+    keys_b = list(labels_b)
+    typed_b = [[mod.PAPER_TABLE5B[p][k] for p in PORTS] for k in keys_b]
+    return bad + report("Table 5 Panel B", typed_b, [rows_b[k] for k in keys_b],
+                        rows=len(keys_b), cols=4)
 
 
 def table8(lines: list[str], mod) -> int:
@@ -257,7 +278,7 @@ def table8(lines: list[str], mod) -> int:
     if start is None:
         raise SystemExit("no line starting with 'Table 8' in the text layer")
     panels = {"A. Pre": {}, "B. Post": {}}
-    alpha_t = {"A. Pre": None, "B. Post": None}
+    tstats = {"A. Pre": {}, "B. Post": {}}
     factor_sd = {"A. Pre": {}, "B. Post": {}}
     current, previous = None, None
     for line in lines[start:]:
@@ -270,9 +291,11 @@ def table8(lines: list[str], mod) -> int:
         if current is None:
             continue
         low = s.lower()
-        if low.startswith("t-statistic") and previous == "intercept" and alpha_t[current] is None:
-            alpha_t[current] = tokens(s)
-        previous = "intercept" if low.startswith("intercept") else (None if s else previous)
+        if low.startswith("t-statistic") and previous and previous not in tstats[current]:
+            tstats[current][previous] = [
+                -float(x[1:]) if re.match(r"^7\d+\.\d+$", x) else float(x)
+                for x in NUM.findall(s)]
+        previous = None
         if low.startswith("mean excess return") and "mean" not in panels[current]:
             panels[current]["mean"] = tokens(s)
         elif low.startswith("standard deviation") and "std" not in panels[current]:
@@ -285,6 +308,7 @@ def table8(lines: list[str], mod) -> int:
                     panels[current][key] = values[:4]
                     if len(values) == 5:
                         factor_sd[current][key] = values[4]
+                    previous = key
     bad = 0
     for marker, prefix in (("A. Pre", "pre"), ("B. Post", "post")):
         rows = panels[marker]
@@ -296,10 +320,13 @@ def table8(lines: list[str], mod) -> int:
         typed = [[mod.PAPER_TABLE8[p][f"{prefix}_{kind}"] for p in PORTS] for kind in kinds]
         bad += report(f"Table 8 Panel {marker[0]}", typed, [rows[k] for k in kinds],
                       rows=len(kinds), cols=4)
-        if alpha_t[marker] is None or len(alpha_t[marker]) != 4:
-            raise SystemExit(f"Table 8 Panel {marker}: no intercept t-statistic row")
-        bad += report(f"Table 8 Panel {marker[0]} alpha t", [[mod.PAPER_ALPHA_T[prefix][p] for p in PORTS]],
-                      [alpha_t[marker]], rows=1, cols=4)
+        tkeys = [key for _, key in T8_REGRESSION_ROWS if key != "r2"]
+        if set(tstats[marker]) != set(tkeys) or any(len(v) != 4 for v in tstats[marker].values()):
+            raise SystemExit(f"Table 8 Panel {marker}: t rows for {sorted(tstats[marker])}, "
+                             f"expected {tkeys}")
+        bad += report(f"Table 8 Panel {marker[0]} t",
+                      [[mod.PAPER_TABLE8_T[f"{prefix}_{k}"][i] for i in range(4)] for k in tkeys],
+                      [tstats[marker][k] for k in tkeys], rows=len(tkeys), cols=4)
         sds = mod.PAPER_TABLE8_FACTOR_SD[prefix]
         if set(factor_sd[marker]) != set(sds):
             raise SystemExit(f"Table 8 Panel {marker}: factor SDs parsed for "
@@ -321,12 +348,12 @@ def table4(lines: list[str], mod) -> int:
         raise SystemExit("no line 'Table 4' in the text layer")
     found: dict[str, list[float]] = {}
     ibbotson: dict[str, list[float]] = {}
-    alpha_t: list[float] = []
+    found_t: dict[str, list[float]] = {}
+    ibb_t: dict[str, list[float]] = {}
     in_ibbotson = False
     for line in lines[start:]:
         s = re.sub(r"\([^)]*\)", " ", line).strip()
-        if not in_ibbotson and s.startswith("Intercept") and not alpha_t:
-            alpha_t = [float(x.replace("–", "-")) for x in re.findall(r"\(([^)]*)\)", line)]
+        paren = [float(x.replace("–", "-")) for x in re.findall(r"\(([^)]*)\)", line)]
         if s.startswith("Factor model: Ibbotson"):
             in_ibbotson = True
             continue
@@ -336,11 +363,15 @@ def table4(lines: list[str], mod) -> int:
             for prefix, key in T4_IBBOTSON_ROWS:
                 if s.startswith(prefix) and key not in ibbotson and tokens(s):
                     ibbotson[key] = tokens(s)
+                    if len(paren) == 4:
+                        ibb_t[key] = paren
             continue
         for prefix, key in T4_ROWS:
             # the block header wraps onto a line reading just "Reversal": rows need numbers
             if s.startswith(prefix) and key not in found and tokens(s):
                 found[key] = tokens(s)
+                if len(paren) == 4:
+                    found_t[key] = paren
     missing = [key for _, key in T4_ROWS if key not in found]
     if missing:
         raise SystemExit(f"Table 4: no row for {missing}")
@@ -354,10 +385,18 @@ def table4(lines: list[str], mod) -> int:
     keys = [key for _, key in T4_IBBOTSON_ROWS]
     bad += report("Table 4 Ibbotson", [[mod.PAPER_TABLE4[p][k] for p in PORTS] for k in keys],
                   [ibbotson[k] for k in keys], rows=len(keys), cols=4)
-    if len(alpha_t) != 4:
-        raise SystemExit(f"Table 4: intercept t-statistics {alpha_t}, expected four")
-    bad += report("Table 4 alpha t", [[mod.PAPER_ALPHA_T["full"][p] for p in PORTS]], [alpha_t],
-                  rows=1, cols=4)
+    trows = ["intercept", "market", "smb", "hml", "momentum", "reversal"]
+    if set(found_t) != set(trows):
+        raise SystemExit(f"Table 4: t rows {sorted(found_t)}, expected {trows}")
+    bad += report("Table 4 t",
+                  [[mod.PAPER_TABLE4_T[k][i] for i in range(4)] for k in trows],
+                  [found_t[k] for k in trows], rows=len(trows), cols=4)
+    tkeys = [k for _, k in T4_IBBOTSON_ROWS if k != "ibbotson_r2"]
+    if set(ibb_t) != set(tkeys):
+        raise SystemExit(f"Table 4 Ibbotson: t rows {sorted(ibb_t)}, expected {tkeys}")
+    bad += report("Table 4 Ibbotson t",
+                  [[mod.PAPER_TABLE4_T[k][i] for i in range(4)] for k in tkeys],
+                  [ibb_t[k] for k in tkeys], rows=len(tkeys), cols=4)
     ep = mod.PAPER_EQUITY_PREMIUM
     typed = [[ep["mean"], ep["std"], ep["sharpe"], ep["serial_correlation"]]]
     parsed = [[found["mean"][4], found["std"][4], found["sharpe"][4], found["serial"][4]]]
@@ -389,44 +428,253 @@ def figure4(lines: list[str], mod) -> int:
                   [[parsed[k] for k in keys]], rows=1, cols=6)
 
 
-def table7(lines: list[str], mod) -> int:
-    """Table 7's portfolio-performance block: four rows for each of the two books.
+T7_MINUS = re.compile(r"^7\d\.")
 
-    Each row carries eight numbers - long and short for the top 5, the top 20,
-    101-120 and all - in that order. The regression block below repeats the row
-    labels with betas instead of moments, so parsing stops at its header.
+
+def table7_tokens(line: str) -> list[float]:
+    """Table 7's numbers, with the article's minus glyph normalised ("71.74" is -1.74)."""
+    return [-float(t[1:]) if T7_MINUS.match(t) else float(t) for t in NUM.findall(line)]
+
+
+def table7(lines: list[str], mod) -> int:
+    """Table 7: the four performance rows and the five-factor regression block.
+
+    Each printed row carries eight numbers - long and short for the top 5, the top 20,
+    101-120 and all - in that order. The regression block prints each coefficient over
+    its Newey-West t-statistic, so a t row belongs to the coefficient row above it. The
+    text layer prints a minus sign as the glyph "7" glued to the digits, in the t rows as
+    well ("71.74" is -1.74), so its numbers need the stricter glyph rule below.
     """
-    labels = {
+    performance = {
         "mean monthly return": "mean monthly return",
         "standard error (newey-west)": "standard error (Newey-West)",
         "standard deviation": "standard deviation",
         "monthly serial correlation": "monthly serial correlation",
     }
+    regression = {
+        "intercept": "intercept",
+        "u.s. equity risk-premium": "market",
+        "smb": "smb",
+        "hml": "hml",
+        "momentum": "momentum",
+        "reversal": "reversal",
+        "r2": "r2",
+    }
     start = next((i for i, l in enumerate(lines) if l.strip().startswith("Table 7")), None)
     if start is None:
         raise SystemExit("no line starting with 'Table 7' in the text layer")
     found: dict[str, list[float]] = {}
+    tstats: dict[str, list[float]] = {}
+    owner: str | None = None
     for line in lines[start:]:
         s = line.strip()
-        if s.startswith("Regression on"):
+        if s.startswith("Monthly risk profile"):
             break
+        if not s:
+            continue
+        values = table7_tokens(s)
+        # the block's header wraps onto a line reading "Momentum, and Reversal factors"
+        if len(values) < 8:
+            continue
         low = s.lower()
-        for key, label in labels.items():
-            if low.startswith(key) and key not in found:
-                vals = tokens(s)
-                if len(vals) < 8:
-                    raise SystemExit(f"Table 7: {label!r} parsed {len(vals)} values, want 8")
-                found[key] = vals[-8:]
-    missing = set(labels) - set(found)
+        if low.startswith("t-statistic"):
+            if owner is not None:
+                tstats[owner] = values[-8:]
+            continue
+        key = next((name for prefix, name in performance.items()
+                    if low.startswith(prefix) and f"perf|{name}" not in found), None)
+        block = "perf"
+        if key is None:
+            key = next((name for prefix, name in regression.items()
+                        if low.startswith(prefix) and f"reg|{name}" not in found), None)
+            block = "regression"
+        if key is None:
+            continue
+        owner = f"{block}|{key}"
+        found[owner] = values[-8:]
+    bad = 0
+    blocks = (
+        ("Table 7", list(performance.values()), "perf", False),
+        ("Table 7 regression", list(regression.values()), "regression", False),
+        ("Table 7 t", [k for k in regression.values() if k != "r2"], "regression", True),
+    )
+    for name, rows, block_name, unscored in blocks:
+        missing = [key for key in rows if block_name + "|" + key not in found]
+        if missing:
+            raise SystemExit(f"{name}: no row for {missing}")
+        typed, parsed = [], []
+        for key in rows:
+            for side, offset in (("long", 0), ("short", 1)):
+                target = mod.PAPER_TABLE7_T if unscored else mod.PAPER_TABLE7
+                typed.append([target[p][f"{side}: {key}"] for p in PORTS])
+                source = tstats.get(block_name + "|" + key) if unscored \
+                    else found[block_name + "|" + key]
+                if source is None:
+                    raise SystemExit(f"{name}: no t-statistic row under {key!r}")
+                parsed.append([source[2 * i + offset] for i in range(len(PORTS))])
+        bad += report(name, typed, parsed, rows=len(rows) * 2, cols=4)
+    return bad
+
+
+def table9a(lines: list[str], mod) -> int:
+    """Table 9 Panel A (top three size deciles): eleven rows for four portfolios.
+
+    Panel B below repeats the row labels, so the parse stops at its header. The
+    printed skewness and kurtosis rows are scored as printed (COVERAGE.md item 1);
+    the typed constants carry the printed assignment too, so the swap is not the
+    parser's business.
+    """
+    rows = [("mean monthly return (fully invested)", "mean"),
+            ("standard error (newey-west)", "nw_se"),
+            ("t-statistic", "t_stat"),
+            ("median", "median"),
+            ("standard deviation", "std"),
+            ("kurtosis", "kurtosis"),
+            ("skewness", "skew"),
+            ("minimum", "min"),
+            ("maximum", "max"),
+            ("observations with excess return < 0", "share_negative"),
+            ("mean excess return on committed capital", "committed_mean")]
+    start = next((i for i, l in enumerate(lines) if l.strip() == "A. Top three deciles"), None)
+    if start is None:
+        raise SystemExit("no 'A. Top three deciles' line in the text layer")
+    end = next((i for i, l in enumerate(lines[start:], start) if l.strip().startswith("B. Short recalls")), None)
+    if end is None:
+        raise SystemExit("no 'B. Short recalls' line after Table 9 Panel A")
+    found: dict[str, list[float]] = {}
+    for line in lines[start:end]:
+        s = line.strip().lower()
+        for label, key in rows:
+            if s.startswith(label) and key not in found:
+                vals = tokens(line)
+                if len(vals) < 4:
+                    raise SystemExit(f"Table 9 Panel A: {label!r} parsed {len(vals)} values, want 4")
+                found[key] = vals[-4:]
+    missing = [key for _, key in rows if key not in found]
     if missing:
-        raise SystemExit(f"Table 7: no row for {sorted(missing)}")
-    keys = list(labels)
-    typed, paper = [], []
-    for key in keys:
-        for side, offset in (("long", 0), ("short", 1)):
-            typed.append([mod.PAPER_TABLE7[p][f"{side}: {labels[key]}"] for p in PORTS])
-            paper.append([found[key][2 * i + offset] for i in range(len(PORTS))])
-    return report("Table 7", typed, paper, rows=len(keys) * 2, cols=4)
+        raise SystemExit(f"Table 9 Panel A: no row for {missing}")
+    typed = [[mod.PAPER_TABLE9A[p][key] for p in PORTS] for _, key in rows]
+    parsed = [found[key] for _, key in rows]
+    return report("Table 9 Panel A", typed, parsed, rows=len(rows), cols=4)
+
+
+def table9b(lines: list[str], mod) -> int:
+    """Table 9 Panel B (short recalls on high volume): Panel A's eleven rows again.
+
+    Panel B sits directly below Panel A and repeats its row labels, so the parse
+    starts at the "B. Short recalls" header, skips the "Excess return distribution"
+    subheader (no numbers) and stops once every row is found. The printed share row
+    is a percentage ("39%"), which ``tokens`` returns as 0.39, the scale of the
+    typed constants.
+    """
+    rows = [("mean monthly return (fully invested)", "mean"),
+            ("standard error (newey-west)", "nw_se"),
+            ("t-statistic", "t_stat"),
+            ("median", "median"),
+            ("standard deviation", "std"),
+            ("skewness", "skew"),
+            ("kurtosis", "kurtosis"),
+            ("minimum", "min"),
+            ("maximum", "max"),
+            ("observations with excess return < 0", "share_negative"),
+            ("mean excess return on committed capital", "committed_mean")]
+    start = next((i for i, l in enumerate(lines)
+                  if l.strip().startswith("B. Short recalls")), None)
+    if start is None:
+        raise SystemExit("no 'B. Short recalls' line in the text layer")
+    found: dict[str, list[float]] = {}
+    for line in lines[start:]:
+        s = line.strip().lower()
+        for label, key in rows:
+            if s.startswith(label) and key not in found:
+                vals = tokens(line)
+                if len(vals) < 4:
+                    raise SystemExit(
+                        f"Table 9 Panel B: {label!r} parsed {len(vals)} values, want 4")
+                found[key] = vals[-4:]
+        if len(found) == len(rows):
+            break
+    missing = [key for _, key in rows if key not in found]
+    if missing:
+        raise SystemExit(f"Table 9 Panel B: no row for {missing}")
+    typed = [[mod.PAPER_TABLE9B[p][key] for p in PORTS] for _, key in rows]
+    parsed = [found[key] for _, key in rows]
+    return report("Table 9 Panel B", typed, parsed, rows=len(rows), cols=4)
+def table6(lines: list[str], mod) -> int:
+    """Table 6 (returns to random pairs): twelve rows of four portfolios.
+
+    The text layer typesets this table's minus sign as the glyph "7" in front of the
+    digits ("70.00137" is -0.00137), as it does elsewhere; the parse stops forty
+    lines after the "Table 6" header, past the twelve rows and the caption.
+    """
+    start = next((i for i, l in enumerate(lines) if l.strip() == "Table 6"), None)
+    if start is None:
+        raise SystemExit("no 'Table 6' line in the text layer")
+    panels = {"A. No waiting": "A", "B. Wait one day": "B"}
+    blocks = {"Fully invested": "employed", "Committed capital": "committed"}
+    rows = {"mean excess return": "mean", "standard deviation": "std",
+            "median": "median"}
+    found: dict[str, list[float]] = {}
+    panel = block = None
+    for line in lines[start:start + 40]:
+        text = line.strip()
+        if text in panels:
+            panel = panels[text]
+            continue
+        if text in blocks:
+            block = blocks[text]
+            continue
+        key = next((v for k, v in rows.items() if text.lower().startswith(k)), None)
+        if key is None or panel is None or block is None:
+            continue
+        vals = re.findall(r"7?\d+\.\d+", text)
+        if len(vals) != 4:
+            raise SystemExit(f"Table 6 row {text!r}: parsed {len(vals)} numbers, want 4")
+        found[f"{panel}|{block}|{key}"] = [
+            -float(v[1:]) if v.startswith("70.") else float(v) for v in vals]
+    missing = [k for k in mod.PAPER_TABLE6 if k not in found]
+    if missing:
+        raise SystemExit(f"Table 6: no row for {missing}")
+    keys = list(mod.PAPER_TABLE6)
+    ports = ["top5", "top20", "101-120", "top120"]
+    typed = [[mod.PAPER_TABLE6[k][port] for port in ports] for k in keys]
+    parsed = [found[k] for k in keys]
+    return report("Table 6", typed, parsed, rows=len(keys), cols=4)
+
+
+def text_numbers(lines: list[str], mod) -> int:
+    """The three result numbers printed in prose rather than in a table.
+
+    The captions of Tables 1, 5, 8 and 9 state the all-pair portfolio's average size;
+    section 1.2 (p. 800) prints the hold-out sentence; footnote 4 (p. 804) prints the
+    delisting assumption's result. The values are compared in the paper's units, the
+    typed constants being fractions.
+    """
+    flat = " ".join(" ".join(lines).split())
+    bad = report("pairs per cohort (captions)", [[mod.PAPER_UNIVERSE["mean_pairs_per_cohort"]]],
+                 [[float(re.search(
+                     r"average number of pairs in the all-pair portfolio is ([\d,]+)",
+                     flat).group(1).replace(",", ""))]], rows=1, cols=1)
+    m = re.search(
+        r"over the 1999-2002 period, the excess return of the fully invested portfolio of "
+        r"the top 20 pairs averaged ([\d.]+)% per annum, with an annual standard deviation "
+        r"of ([\d.]+)% and a large and significant Newey-\s*West-adjusted t-statistic of "
+        r"([\d.]+)", flat)
+    if m is None:
+        raise SystemExit("no hold-out sentence (1999-2002) in the text layer")
+    hold = [100.0 * mod.PAPER_HOLDOUT["mean_annual"],
+            100.0 * mod.PAPER_HOLDOUT["sd_annual"], mod.PAPER_HOLDOUT["t_stat"]]
+    bad += report("hold-out sentence (section 1.2)", [hold],
+                  [[float(m.group(i)) for i in (1, 2, 3)]], rows=1, cols=3)
+    m = re.search(
+        r"average monthly return on the top 20 pairs portfolio is ([\d.]+)% with a "
+        r"standard deviation of ([\d.]+)%", flat)
+    if m is None:
+        raise SystemExit("no footnote 4 delisting result in the text layer")
+    foot = [100.0 * mod.PAPER_FOOTNOTE4[k] for k in ("mean", "std")]
+    bad += report("footnote 4 (delisting)", [foot],
+                  [[float(m.group(1)), float(m.group(2))]], rows=1, cols=2)
+    return bad
 
 
 def main() -> int:
@@ -437,7 +685,8 @@ def main() -> int:
     identify(lines, args.pdf)
     mod = constants()
     bad = (table1(lines, mod) + table2(lines, mod) + table3(lines, mod) + table4(lines, mod)
-           + table5(lines, mod) + table7(lines, mod) + table8(lines, mod) + figure4(lines, mod))
+           + table5(lines, mod) + table7(lines, mod) + table8(lines, mod) + table9a(lines, mod)
+           + table9b(lines, mod) + table6(lines, mod) + figure4(lines, mod) + text_numbers(lines, mod))
     counts = " ".join(f"{k} {v}" for k, v in mod.PAPER_SECTOR_COUNTS.items())
     print(f"  sector counts (Table 3 caption): {counts}; sum "
           f"{sum(mod.PAPER_SECTOR_COUNTS.values())}")

@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import calendar
+import hashlib
 import json
 import os
 
@@ -70,15 +71,24 @@ from project.data import (
     pin_arrow_threads,
     processed_source_identity,
     trading_calendar,
+    universe_flags,
 )
 from project.evaluation import (
     PORTFOLIOS,
+    QUANTILE_METHODS,
     cohort_monthly,
     composition_stats,
     overlap_average,
+    portfolio_daily,
     portfolio_legs,
     portfolio_monthly,
+    quantile,
     restrict_to_size_deciles,
+    set_moments,
+    set_nw_correction,
+    set_quantile_method,
+    set_sign_zero,
+    share_negative,
     summary_stats,
     trading_components,
     trading_stats_from_components,
@@ -86,14 +96,23 @@ from project.evaluation import (
 from project.factors import (
     FACTORS,
     IBBOTSON_FACTORS,
+    factor_problem_files,
     factor_regression,
     factor_residuals,
     factor_tstats,
     load_factors,
     load_ibbotson_factors,
     load_losers_only,
+    set_ibbotson_market,
+    set_vintage,
+    vintage,
 )
-from project.features import normalized_prices, select_pairs, select_pairs_within_groups
+from project.features import (
+    demote_frozen_pairs,
+    normalized_prices,
+    select_pairs,
+    select_pairs_within_groups,
+)
 from project.models import simulate_cohort
 from project.paths import ROOT
 from project.plotting import plot_pair_trading_period, position_indicator
@@ -104,6 +123,7 @@ from project.sectors import (
     header_sic,
     sectors_for,
 )
+from project.table7 import excess, monthly_autocorr, regression_rows, strategy_series
 
 PAPER_TABLE1: dict[str, dict[str, dict[str, float]]] = {
     "A": {
@@ -244,6 +264,113 @@ PAPER_UNIVERSE = {
     "mean_pairs_opened_wait1": 1944.22,
 }
 
+#: The hold-out sentence, section 1.2 (p. 800): "Using the original model, but the
+#: post-1988 data, we found that over the 1999-2002 period, the excess return of the
+#: fully invested portfolio of the top 20 pairs averaged 10.4% per annum, with an
+#: annual standard deviation of 3.8% and a large and significant Newey-West-adjusted
+#: t-statistic of 4.82." Scored on the no-wait rule, the reading REVIEW_NOTES section
+#: 17 recorded before any of these cells existed; the one-day-wait reading prints
+#: beside it, unscored.
+PAPER_HOLDOUT = {"mean_annual": 0.104, "sd_annual": 0.038, "t_stat": 4.82}
+
+#: Footnote 4 (p. 804): under the assumption that only a long stock returns -100% on
+#: delisting, "the average monthly return on the top 20 pairs portfolio is 1.32% with
+#: a standard deviation of 1.9%" (no wait). Scored from the cache built with
+#: --long-delisting-loss (--delist-cache, make delist100).
+PAPER_FOOTNOTE4 = {"mean": 0.0132, "std": 0.019}
+
+#: Table 9 Panel A (p. 824), as printed: pairs formed only from stocks in the top
+#: three size deciles, the one-day wait. The paper prints its skewness and kurtosis
+#: rows the wrong way round against Table 1's (COVERAGE.md, "where the published
+#: version contradicts itself" 1): the row labelled "Kurtosis" reads 0.02-1.77 and
+#: the one labelled "Skewness" 7.01-11.67, where Table 1 prints skewness 0.3-3.3 and
+#: an absolute kurtosis 7.8-25.7. These are the printed rows, and the block is scored
+#: as printed; the swapped reading is printed below it as an unscored diagnostic.
+PAPER_TABLE9A: dict[str, dict[str, float]] = {
+    "top5": {"mean": 0.00835, "nw_se": 0.00112, "t_stat": 7.47, "median": 0.008,
+             "std": 0.01904, "kurtosis": 0.02, "skew": 7.01, "min": -0.10894,
+             "max": 0.10144, "share_negative": 0.32, "committed_mean": 0.00493},
+    "top20": {"mean": 0.00914, "nw_se": 0.00096, "t_stat": 9.48, "median": 0.00793,
+              "std": 0.01464, "kurtosis": 0.98, "skew": 8.2, "min": -0.05646,
+              "max": 0.10003, "share_negative": 0.26, "committed_mean": 0.00514},
+    "101-120": {"mean": 0.00728, "nw_se": 0.00075, "t_stat": 9.66, "median": 0.00614,
+                "std": 0.01579, "kurtosis": 0.8, "skew": 6.46, "min": -0.03803,
+                "max": 0.10642, "share_negative": 0.33, "committed_mean": 0.00462},
+    "all": {"mean": 0.0069, "nw_se": 0.00064, "t_stat": 10.85, "median": 0.00508,
+            "std": 0.01294, "kurtosis": 1.77, "skew": 11.67, "min": -0.0268,
+            "max": 0.10478, "share_negative": 0.27, "committed_mean": 0.00401},
+}
+
+#: The row labels the paper prints for the two rows Panel A transposes.
+TABLE9A_SWAP_LABELS = {"skew": "Kurtosis", "kurtosis": "Skewness"}
+
+#: Table 9 Panel B (p. 825), as printed: the one-day-wait rule with recalls on the
+#: short positions on high-volume days (volume more than one standard deviation
+#: above its 18-month mean, both split-adjusted). Panel B prints its shape rows
+#: the right way round -- skewness 0.15-2.82, absolute kurtosis 5.39-18.98 -- so
+#: this block needs no transposition; ``share_negative`` is the printed 39% as 0.39.
+PAPER_TABLE9B: dict[str, dict[str, float]] = {
+    "top5": {"mean": 0.00619, "nw_se": 0.00115, "t_stat": 5.39, "median": 0.00592,
+             "std": 0.02210, "skew": 0.15, "kurtosis": 5.39, "min": -0.09611,
+             "max": 0.10504, "share_negative": 0.39, "committed_mean": 0.00304},
+    "top20": {"mean": 0.00854, "nw_se": 0.00094, "t_stat": 9.07, "median": 0.00703,
+              "std": 0.01488, "skew": 0.48, "kurtosis": 6.0, "min": -0.06594,
+              "max": 0.07255, "share_negative": 0.26, "committed_mean": 0.00347},
+    "101-120": {"mean": 0.00665, "nw_se": 0.00085, "t_stat": 7.81, "median": 0.00531,
+                "std": 0.01505, "skew": 1.03, "kurtosis": 7.39, "min": -0.04408,
+                "max": 0.10084, "share_negative": 0.34, "committed_mean": 0.00296},
+    "all": {"mean": 0.00585, "nw_se": 0.00098, "t_stat": 5.95, "median": 0.00312,
+            "std": 0.01555, "skew": 2.82, "kurtosis": 18.98, "min": -0.03465,
+            "max": 0.14173, "share_negative": 0.37, "committed_mean": 0.00202},
+}
+
+#: The run of ``scripts/claims/table9b_recalls.py`` the section scores: the primary
+#: reading, ``rearm`` -- a recalled short ends the pair and it is re-entered only
+#: once a new divergence fires (the script's ``RUN_REARM``).
+TABLE9B_RUN = "rearm"
+#: Table 6 (pp. 818-819), as printed: the random-pair bootstrap, two panels (no
+#: waiting, wait one day) x two capital measures x three statistics x four
+#: portfolios, each cell the average over the 200 replications. The text layer typesets
+#: this table's minus sign as the glyph "7" ("70.00137" is -0.00137), as it does
+#: elsewhere; REVIEW_NOTES section 65 records that ours are our own draws.
+PAPER_TABLE6: dict[str, dict[str, float]] = {
+    "A|employed|mean": {"top5": -0.00137, "top20": -0.00111, "101-120": -0.00105,
+                        "top120": -0.00113},
+    "A|employed|std": {"top5": 0.05521, "top20": 0.02295, "101-120": 0.02264,
+                       "top120": 0.012},
+    "A|employed|median": {"top5": -0.00192, "top20": -0.00153, "101-120": -0.00156,
+                          "top120": -0.00162},
+    "A|committed|mean": {"top5": -0.00083, "top20": -0.00077, "101-120": -0.00089,
+                         "top120": -0.00091},
+    "A|committed|std": {"top5": 0.02635, "top20": 0.01358, "101-120": 0.01443,
+                        "top120": 0.0076},
+    "A|committed|median": {"top5": -0.00123, "top20": -0.001, "101-120": -0.00123,
+                           "top120": -0.00122},
+    "B|employed|mean": {"top5": -0.00177, "top20": -4e-05, "101-120": -0.00154,
+                        "top120": -0.00156},
+    "B|employed|std": {"top5": 0.05966, "top20": 0.0531, "101-120": 0.02404,
+                       "top120": 0.01213},
+    "B|employed|median": {"top5": -0.00241, "top20": -0.00172, "101-120": -0.00206,
+                          "top120": -0.00201},
+    "B|committed|mean": {"top5": -0.00103, "top20": -0.00094, "101-120": -0.00112,
+                         "top120": -0.00112},
+    "B|committed|std": {"top5": 0.02811, "top20": 0.01363, "101-120": 0.01449,
+                        "top120": 0.00761},
+    "B|committed|median": {"top5": -0.00152, "top20": -0.00118, "101-120": -0.00148,
+                           "top120": -0.00139},
+}
+
+#: Table 6's four printed columns: ranks 1-5, 1-20, 101-120 and all 120 top pairs.
+TABLE6_PORTS = ("top5", "top20", "101-120", "top120")
+#: The printed row groups, and the one row label per scored row: the paper's panel,
+#: capital block and statistic, so every row of the check keys one paper cell.
+TABLE6_PANELS = {"A": "A. No waiting", "B": "B. Wait one day"}
+TABLE6_BLOCKS = {"employed": "fully invested", "committed": "committed capital"}
+TABLE6_STATS = {"mean": "Mean excess return", "std": "Standard deviation",
+                "median": "Median"}
+TABLE6_HEADER = ("| statistic | Top 5 | Top 20 | Top 100-120 | All 120 |\n"
+                 "|---|---|---|---|---|")
+
 PANEL_OF_WAIT = {0: "A", 1: "B"}
 
 PAPER_TABLE3: dict[str, dict[str, list[float]]] = {
@@ -291,6 +418,29 @@ PAPER_TABLE5: dict[str, dict[str, float]] = {
     "all": {"serial_correlation": 0.12, "var_1": -0.01994, "var_5": -0.00877,
             "var_10": -0.00614, "var_25": -0.00146},
 }
+# Table 5 Panel B (p. 816): the same nine statistics on the DAILY returns of the
+# one-day-wait fully-invested portfolios. Its note says the rows are "Monthly and
+# daily VAR percentiles of pairs trading strategies between July 1963 and December
+# 2002 (474 months)" under "the rule that opens a position in a pair on the day
+# following the day on which the prices of the stocks in the pair diverge by two
+# historical standard deviations", and the text prints the top-five worst day
+# (10.08%) and the 1% quantiles (1.24% and 0.65%). Scored since SCORE_LOG row 18;
+# the cache stores the daily series since format 7.
+PAPER_TABLE5B: dict[str, dict[str, float]] = {
+    "top5": {"mean": 0.00033, "std": 0.00492, "serial_correlation": -0.12,
+             "var_1": -0.01236, "var_5": -0.00710, "var_10": -0.00504, "var_25": -0.00239,
+             "share_negative": 0.47, "min": -0.10079},
+    "top20": {"mean": 0.00040, "std": 0.00296, "serial_correlation": -0.06,
+              "var_1": -0.00647, "var_5": -0.00398, "var_10": -0.00293, "var_25": -0.00133,
+              "share_negative": 0.44, "min": -0.06723},
+    "101-120": {"mean": 0.00035, "std": 0.00277, "serial_correlation": 0.00,
+                "var_1": -0.00653, "var_5": -0.00400, "var_10": -0.00288, "var_25": -0.00130,
+                "share_negative": 0.45, "min": -0.01987},
+    "all": {"mean": 0.00027, "std": 0.00169, "serial_correlation": 0.35,
+            "var_1": -0.00327, "var_5": -0.00202, "var_10": -0.00149, "var_25": -0.00071,
+            "share_negative": 0.46, "min": -0.01069},
+}
+TABLE5B_PCT = {"mean", "std", "var_1", "var_5", "var_10", "var_25", "min"}
 PAPER_TABLE8: dict[str, dict[str, float]] = {
     "top5": {"pre_mean": 0.01034, "pre_std": 0.02259, "post_mean": 0.00217,
              "post_std": 0.01660},
@@ -317,6 +467,22 @@ for _half, _ports in _TABLE8_REGRESSIONS.items():
     for _p, _vals in _ports.items():
         PAPER_TABLE8[_p].update({f"{_half}_{row}": v for row, v in zip(FACTOR_ROWS, _vals)})
 TABLE8_PCT = {f"{h}_{r}" for h in ("pre", "post") for r in ("mean", "std", "intercept")}
+#: The Newey-West t-statistics Table 8 prints on a row under each coefficient (p. 822),
+#: per panel and coefficient, in the table's column order. Scored since SCORE_LOG row 25.
+PAPER_TABLE8_T: dict[str, list[float]] = {
+    "pre_intercept": [1.72, 4.41, 6.54, 4.19],
+    "pre_market": [-4.29, -3.57, -3.80, -7.26],
+    "pre_smb": [-3.75, -2.86, -2.86, -5.76],
+    "pre_hml": [0.64, 0.73, -1.84, -1.97],
+    "pre_momentum": [0.29, -0.50, -2.92, -5.01],
+    "pre_reversal": [4.44, 3.62, 4.05, 7.98],
+    "post_intercept": [2.12, 3.77, 3.01, -0.56],
+    "post_market": [1.68, 1.81, 0.06, -2.43],
+    "post_smb": [-0.10, 1.32, 0.69, -2.83],
+    "post_hml": [0.61, 0.45, 0.50, -2.65],
+    "post_momentum": [-0.13, -1.29, -4.17, -7.59],
+    "post_reversal": [-1.76, -0.67, 0.54, 5.56],
+}
 # Table 8's last column, each factor's standard deviation in the panel. Not scored: it is how
 # the factors are identified (French's market, SMB, HML and momentum match it; the reversal
 # factor does not, REVIEW_NOTES sections 49-50), so it is verified against the PDF.
@@ -347,6 +513,21 @@ PAPER_TABLE4: dict[str, dict[str, float]] = {
                                                          -0.10312, 0.09459, 0.18)))},
     "all": {"sharpe": 0.45, **dict(zip(FACTOR_ROWS, (0.00512, -0.14520, -0.07079, -0.05403,
                                                      -0.18077, 0.20077, 0.54)))},
+}
+#: The Newey-West t-statistics Table 4 prints in parentheses beside each coefficient
+#: (p. 814, six lags), in the table's column order. Scored since SCORE_LOG row 25.
+PAPER_TABLE4_T: dict[str, list[float]] = {
+    "intercept": [3.81, 7.08, 8.66, 5.30],
+    "market": [-1.03, -0.64, -1.77, -3.10],
+    "smb": [-0.71, 0.02, -0.50, -1.66],
+    "hml": [1.37, 1.45, -0.59, -1.82],
+    "momentum": [-0.94, -2.45, -5.83, -8.50],
+    "reversal": [1.50, 1.27, 2.24, 4.34],
+    "ibbotson_intercept": [6.32, 9.25, 9.39, 7.77],
+    "ibbotson_market": [-0.07, 0.74, 0.90, 1.98],
+    "ibbotson_small_premium": [1.32, 2.22, 1.66, 1.93],
+    "ibbotson_default_premium": [1.11, 1.38, 1.81, 2.82],
+    "ibbotson_horizon_premium": [1.55, 1.64, 1.04, 0.77],
 }
 IBBOTSON_ROWS = [f"ibbotson_{r}" for r in ("intercept", *IBBOTSON_FACTORS, "r2")]
 _TABLE4_IBBOTSON = {
@@ -380,9 +561,12 @@ PAPER_FIGURE4 = {
 }
 # Table 7 ("Returns to long and short components of pairs", wait one day): the
 # two books Table 1's fully-invested return is the difference of. Scored since
-# 2026-10-25 (SCORE_LOG row 14); the rows below are the four printed for each
-# book. The paper's regression block needs Fama-French, momentum and reversal
-# factors and is not reproduced by the driver.
+# 2026-10-25 (SCORE_LOG row 14) for the four rows the paper prints for each book, and
+# since row 18 for the regression block below them: the book's own monthly return less
+# the 30-day bill (the note, p. 821) on French's five factors, coefficients and R2
+# scored, Newey-West t-statistics printed unscored as in Tables 4 and 8. The paper's
+# own reversal factor is unidentified (REVIEW_NOTES section 51), so the reversal column
+# is whichever series the driver's factor frame carries (``--reversal-factor``).
 LEG_CAPITALS = ("long_book", "short_book")
 TABLE7_ROWS = [
     "long: mean monthly return",
@@ -394,7 +578,6 @@ TABLE7_ROWS = [
     "short: standard deviation",
     "short: monthly serial correlation",
 ]
-TABLE7_PCT = {r for r in TABLE7_ROWS if not r.endswith("serial correlation")}
 PAPER_TABLE7: dict[str, dict[str, float]] = {
     "top5": {
         "long: mean monthly return": 0.01245,
@@ -405,6 +588,22 @@ PAPER_TABLE7: dict[str, dict[str, float]] = {
         "short: standard error (Newey-West)": 0.00177,
         "short: standard deviation": 0.03259,
         "short: monthly serial correlation": 0.11,
+        # The regression block (p. 821): each book less the 30-day bill on
+        # the five factors, coefficients and R2 only (the t rows follow).
+        "long: intercept": 0.00103,
+        "long: market": 0.37415,
+        "long: smb": -0.16764,
+        "long: hml": 0.48401,
+        "long: momentum": -0.0543,
+        "long: reversal": 0.15854,
+        "long: r2": 0.39,
+        "short: intercept": -0.00442,
+        "short: market": 0.44075,
+        "short: smb": -0.12532,
+        "short: hml": 0.42661,
+        "short: momentum": -0.02625,
+        "short: reversal": 0.05662,
+        "short: r2": 0.41,
     },
     "top20": {
         "long: mean monthly return": 0.0133,
@@ -415,6 +614,22 @@ PAPER_TABLE7: dict[str, dict[str, float]] = {
         "short: standard error (Newey-West)": 0.00174,
         "short: standard deviation": 0.03161,
         "short: monthly serial correlation": 0.12,
+        # The regression block (p. 821): each book less the 30-day bill on
+        # the five factors, coefficients and R2 only (the t rows follow).
+        "long: intercept": 0.00243,
+        "long: market": 0.47617,
+        "long: smb": -0.06506,
+        "long: hml": 0.52539,
+        "long: momentum": -0.04456,
+        "long: reversal": 0.09601,
+        "long: r2": 0.48,
+        "short: intercept": -0.00521,
+        "short: market": 0.50772,
+        "short: smb": -0.06616,
+        "short: hml": 0.48025,
+        "short: momentum": 0.00361,
+        "short: reversal": 0.02365,
+        "short: r2": 0.49,
     },
     "101-120": {
         "long: mean monthly return": 0.01458,
@@ -425,6 +640,22 @@ PAPER_TABLE7: dict[str, dict[str, float]] = {
         "short: standard error (Newey-West)": 0.00165,
         "short: standard deviation": 0.03146,
         "short: monthly serial correlation": 0.12,
+        # The regression block (p. 821): each book less the 30-day bill on
+        # the five factors, coefficients and R2 only (the t rows follow).
+        "long: intercept": 0.00287,
+        "long: market": 0.4852,
+        "long: smb": 0.0112,
+        "long: hml": 0.39451,
+        "long: momentum": -0.10901,
+        "long: reversal": 0.17288,
+        "long: r2": 0.78,
+        "short: intercept": -0.00426,
+        "short: market": 0.56217,
+        "short: smb": 0.03453,
+        "short: hml": 0.41175,
+        "short: momentum": -0.00589,
+        "short: reversal": 0.0783,
+        "short: r2": 0.75,
     },
     "all": {
         "long: mean monthly return": 0.01623,
@@ -435,8 +666,91 @@ PAPER_TABLE7: dict[str, dict[str, float]] = {
         "short: standard error (Newey-West)": 0.00231,
         "short: standard deviation": 0.04601,
         "short: monthly serial correlation": 0.16,
+        # The regression block (p. 821): each book less the 30-day bill on
+        # the five factors, coefficients and R2 only (the t rows follow).
+        "long: intercept": -0.00101,
+        "long: market": 0.58571,
+        "long: smb": 0.22192,
+        "long: hml": 0.25732,
+        "long: momentum": -0.08832,
+        "long: reversal": 0.39208,
+        "long: r2": 0.97,
+        "short: intercept": -0.00613,
+        "short: market": 0.73091,
+        "short: smb": 0.29271,
+        "short: hml": 0.31134,
+        "short: momentum": 0.09245,
+        "short: reversal": 0.19131,
+        "short: r2": 0.93,
     },
 }
+#: Table 7's regression block: the seven rows the paper prints for each book, in its order.
+TABLE7_REGRESSION_ROWS = [f"{side}: {row}" for side in ("long", "short") for row in FACTOR_ROWS]
+TABLE7_PCT = {r for r in TABLE7_ROWS if not r.endswith("serial correlation")}
+TABLE7_PCT |= {r for r in TABLE7_REGRESSION_ROWS if r.endswith("intercept")}
+#: The Newey-West t-statistics Table 7 prints under each coefficient (six lags, p. 821).
+#: Printed beside ours and not scored, the way Table 4's alpha t-statistics are.
+PAPER_TABLE7_T: dict[str, dict[str, float]] = {
+    "top5": {
+        "long: intercept": 0.47,
+        "long: market": 4.6,
+        "long: smb": -1.74,
+        "long: hml": 7.12,
+        "long: momentum": -1.48,
+        "long: reversal": 1.83,
+        "short: intercept": -2.74,
+        "short: market": 6.19,
+        "short: smb": -2.0,
+        "short: hml": 6.92,
+        "short: momentum": -0.65,
+        "short: reversal": 1.13,
+    },
+    "top20": {
+        "long: intercept": 1.27,
+        "long: market": 6.68,
+        "long: smb": -0.8,
+        "long: hml": 9.36,
+        "long: momentum": -1.21,
+        "long: reversal": 1.26,
+        "short: intercept": -3.35,
+        "short: market": 8.44,
+        "short: smb": -1.22,
+        "short: hml": 9.47,
+        "short: momentum": 0.1,
+        "short: reversal": 0.55,
+    },
+    "101-120": {
+        "long: intercept": 2.85,
+        "long: market": 10.23,
+        "long: smb": 0.27,
+        "long: hml": 9.76,
+        "long: momentum": -3.53,
+        "long: reversal": 4.33,
+        "short: intercept": -4.26,
+        "short: market": 9.74,
+        "short: smb": 0.95,
+        "short: hml": 11.54,
+        "short: momentum": -0.21,
+        "short: reversal": 1.9,
+    },
+    "all": {
+        "long: intercept": -1.32,
+        "long: market": 14.99,
+        "long: smb": 3.45,
+        "long: hml": 7.49,
+        "long: momentum": -3.53,
+        "long: reversal": 10.44,
+        "short: intercept": -5.22,
+        "short: market": 12.13,
+        "short: smb": 3.15,
+        "short: hml": 8.11,
+        "short: momentum": 2.81,
+        "short: reversal": 2.98,
+    },
+}
+#: Table 7's four performance rows per book: the block the check prints first, in row order.
+TABLE7_PAPER_PERFORMANCE = {p: {r: PAPER_TABLE7[p][r] for r in TABLE7_ROWS} for p in PORTFOLIOS}
+
 SUBPERIOD_SPLIT = (1988, 12)
 DIAGNOSTIC_FILES = ("table5_var.csv", "table8_subperiod.csv")
 RISK_FILES = ("table4.csv", "table4_equity_premium.csv", "figure4.csv",
@@ -464,7 +778,17 @@ FIGURE1 = {
 
 PRIMARY_UNIVERSE = "vol_common"
 STEPS = ("tables", "table3", "figure1", "check")
+#: The steps whose output reads the French and Goyal-Welch factor files: ``tables`` writes the
+#: regression rows (Tables 4, 7 and 8, Figure 4) and ``check`` scores them. Neither ``table3``
+#: nor ``figure1`` opens a factor file.
+FACTOR_STEPS = ("tables", "check")
 _SIC_FALLBACKS: tuple[pd.Series, ...] | None = None
+
+#: ``--cohort-weights``: how the overlapping cohorts are weighted into one
+#: monthly series ("equal", the shipped Jegadeesh-Titman average).
+COHORT_WEIGHTS = "equal"
+#: {(wait, portfolio): {cohort: weight}} when ``COHORT_WEIGHTS`` is not "equal".
+_COHORT_WEIGHTS: dict | None = None
 
 CACHE_ROOT_OVERRIDE: Path | None = None
 OUT_ROOT_OVERRIDE: Path | None = None
@@ -492,8 +816,25 @@ def figures_dir(universe: str) -> Path:
     return base if universe == PRIMARY_UNIVERSE else base / universe
 
 
-CACHE_FORMAT = 6
+CACHE_FORMAT = 7
+#: Format 7: each cohort also stores ``daily.parquet``, the daily fully-invested
+#: series of the four one-day-wait portfolios (date, portfolio, ret), which is
+#: what Table 5 Panel B summarises. It is additional output: the monthly rows
+#: are unchanged, byte for byte.
 T1_CAPITALS = ("committed", "employed", "committed_count", "employed_count", "employed_literal")
+#: The capital convention and key under which ``aggregate`` files each portfolio's
+#: daily fully-invested strategy series (the daily counterpart of "employed").
+DAILY_CAPITAL = "employed_daily"
+#: ``--capital-base``: the series Tables 1, 3, 4, 5 Panel A and 8 and Figure 4 read
+#: as "fully invested" ("employed", the value-weighted books, shipped) and as
+#: "committed" ("committed", the paper's own one-pair-in-N scaling). The readings
+#: of REVIEW_NOTES sections 25, 29 and 76 name the other bases.
+T1_FI = "employed"
+T1_COMMITTED = "committed"
+T3_FI = "employed"
+#: Extra capital series a run caches when its base is not one of the shipped ones
+#: (empty by default, so a default cache keeps exactly the rows it always had).
+EXTRA_CAPITALS: tuple[str, ...] = ()
 
 
 def read_cache_meta(universe: str) -> dict | None:
@@ -507,6 +848,8 @@ def _expected_meta(continued: bool) -> dict:
         "format": CACHE_FORMAT,
         # Format 6: Tables 1 and 3 compound each book before subtracting (REVIEW_NOTES 54).
         "monthly_aggregation": "books",
+        # Format 7: the daily fully-invested series of the one-day-wait portfolios
+        # is cached too (``daily.parquet``), for Table 5 Panel B.
         **FORMATION_OPTIONS,
     }
 
@@ -532,6 +875,9 @@ def verify_cache(universe: str, continued: bool) -> None:
         )
     for key in ("exclude_same_issuer", "max_stale_share", "telephone_sic", "trigger_sigma",
                 "short_weights", "size_deciles_top", "long_delisting_loss", "waste_sic",
+                "trigger_mult", "fresh_divergence", "capital_base",
+                "demote_frozen", "demote_frozen_share", "share_classes",
+                "share_classes_map",
                 "processed_source"):
         if meta.get(key) != want.get(key):
             built = f"{key}={meta[key]}" if key in meta else f"no {key} stamp"
@@ -602,6 +948,54 @@ class Job:
     long_delisting_loss: bool = False
     #: Sector of waste management (SIC 4950-4959): ``industrials`` or ``utilities``.
     waste_sic: str = "industrials"
+    #: Entry threshold in formation sigmas (default 2.0, the paper's 2-sigma rule).
+    trigger_mult: float = 2.0
+    #: "Fresh divergence" reading of the entry rule (default off).
+    fresh_divergence: bool = False
+    #: Capital series to cache on top of the shipped ones (``--capital-base``).
+    extra_capitals: tuple[str, ...] = ()
+    #: Demote pairs with a frozen-quote leg from the ranking: ``none`` (shipped),
+    #: ``one`` (either leg) or ``both`` (REVIEW_NOTES section 40).
+    demote_frozen: str = "none"
+    #: A leg counts as frozen when its quote is unchanged on more than this share
+    #: of the formation window's days.
+    demote_frozen_share: float = 0.90
+    #: Parquet map of the permnos the wide share-class reading adds
+    #: (``--share-classes wide``); None keeps the shipped share filter.
+    share_classes_file: str | None = None
+    #: ``--delist-last-px`` reading (REVIEW_NOTES 94): the delisting-code classes whose
+    #: terminal row books the last available price instead of the delisting return.
+    #: ``off`` is the shipped rule, "the delisting return, or the last available price".
+    delist_last_px: str = "off"
+
+
+#: CRSP ``delactiontype`` classes behind ``--delist-last-px``.
+_DELIST_LAST_PX_CLASSES = {
+    "merge": ("MER",),
+    "nondistress": ("MER", "GEX", "GLI"),
+    "all": ("MER", "GDR", "GEX", "GLI", "LOS"),
+}
+_DELISTED: dict[tuple[str, ...], frozenset] = {}
+
+
+def _delisting_permnos(classes: tuple[str, ...]) -> frozenset:
+    """Permnos whose CRSP delisting action is one of ``classes`` (cached per call set).
+
+    Reads ``delisting.parquet`` from the WRDS API directory; only the option path uses
+    it, so a default build never opens the file.
+    """
+    key = tuple(classes)
+    if key in _DELISTED:
+        return _DELISTED[key]
+    from project.paths import WRDS_API_DIR
+
+    path = WRDS_API_DIR / "delisting.parquet"
+    if not path.exists():
+        raise SystemExit(f"--delist-last-px needs {path}")
+    frame = pd.read_parquet(path, columns=["permno", "delactiontype"])
+    keep = frame["delactiontype"].isin(classes)
+    _DELISTED[key] = frozenset(int(p) for p in frame.loc[keep, "permno"])
+    return _DELISTED[key]
 
 
 def init_worker(fallbacks: tuple[pd.Series, ...] | None = None) -> None:
@@ -647,6 +1041,46 @@ def _sic_fallbacks(cohorts_root: str | None = None) -> tuple[pd.Series, ...]:
     return _SIC_FALLBACKS
 
 
+_SHARE_CLASS_CACHE: dict[str, pd.Index] = {}
+
+
+def _share_class_permnos(path: str | None) -> pd.Index | None:
+    """The permnos a wide share-class run adds to ``common`` (None: nobody)."""
+    if _no_path(path):
+        return None
+    key = str(Path(path))
+    if key not in _SHARE_CLASS_CACHE:
+        frame = pd.read_parquet(key, columns=["permno"])
+        _SHARE_CLASS_CACHE[key] = pd.Index(frame["permno"].to_numpy(dtype=np.int64))
+    return _SHARE_CLASS_CACHE[key]
+
+
+def _no_path(path: str | None) -> bool:
+    """True when ``path`` names no file for this run."""
+    return path is None or str(path).strip().lower() in ("", "none")
+
+
+def _frozen_quote_permnos(panel: pd.DataFrame, universe: str, share: float) -> pd.Index:
+    """Permnos whose formation quote is unchanged on more than ``share`` of its days.
+
+    The same day definition the near-frozen-quote screen uses (no recorded
+    volume and an unchanged price), read only over the rows that pass the
+    universe's own flags, so the demotion and the screen cannot disagree about
+    which days count as quote-only.
+    """
+    columns = ["permno", "vol_zero", "vol_pos", "ret"]
+    missing = [c for c in columns if c not in panel.columns]
+    if missing:
+        raise SystemExit(
+            f"--demote-frozen needs the formation panel's {missing}; "
+            "it is read with --max-stale-share set (the default 0.95 does)"
+        )
+    rows = panel.loc[universe_flags(panel, universe), columns]
+    stale = ~rows["vol_zero"] & ~rows["vol_pos"] & rows["ret"].fillna(0.0).eq(0.0)
+    frac = stale.groupby(rows["permno"]).mean()
+    return frac.index[frac > share]
+
+
 def _issuer_series() -> pd.Series:
     global _ISSUERS
     if _ISSUERS is None:
@@ -663,6 +1097,20 @@ def _monthly_rows(table: str, sector: str, wait: int, pname: str, capital: str,
     ]
 
 
+def _daily_rows(pname: str, daily: pd.Series) -> list[dict]:
+    """The cached rows of one portfolio's daily series (Table 5 Panel B).
+
+    A day on which the portfolio holds no position is NaN in
+    ``portfolio_daily``; it is skipped rather than stored, which is what the
+    daily overlap average does with it anyway (it averages the cohorts trading
+    that day), and it keeps the cache small.
+    """
+    return [
+        {"date": ts, "portfolio": pname, "ret": float(v)}
+        for ts, v in daily.dropna().items()
+    ]
+
+
 def build_cohort(job: Job) -> tuple[int, int]:
     """Build one cohort and cache everything the tables need.
 
@@ -670,8 +1118,11 @@ def build_cohort(job: Job) -> tuple[int, int]:
     within-sector pairs, simulates them and writes under
     ``cohort_dir(universe)/YYYY-MM/``: ``pairs.parquet``, per wait
     ``w{wait}_trades.parquet`` and ``w{wait}_opened.parquet``, ``monthly.parquet``
-    (each cohort's monthly returns for Tables 1 and 3) and ``summary.json``
-    (Table 2 inputs, Panel B, universe and sector counts), written last.
+    (each cohort's monthly returns for Tables 1 and 3), ``daily.parquet`` (the
+    one-day-wait portfolios' daily fully-invested returns, Table 5 Panel B) and
+    ``summary.json`` (Table 2 inputs, Panel B, universe and sector counts),
+    written last. The daily rows are additional output: the monthly cache the
+    tables read is unchanged, byte for byte.
     The trading period is loaded from the full panel regardless of the
     formation share filter, so a share-type change inside the trading period
     does not cut a stock off early.
@@ -704,7 +1155,7 @@ def build_cohort(job: Job) -> tuple[int, int]:
     form_panel = load_daily(form_start, form_end, formation_cols)
     universe = formation_universe(
         form_start, form_end, universe=job.universe, max_stale_share=job.max_stale_share,
-        panel=form_panel,
+        panel=form_panel, extra_permnos=_share_class_permnos(job.share_classes_file),
     )
     if job.size_deciles_top is not None:
         # Table 9 Panel A's size screen: pairs form only inside the top deciles.
@@ -713,17 +1164,30 @@ def build_cohort(job: Job) -> tuple[int, int]:
         universe = restrict_to_size_deciles(
             universe, row["cap"], row["exch"], row["common"], job.size_deciles_top
         )
+    frozen = (
+        _frozen_quote_permnos(form_panel, job.universe, job.demote_frozen_share)
+        if job.demote_frozen != "none" else None
+    )
     form = form_panel.loc[form_panel["permno"].isin(set(universe)), ["permno", "date", "ret"]]
     del form_panel
     prices = normalized_prices(form.pivot(index="date", columns="permno", values="ret").sort_index())
     del form
     issuers = _issuer_series() if job.exclude_same_issuer else None
     pairs = select_pairs(prices, issuers, job.trigger_sigma)
+    if frozen is not None:
+        pairs = demote_frozen_pairs(pairs, frozen, job.demote_frozen)
 
     labels = sectors_for(row["siccd"].reindex(universe).fillna(0),
                          *_sic_fallbacks(job.cohorts_root), telephone=job.telephone_sic,
                          waste=job.waste_sic)
     sector_pairs = select_pairs_within_groups(prices, labels, issuers, job.trigger_sigma)
+    if frozen is not None:
+        sector_pairs = pd.concat(
+            [demote_frozen_pairs(g.drop(columns="group"), frozen, job.demote_frozen)
+             .assign(group=label)
+             for label, g in sector_pairs.groupby("group", sort=True)],
+            ignore_index=True,
+        )
     levels = prices.iloc[-1] if job.continued else None
     del prices
 
@@ -744,6 +1208,15 @@ def build_cohort(job: Job) -> tuple[int, int]:
         .eq(True)
     )
     del trd
+    if job.delist_last_px != "off":
+        # REVIEW_NOTES 94 / contract R10-A: read "using the delisting return, or the last
+        # available price" (p. 804) by delisting-code class. The selected classes book a
+        # zero return on their terminal row -- the last available price -- instead of
+        # CRSP's delisting return; every other class keeps the shipped treatment.
+        classes = _DELIST_LAST_PX_CLASSES[job.delist_last_px]
+        selected = [p for p in rets.columns if p in _delisting_permnos(classes)]
+        if selected:
+            rets[selected] = rets[selected].where(~term[selected], 0.0)
 
     coh_dir = cohort_path(job)
     coh_dir.mkdir(parents=True, exist_ok=True)
@@ -751,6 +1224,7 @@ def build_cohort(job: Job) -> tuple[int, int]:
     pairs.to_parquet(coh_dir / "pairs.parquet")
     sigma = pairs.set_index("rank")["sigma"]
     rows: list[dict] = []
+    daily_rows: list[dict] = []
     summary: dict = {
         "waits": list(job.waits),
         "stocks": int(pd.concat([pairs["permno_1"], pairs["permno_2"]]).nunique()),
@@ -765,18 +1239,27 @@ def build_cohort(job: Job) -> tuple[int, int]:
         summary["size_deciles_top"] = job.size_deciles_top
     for wait in job.waits:
         result = simulate_cohort(pairs, rets, term, wait=wait, start_levels=levels,
-                                 long_delisting_loss=job.long_delisting_loss)
+                                 long_delisting_loss=job.long_delisting_loss,
+                                 trigger_mult=job.trigger_mult,
+                                 fresh_divergence=job.fresh_divergence)
         result.trades.to_parquet(coh_dir / f"w{wait}_trades.parquet")
         result.opened.rename("opened").to_frame().to_parquet(coh_dir / f"w{wait}_opened.parquet")
         for pname, ranks in PORTFOLIOS.items():
-            for capital in T1_CAPITALS:
+            for capital in (*T1_CAPITALS, *job.extra_capitals):
                 monthly = portfolio_monthly(result, ranks, capital, job.short_weights)
                 rows += _monthly_rows("t1", "", wait, pname, capital, monthly)
             long_daily, short_daily = portfolio_legs(result, ranks, job.short_weights)
             for name, daily in zip(LEG_CAPITALS, (long_daily, short_daily)):
                 rows += _monthly_rows("t1", "", wait, pname, name, cohort_monthly(daily))
             if wait == 1:
-                summary["trading"][pname] = trading_components(result, sigma, ranks)
+                summary["trading"][pname] = trading_components(
+                    result, sigma, ranks, job.trigger_mult)
+                # Table 5 Panel B's series: the fully-invested ("employed") daily
+                # return, the long book minus the short book with a day on which no
+                # pair holds a position left out (``portfolio_daily`` returns NaN,
+                # ``_daily_rows`` drops it).
+                daily_rows += _daily_rows(
+                    pname, portfolio_daily(result, ranks, "employed", job.short_weights))
         if wait == 1:
             summary["opened_w1"] = int(result.opened.sum())
 
@@ -798,16 +1281,20 @@ def build_cohort(job: Job) -> tuple[int, int]:
         if sp.empty:
             continue
         result = simulate_cohort(sp, rets, term, wait=1, start_levels=levels,
-                                 long_delisting_loss=job.long_delisting_loss)
+                                 long_delisting_loss=job.long_delisting_loss,
+                                 trigger_mult=job.trigger_mult,
+                                 fresh_divergence=job.fresh_divergence)
         for pname, ranks in TABLE3_PORTFOLIOS.items():
             if ranks is not None and len(sp) < max(ranks):
                 continue
-            for capital in TABLE3_CAPITALS:
+            for capital in (*TABLE3_CAPITALS, *job.extra_capitals):
                 monthly = portfolio_monthly(result, ranks, capital, job.short_weights)
                 rows += _monthly_rows("t3", sector, 1, pname, capital, monthly)
 
     pd.DataFrame(rows, columns=["table", "sector", "wait", "portfolio", "capital",
                                 "month_end", "ret"]).to_parquet(coh_dir / "monthly.parquet")
+    pd.DataFrame(daily_rows, columns=["date", "portfolio", "ret"]).to_parquet(
+        coh_dir / "daily.parquet")
     (coh_dir / "summary.json").write_text(json.dumps(summary, default=float) + "\n")
     return job.year, job.month
 
@@ -832,25 +1319,130 @@ def load_summaries(cohorts: list[tuple[int, int]], universe: str) -> tuple[pd.Da
 
 
 def _strategy_series(frame: pd.DataFrame, end_ts: pd.Timestamp) -> pd.Series:
-    """Overlap-average one key's cohort monthly returns to the strategy series."""
-    months = {
-        cohort: pd.Series(g["ret"].to_numpy(), index=pd.DatetimeIndex(g["month_end"]))
-        for cohort, g in frame.groupby("cohort", sort=True)
-    }
-    strat = overlap_average(months)
-    return strat[strat.index <= end_ts]
+    """``project.table7.strategy_series`` with this run's ``--cohort-weights``.
+
+    The overlap average lives in ``project.table7``; this wrapper only picks the
+    weights (equal-weighted by cohort, the shipped reading, unless
+    ``--cohort-weights`` chose another; REVIEW_NOTES sections 27 and 76).
+    """
+    weights = _cohort_weights_for(frame) if COHORT_WEIGHTS != "equal" else None
+    return strategy_series(frame, end_ts, weights)
+
+
+def _cohort_weights_for(frame: pd.DataFrame) -> dict | None:
+    """This frame's per-cohort weights under ``--cohort-weights``, or None."""
+    if _COHORT_WEIGHTS is None or frame.empty:
+        return None
+    row = frame.iloc[0]
+    if "table" not in frame.columns or row["table"] not in ("t1", "t3"):
+        # Table 9 Panel A reads the screened side cache and Table 5 Panel B the
+        # daily series; neither carries a trade log for this reading, so both
+        # keep the equal-weighted average (REVIEW_NOTES section 76).
+        return None
+    table = _COHORT_WEIGHTS.get((int(row["wait"]), row["portfolio"]))
+    return table
+
+
+def cohort_weight_table(
+    kind: str, cohorts: list[tuple[int, int]], universe: str, waits: tuple[int, ...],
+) -> dict[tuple[int, str], dict]:
+    """Per-cohort weights for the overlap average (``--cohort-weights``).
+
+    ``selected``: the number of pairs the cohort selected for that portfolio
+    (the pool size for "all", the rank count otherwise), one weight for the
+    cohort's whole window. ``positions``: the number of the portfolio's pairs
+    holding a position in each of its months, read from the cached one-day-wait
+    trade log of the same wait -- one pooled book, the reading of the paper's
+    "one of six traders" sentence. Returns {(wait, portfolio): {cohort: weight}}.
+
+    Table 3's sector engines keep no trade log in the cache, so their monthly
+    rows take the unrestricted portfolio's weights for the same wait (the one
+    approximation this reading makes; REVIEW_NOTES section 76 says so).
+    """
+    out: dict[tuple[int, str], dict] = {}
+    for year, month in cohorts:
+        coh = cohort_dir(universe) / f"{year:04d}-{month:02d}"
+        pool = int(json.loads((coh / "summary.json").read_text())["pairs"])
+        cohort_ts = pd.Timestamp(year, month, 1) + pd.offsets.MonthEnd(0)
+        for wait in waits:
+            path = coh / f"w{wait}_trades.parquet"
+            trades = pd.read_parquet(path) if kind == "positions" else None
+            for pname, ranks in PORTFOLIOS.items():
+                sel = list(ranks) if ranks is not None else list(range(1, pool + 1))
+                sel = [r for r in sel if r <= pool]
+                if kind == "selected":
+                    weight = float(len(sel))
+                else:
+                    weight = _open_counts_by_month(trades, sel, cohort_ts)
+                out.setdefault((wait, pname), {})[cohort_ts] = weight
+    return out
+
+
+def _open_counts_by_month(
+    trades: pd.DataFrame, sel: list[int], cohort_ts: pd.Timestamp,
+) -> pd.Series:
+    """Pairs of ``sel`` holding a position on each month-end of the window."""
+    months = pd.date_range(cohort_ts, periods=6, freq="ME")
+    if trades is None or trades.empty:
+        return pd.Series(0.0, index=months)
+    part = trades[trades["rank"].isin(sel)]
+    opens = pd.to_datetime(part["open_date"])
+    closes = pd.to_datetime(part["close_date"])
+    counts = []
+    for end in months:
+        start = end - pd.offsets.MonthBegin(1)
+        counts.append(float(((opens <= end) & (closes >= start)).sum()))
+    return pd.Series(counts, index=months, dtype=float)
+
+
+def load_daily_returns(
+    cohorts: list[tuple[int, int]], universe: str,
+) -> dict[str, dict[pd.Timestamp, pd.Series]]:
+    """Each cohort's cached daily fully-invested series, per portfolio.
+
+    Returns ``{portfolio: {cohort first trading month: Series indexed by date}}``,
+    the argument ``aggregate`` needs for the daily overlap average. Format 7
+    caches ``daily.parquet`` (date, portfolio, ret) with the one-day-wait
+    portfolios only; a cohort cache without it is refused by ``verify_cache``, so
+    a missing file here means a hand-edited cache and is named rather than
+    skipped.
+    """
+    out: dict[str, dict[pd.Timestamp, pd.Series]] = {p: {} for p in PORTFOLIOS}
+    for year, month in cohorts:
+        coh = cohort_dir(universe) / f"{year:04d}-{month:02d}"
+        path = coh / "daily.parquet"
+        if not path.exists():
+            raise SystemExit(
+                f"{path} is missing: the cache predates format {CACHE_FORMAT}; "
+                "rebuild it with --force"
+            )
+        frame = pd.read_parquet(path)
+        first = pd.Timestamp(year, month, 1)
+        for pname, g in frame.groupby("portfolio", sort=True):
+            out.setdefault(pname, {})[first] = pd.Series(
+                g["ret"].to_numpy(), index=pd.DatetimeIndex(g["date"])
+            )
+    return out
 
 
 def aggregate(
     monthly: pd.DataFrame, summaries: list[dict], waits: tuple[int, ...], end: tuple[int, int],
-    cohorts: list[tuple[int, int]] | None = None,
+    cohorts: list[tuple[int, int]] | None = None, reversal_factor: str = "losers_only",
+    daily: dict[str, dict[pd.Timestamp, pd.Series]] | None = None,
+    panel_a_cohorts: str = "complete",
 ) -> tuple[dict, dict, dict, pd.Series]:
-    """Tables 1 and 2 from cached cohort summaries.
+    """Tables 1 and 2 from cached cohort summaries, and the daily strategy series.
 
     Returns (strategy, trading, composition, universe): ``strategy[wait][portfolio]
     [capital]`` is the strategy's monthly return Series, ``trading[portfolio]``
     the Table 2 Panel A Series (wait 1), ``composition[portfolio]`` the Panel B
     Series and ``universe`` the stocks / pairs / pairs-opened means.
+
+    ``daily`` (``load_daily_returns``) adds ``strategy[1][portfolio]
+    [DAILY_CAPITAL]``: the same Jegadeesh-Titman overlap average one level down,
+    each trading day's equal-weighted mean over the cohorts trading that day of
+    the cohort's daily fully-invested return, which is Table 5 Panel B's series.
+    Without it that entry is an empty Series.
     """
     end_ts = pd.Timestamp(month_end(*end))
     t1 = monthly[monthly["table"] == "t1"]
@@ -860,17 +1452,30 @@ def aggregate(
         w: {
             p: {
                 c: _strategy_series(groups[(w, p, c)], end_ts) if (w, p, c) in groups else empty
-                for c in (*T1_CAPITALS, *LEG_CAPITALS)
+                for c in (*T1_CAPITALS, *LEG_CAPITALS, *EXTRA_CAPITALS)
             }
             for p in PORTFOLIOS
         }
         for w in waits
     }
+    if 1 in waits:
+        # The daily series is the one-day-wait series, so it lives under wait 1.
+        # ``overlap_average`` is frequency-agnostic: it buckets each cohort's
+        # rows by their own timestamps, so at daily frequency it averages the
+        # cohorts trading each day exactly as the monthly one averages the
+        # cohorts trading each month.
+        for pname in PORTFOLIOS:
+            frames = (daily or {}).get(pname)
+            strategy[1][pname][DAILY_CAPITAL] = (
+                overlap_average(frames) if frames else empty
+            )
     trading = {}
     if 1 in waits:
         labels = [f"{year:04d}-{month:02d}" for year, month in cohorts] if cohorts else None
         trading = {
-            p: trading_stats_from_components([s["trading"][p] for s in summaries], labels)
+            p: trading_stats_from_components(
+                [s["trading"][p] for s in summaries], labels,
+                completed=panel_a_cohorts == "complete")
             for p in PORTFOLIOS
         }
     composition = {
@@ -906,17 +1511,252 @@ def table3_from_cache(
 
 
 
-def _monthly_autocorr(series: pd.Series) -> float:
-    """Lag-1 autocorrelation over calendar-adjacent months.
+def table9a_from_cache(cache_root: Path, universe: str, cohorts: list[tuple[int, int]],
+                       end: tuple[int, int]) -> pd.DataFrame:
+    """Table 9 Panel A's statistics from the screened (top three size deciles) cache.
 
-    Missing months are reindexed in rather than dropped, so a strided sample
-    (or any gap) never pairs two months that are not one month apart.
+    The screened universe is a second, complete cohort cache built with
+    ``--size-deciles-top 3`` (Section 3.9, p. 824), so the check step can read it
+    without rebuilding the main one. The statistics are ``summary_stats`` over the
+    same one-day-wait series the Table 1 Panel B section uses -- ``employed`` for
+    every row and the ``committed`` series for the last one -- so the two sections
+    cannot drift apart.
     """
-    s = series.dropna()
+    global CACHE_ROOT_OVERRIDE
+    root = Path(cache_root)
+    if not (root / "cohorts").is_dir():
+        raise SystemExit(
+            f"Table 9 Panel A needs the screened cohort cache, and {root} has no "
+            "cohorts/ directory. Build it with:\n"
+            f"  python scripts/03_replicate.py --steps tables --size-deciles-top 3 "
+            f"--cache-root {root} --workers 1\n"
+            "or pass --table9a-cache <dir> (--table9a-cache none leaves the section out)."
+        )
+    saved = CACHE_ROOT_OVERRIDE
+    CACHE_ROOT_OVERRIDE = root
+    try:
+        monthly, _summaries = load_summaries(cohorts, universe)
+    finally:
+        CACHE_ROOT_OVERRIDE = saved
+    end_ts = pd.Timestamp(month_end(*end))
+    t1 = monthly[(monthly["table"] == "t1") & (monthly["wait"] == 1)]
+    columns: dict[str, pd.Series] = {}
+    for pname in PORTFOLIOS:
+        part = t1[t1["portfolio"] == pname]
+        employed = summary_stats(
+            _strategy_series(part[part["capital"] == "employed"], end_ts))
+        committed = summary_stats(
+            _strategy_series(part[part["capital"] == "committed"], end_ts))
+        row = employed.copy()
+        row["committed_mean"] = float(committed["mean"])
+        columns[pname] = row
+    return pd.DataFrame(columns)
+
+
+def table9b_from_cache(cache_root: Path, cohorts: list[tuple[int, int]],
+                       end: tuple[int, int]) -> pd.DataFrame:
+    """Table 9 Panel B's statistics from the recall cache the claim script writes.
+
+    ``scripts/claims/table9b_recalls.py run --out-root <root>`` caches one
+    ``monthly.parquet`` per cohort under ``<root>/cohorts/YYYY-MM/`` with a
+    ``run`` column; this reads the primary reading's rows (``rearm``) and
+    aggregates them exactly as the Table 1 and Table 9 Panel A sections do --
+    the overlap average (``_strategy_series``) and ``summary_stats`` -- with the
+    committed series supplying the last row. The cache is a second, derived
+    artifact: it is read, never written, and the main cache it was simulated from
+    is the same one the rest of the check reads.
+    """
+    root = Path(cache_root)
+    if not (root / "cohorts").is_dir():
+        raise SystemExit(
+            f"Table 9 Panel B needs the recall cohort cache, and {root} has no "
+            "cohorts/ directory. Build it with:\n"
+            "  python scripts/claims/table9b_recalls.py run --workers 8 "
+            "--cache-root <shared vol_common> --out-root <dir>\n"
+            "or pass --table9b-cache <dir> (--table9b-cache none leaves the section out)."
+        )
+    frames: list[pd.DataFrame] = []
+    missing: list[str] = []
+    for year, month in cohorts:
+        path = root / "cohorts" / f"{year:04d}-{month:02d}" / "monthly.parquet"
+        if not path.exists():
+            missing.append(f"{year:04d}-{month:02d}")
+            continue
+        frame = pd.read_parquet(path)
+        frame = frame[frame["run"] == TABLE9B_RUN]
+        frame["cohort"] = pd.Timestamp(year, month, 1) + pd.offsets.MonthEnd(0)
+        frames.append(frame.loc[:, ["portfolio", "capital", "month_end", "ret", "cohort"]])
+    if missing:
+        sample = ", ".join(missing[:6])
+        raise SystemExit(
+            f"Table 9 Panel B's recall cache {root} is missing {len(missing)} of "
+            f"{len(cohorts)} cohorts (e.g. {sample}); rerun the build command above."
+        )
+    monthly = pd.concat(frames, ignore_index=True)
+    end_ts = pd.Timestamp(month_end(*end))
+    columns: dict[str, pd.Series] = {}
+    for pname in PORTFOLIOS:
+        part = monthly[monthly["portfolio"] == pname]
+        employed = summary_stats(
+            _strategy_series(part[part["capital"] == "employed"], end_ts))
+        committed = summary_stats(
+            _strategy_series(part[part["capital"] == "committed"], end_ts))
+        row = employed.copy()
+        row["committed_mean"] = float(committed["mean"])
+        columns[pname] = row
+    return pd.DataFrame(columns)
+
+
+def table6_from_cache(cache_root: Path) -> pd.DataFrame:
+    """Table 6's cells, averaged over replications, from the bootstrap's cohort outputs.
+
+    ``scripts/claims/table6_random_pairs.py --mode run`` writes one ``.npz`` per cohort
+    beside a stamp naming the close rule, the seed and the replication count. The
+    claim's own reader aggregates them (``table6_report.collect``), so this section and
+    ``report/replication/claims/TABLE6.md`` cannot drift apart. Only the primary design
+    is scored: ``--close true``, each random position closed with the true trade it
+    replaces (REVIEW_NOTES sections 54 and 65).
+    """
+    root = Path(cache_root)
+    stamp = root / "run_params.json"
+    if not (root / "cohorts").is_dir() or not stamp.exists():
+        raise SystemExit(
+            f"Table 6 needs the random-pair bootstrap's per-cohort outputs, and {root} has "
+            "no cohorts/ directory with run_params.json. Build it with:\n"
+            "  python scripts/claims/table6_random_pairs.py --mode run --reps 200 "
+            "--committed-capital book-share "
+            f"--workers 8 --out-root {root}\n"
+            "or pass --table6-cache <dir> (--table6-cache none leaves the section out)."
+        )
+    params = json.loads(stamp.read_text())
+    if params.get("close_rule") != "true":
+        raise SystemExit(
+            f"{root} holds a --close {params.get('close_rule')} run; the scored Table 6 is "
+            "the primary reading, --close true (REVIEW_NOTES section 54)"
+        )
+    sys.path.insert(0, str(ROOT / "scripts" / "claims"))
+    import table6_report
+
+    stats, _diffs, _meta = table6_report.collect(root, int(params["reps"]))
+    frame = pd.DataFrame(index=list(PAPER_TABLE6), columns=list(TABLE6_PORTS), dtype=float)
+    for _, row in stats.iterrows():
+        panel = PANEL_OF_WAIT[int(row["wait"])]
+        for stat in ("mean", "std", "median"):
+            frame.loc[f"{panel}|{row['capital']}|{stat}", row["portfolio"]] = float(
+                row[f"rep_{stat}"])
+    return frame
+
+
+def delist100_from_cache(cache_root: Path, cohorts: list[tuple[int, int]],
+                         end: tuple[int, int]) -> pd.Series:
+    """Footnote 4's numbers from the --long-delisting-loss cache (no wait, top 20).
+
+    The cache is a complete second cohort cache built with --long-delisting-loss
+    (the extreme delisting assumption of footnote 4, p. 804); the driver reads its
+    no-wait top-20 fully invested monthly series and summarises it the way the
+    footnote does -- a mean and a standard deviation in percent a month.
+    """
+    global CACHE_ROOT_OVERRIDE
+    root = Path(cache_root)
+    meta_path = root / "cohorts" / "cache_meta.json"
+    if not meta_path.is_file():
+        raise SystemExit(
+            f"Footnote 4 needs the delisting-loss cohort cache, and {root} has no "
+            "cohorts/cache_meta.json. Build it with:\n"
+            f"  make delist100  (python scripts/03_replicate.py --steps tables "
+            f"--long-delisting-loss --cache-root {root} --workers 1)\n"
+            "or pass --delist-cache <dir> (--delist-cache none leaves the cells out)."
+        )
+    meta = json.loads(meta_path.read_text())
+    if not meta.get("long_delisting_loss"):
+        raise SystemExit(
+            f"{root} was not built with --long-delisting-loss (its stamp says "
+            f"{meta.get('long_delisting_loss')!r}); rebuild it with make delist100."
+        )
+    saved = CACHE_ROOT_OVERRIDE
+    CACHE_ROOT_OVERRIDE = root
+    try:
+        monthly, _summaries = load_summaries(cohorts, PRIMARY_UNIVERSE)
+    finally:
+        CACHE_ROOT_OVERRIDE = saved
+    end_ts = pd.Timestamp(month_end(*end))
+    t1 = monthly[(monthly["table"] == "t1") & (monthly["wait"] == 0)]
+    part = t1[(t1["portfolio"] == "top20") & (t1["capital"] == "employed")]
+    series = _strategy_series(part, end_ts)
+    stats = summary_stats(series)
+    return pd.Series({"mean": float(stats["mean"]), "std": float(stats["std"]),
+                      "n_months": int(series.notna().sum())})
+
+
+def _daily_autocorr(series: pd.Series) -> float:
+    """Lag-1 autocorrelation over consecutive trading days (Table 5 Panel B).
+
+    The counterpart of ``monthly_autocorr`` one frequency down: the series is
+    reindexed to the exchange calendar between its first and last day, so a gap
+    never pairs two days that are not trading-day neighbours. The paper states
+    no estimator for Panel B's serial correlation any more than for Panel A's
+    ("Serial correlation", p. 816); this is the same reading.
+    """
+    s = pd.Series(series).dropna().sort_index()
     if len(s) <= 2:
         return float("nan")
-    months = s.reindex(pd.date_range(s.index.min(), s.index.max(), freq="ME"))
-    return float(months.autocorr(lag=1))
+    cal = trading_calendar(s.index.min().date(), s.index.max().date())
+    return float(s.reindex(cal).autocorr(lag=1))
+
+
+DAILY_ROWS = ["mean", "std", "serial_correlation", "var_1", "var_5", "var_10", "var_25",
+              "share_negative", "min"]
+
+
+def _daily_risk_stats(series: pd.Series) -> pd.Series:
+    """Table 5 Panel B's nine statistics for one portfolio's daily returns.
+
+    Percentiles are linearly interpolated (pandas' default, as in Panel A);
+    "share_negative" is the paper's "Probability of return below 0", the share of
+    days with a strictly negative return; "min" is "Minimum historical
+    observation", the worst day. All nine are on the daily series itself, so none
+    of them repeats a monthly row.
+    """
+    s = pd.Series(series).dropna()
+    if s.empty:
+        return pd.Series({row: np.nan for row in DAILY_ROWS})
+    return pd.Series({
+        "mean": float(s.mean()),
+        "std": float(s.std(ddof=1)),
+        "serial_correlation": _daily_autocorr(s),
+        **{f"var_{q}": quantile(s, q / 100) for q in (1, 5, 10, 25)},
+        "share_negative": share_negative(s),
+        "min": float(s.min()),
+    }).reindex(DAILY_ROWS)
+
+
+def guard_factor_inputs(steps: list[str] | tuple[str, ...], allow_missing: bool) -> None:
+    """Stop before a run that would silently score a smaller cell set than 865.
+
+    A fresh checkout carries the French and Goyal-Welch archives as Git LFS pointers, and
+    every loader below treats an unreadable factor file the same way: it prints a warning and
+    returns None. The tables then lose their regression rows and the check still prints a
+    score -- 544 cells rather than 865 -- which reads like a result (REVIEW_NOTES section 88).
+    When a step that reads the factor files is asked for, name the files and the fix and
+    exit non-zero; ``--allow-missing-factors`` is the explicit way back to the old fallback.
+    """
+    if not set(steps) & set(FACTOR_STEPS):
+        return
+    problems = factor_problem_files()
+    if not problems:
+        return
+    listing = "\n".join(f"  {path} ({why})" for path, why in problems)
+    if allow_missing:
+        print(f"warning: --allow-missing-factors: these files are not readable, so the rows "
+              f"that need them are left out:\n{listing}", file=sys.stderr)
+        return
+    print("factor files are not readable, so the check would print a score over fewer than "
+          f"865 cells:\n{listing}\n"
+          "Fix: `git lfs pull` in this checkout, or copy the real archives over "
+          "data/raw/french, data/raw/french_vintage_2005 and data/raw/goyal_welch. To run "
+          "without the factor rows anyway, pass --allow-missing-factors.", file=sys.stderr)
+    raise SystemExit(1)
+
 
 def _factors_or_none() -> pd.DataFrame | None:
     """French's five factors, or None (with a warning) while the LFS files are not pulled."""
@@ -928,6 +1768,21 @@ def _factors_or_none() -> pd.DataFrame | None:
         return None
 
 
+def _risk_free_or_none() -> pd.Series | None:
+    """French's 30-day bill return, or None while the factor files are not pulled.
+
+    Table 7's note (p. 821): "The returns in the bottom half of the table are in excess of
+    the 30-day Treasury bill returns", so each book's series is reduced by the same ``rf``
+    column the factor files carry - one rate for the whole table, not one per book.
+    """
+    try:
+        return load_factors()["rf"]
+    except (FileNotFoundError, ValueError) as err:
+        print(f"warning: factor files unavailable ({err}); Table 7's regression block is "
+              "not computed", file=sys.stderr)
+        return None
+
+
 def _losers_only_or_none() -> pd.Series | None:
     """The losers-only reversal series for the unscored alternative, or None while unavailable."""
     try:
@@ -936,6 +1791,66 @@ def _losers_only_or_none() -> pd.Series | None:
         print(f"warning: prior-return deciles unavailable ({err}); the reversal-factor "
               "alternative is not computed", file=sys.stderr)
         return None
+
+
+def load_reversal_csv(path: str | Path) -> pd.Series:
+    """A reversal series from a CSV with a ``month`` and a ``reversal`` column (contract Pb).
+
+    ``month`` is a month end (``YYYY-MM-DD`` or ``YYYYMM``); ``reversal`` is a monthly return in
+    decimals. Months the file does not cover are dropped from the scored regressions by the
+    frame's ``dropna``, so a candidate needs no filler rows.
+    """
+    frame = pd.read_csv(Path(path))
+    missing = {"month", "reversal"} - set(frame.columns)
+    if missing:
+        raise ValueError(f"{path}: missing column(s) {sorted(missing)}")
+    months = pd.to_datetime(frame["month"].astype(str).str.replace(r"(\d{6})$", r"\1", regex=True))
+    return pd.Series(frame["reversal"].to_numpy(dtype=float),
+                     index=months + pd.offsets.MonthEnd(0),
+                     name="reversal").sort_index().dropna()
+
+
+#: The series ``--reversal-factor csv`` scores, set from ``--reversal-csv`` in ``main``.
+REVERSAL_CSV: str | None = None
+
+
+def _reversal_names(reversal_factor: str) -> tuple[str, str]:
+    """(name of the unscored series, name of the scored series) for the ablation blocks."""
+    if reversal_factor == "losers_only":
+        return "French's ST_Rev", "the losers-only series"
+    if reversal_factor == "csv":
+        return "the losers-only series", "the candidate series"
+    return "the losers-only series", "ST_Rev"
+
+
+def scored_factors_or_none(reversal_factor: str,
+                           reversal_csv: str | None = None
+                           ) -> tuple[pd.DataFrame | None, pd.Series | None]:
+    """The scored five-factor frame and the other reversal series (the unscored block).
+
+    ``losers_only`` (the default) scores the series the paper's own Table 8 regressions imply
+    (``load_losers_only``, REVIEW_NOTES section 61) and leaves French's ST_Rev to the unscored
+    alternative; ``st_rev`` is the row-18 convention, with the roles swapped; ``csv`` scores the
+    series in ``reversal_csv`` (contract Pb's candidates, REVIEW_NOTES section 73) and prints the
+    losers-only series unscored beside it.
+    """
+    factors = _factors_or_none()
+    if factors is None:
+        return None, None
+    other = _losers_only_or_none()
+    if other is None:
+        return factors, None
+    if reversal_factor == "csv":
+        path = reversal_csv or REVERSAL_CSV
+        if not path:
+            raise ValueError("--reversal-factor csv needs --reversal-csv PATH")
+        series = load_reversal_csv(path)
+        scored = factors.assign(reversal=series.reindex(factors.index)).dropna()
+        return scored, other
+    if reversal_factor == "losers_only":
+        scored = factors.assign(reversal=other.reindex(factors.index)).dropna()
+        return scored, factors["reversal"]
+    return factors, other
 
 
 def write_reversal_alternative(series: dict[str, pd.Series], factors: pd.DataFrame,
@@ -954,14 +1869,17 @@ def write_reversal_alternative(series: dict[str, pd.Series], factors: pd.DataFra
         out = {}
         for half, part in (("full", s), ("pre", s[s.index <= split]), ("post", s[s.index > split])):
             coef = factor_regression(part, alt)
+            tstat = factor_tstats(part, alt)
             out.update({f"{half}_{r}": float(coef[r]) for r in FACTOR_ROWS})
+            out.update({f"{half}_t_{r}": float(tstat[r]) for r in FACTOR_ROWS if r != "r2"})
         rows[pname] = pd.Series(out)
     frame = pd.DataFrame(rows)
     frame.index.name = "statistic"
     frame.to_csv(out_dir / "reversal_alternative.csv")
 
 
-def _reversal_alternative_section(out_dir: Path, total: list) -> list[str]:
+def _reversal_alternative_section(out_dir: Path, total: list,
+                                  reversal_factor: str = "losers_only") -> list[str]:
     """The unscored comparison of the alternative regressions, with what they would score.
 
     Cells read "ours vs paper mark", without the scored cells' " / ", so the scorer skips them.
@@ -974,15 +1892,34 @@ def _reversal_alternative_section(out_dir: Path, total: list) -> list[str]:
     alt = pd.read_csv(path, index_col=0)
     t4 = pd.read_csv(out_dir / "table4.csv", index_col=0)
     t8 = pd.read_csv(out_dir / "table8_subperiod.csv", index_col=0)
-    lines = ["## Reversal factor: the paper's own, as Table 8 implies it (unscored)", "",
-             "The scored regressions above use French's ST_Rev, the long-short factor the paper",
-             "describes. The paper built its own reversal factor, and its Table 8 regressions are",
-             "consistent only with a factor whose standard deviation is near the printed 0.072",
-             "before 1989 and whose correlation with the market is about +0.8: the profile of a",
-             "long-only portfolio of prior-month losers, not of a long-short factor (REVIEW_NOTES",
-             "section 51, `scripts/audit_reversal_factor.py`). The rows below repeat the regressions",
-             "with that series, French's equal-weighted bottom three prior-month deciles less the",
-             "T-bill, in place of ST_Rev. They are not scored.", ""]
+    if reversal_factor == "losers_only":
+        lines = ["## Reversal factor: French's ST_Rev, the text's long-short factor (unscored)", "",
+                 "The scored regressions above use the losers-only series the paper's own Table 8",
+                 "arithmetic implies, not the long-short factor its text describes: the printed",
+                 "reversal standard deviation is 0.0723 before 1989, which ST_Rev (0.0259) cannot",
+                 "be, while the equal-weighted bottom three prior-month deciles less the T-bill",
+                 "give 0.0685 with the implied +0.81 market and +0.79 SMB correlations (REVIEW_NOTES",
+                 "sections 51 and 61). The rows below repeat the regressions with ST_Rev in place",
+                 "of the scored series. They are not scored.", ""]
+        scored_name = "the losers-only series"
+    elif reversal_factor == "csv":
+        lines = ["## Reversal factor: the losers-only series (unscored)", "",
+                 "The scored regressions above use the candidate series named in the header",
+                 "(`--reversal-csv`, contract Pb, REVIEW_NOTES section 73). The rows below repeat",
+                 "the regressions with the losers-only series, the equal-weighted bottom three",
+                 "prior-month deciles less the T-bill, in its place. They are not scored.", ""]
+        scored_name = "the candidate series"
+    else:
+        lines = ["## Reversal factor: the paper's own, as Table 8 implies it (unscored)", "",
+                 "The scored regressions above use French's ST_Rev, the long-short factor the paper",
+                 "describes. The paper built its own reversal factor, and its Table 8 regressions are",
+                 "consistent only with a factor whose standard deviation is near the printed 0.072",
+                 "before 1989 and whose correlation with the market is about +0.8: the profile of a",
+                 "long-only portfolio of prior-month losers, not of a long-short factor (REVIEW_NOTES",
+                 "section 51, `scripts/audit_reversal_factor.py`). The rows below repeat the",
+                 "regressions with that series, French's equal-weighted bottom three prior-month",
+                 "deciles less the T-bill, in place of ST_Rev. They are not scored.", ""]
+        scored_name = "ST_Rev"
     alt_marks, scored_marks = [], []
     for half, label, paper_of, ours_of in (
             ("full", "Table 4, full sample", lambda p, r: PAPER_TABLE4[p][r],
@@ -1003,12 +1940,31 @@ def _reversal_alternative_section(out_dir: Path, total: list) -> list[str]:
                 fmt = (lambda v: f"{100 * v:.2f}%") if r == "intercept" else (lambda v: f"{v:.3g}")
                 cells.append(f"{fmt(ours)} vs {fmt(paper)} {mark}")
             lines.append(f"| {r} | " + " | ".join(cells) + " |")
+            scored_key = f"t_{r}" if half == "full" else f"{half}_t_{r}"
+            scored_frame = t4 if half == "full" else t8
+            if r == "r2" or f"{half}_t_{r}" not in alt.index \
+                    or scored_key not in scored_frame.index:
+                continue
+            t_cells = []
+            for p in PORTFOLIOS:
+                i = list(PORTFOLIOS).index(p)
+                paper_t = (PAPER_TABLE4_T[r][i] if half == "full"
+                           else PAPER_TABLE8_T[f"{half}_{r}"][i])
+                ours_t = float(alt.loc[f"{half}_t_{r}", p])
+                scored_t = (float(t4.loc[f"t_{r}", p]) if half == "full"
+                            else float(t8.loc[f"{half}_t_{r}", p]))
+                mark = _mark(ours_t, paper_t)
+                alt_marks.append(mark)
+                scored_marks.append(_mark(scored_t, paper_t))
+                t_cells.append(f"{ours_t:.2f} vs {paper_t:.2f} {mark}")
+            lines.append(f"| t: {r} | " + " | ".join(t_cells) + " |")
         lines.append("")
     def points(m):
         return m.count("✓") + 0.5 * m.count("~")
     scored_total = points(total)
     lines += [(f"With this series the {len(alt_marks)} regression cells would score "
-               f"{points(alt_marks):.1f}, against {points(scored_marks):.1f} with ST_Rev, and the "
+               f"{points(alt_marks):.1f}, against {points(scored_marks):.1f} with {scored_name}, "
+               f"and the "
                f"total {scored_total - points(scored_marks) + points(alt_marks):.1f} instead of "
                f"{scored_total:.1f}."), ""]
     return lines
@@ -1043,6 +1999,8 @@ def write_risk_tables(series: dict[str, pd.Series], factors: pd.DataFrame | None
             coef = factor_regression(s, ibbotson)
             row.update({f"ibbotson_{r}": float(coef[r])
                         for r in ("intercept", *IBBOTSON_FACTORS, "r2")})
+            row.update({f"ibbotson_t_{r}": float(v)
+                        for r, v in factor_tstats(s, ibbotson).items()})
         t4[pname] = pd.Series(row)
     frame = pd.DataFrame(t4)
     frame.index.name = "statistic"
@@ -1052,7 +2010,7 @@ def write_risk_tables(series: dict[str, pd.Series], factors: pd.DataFrame | None
         ep = factors["market"].reindex(series["top5"].index).dropna()
         pd.Series({"mean": float(ep.mean()), "std": float(ep.std(ddof=1)),
                    "sharpe": float(ep.mean() / ep.std(ddof=1)),
-                   "serial_correlation": _monthly_autocorr(ep)},
+                   "serial_correlation": monthly_autocorr(ep)},
                   name="equity_premium").rename_axis("statistic").to_csv(
             out_dir / "table4_equity_premium.csv")
 
@@ -1075,6 +2033,24 @@ def write_risk_tables(series: dict[str, pd.Series], factors: pd.DataFrame | None
     fig4.index.name = "statistic"
     fig4.to_csv(out_dir / "figure4.csv")
 
+    if factors is not None:
+        # Table 8's published "Factor sd" column, for comparison with the same factor
+        # frame the regressions use (the option's reversal series included). The windows
+        # are the scored series' own months, so the standard deviations are measured
+        # over exactly the months Table 8's two panels regress.
+        window = series["top20"].index
+        frame = factors.reindex(window)
+        sd_rows = {}
+        for name in FACTORS:
+            s = frame[name].dropna()
+            sd_rows[name] = {
+                "pre": float(s[s.index <= split].std(ddof=1)),
+                "post": float(s[s.index > split].std(ddof=1)),
+            }
+        sd_frame = pd.DataFrame(sd_rows).T
+        sd_frame.index.name = "factor"
+        sd_frame.to_csv(out_dir / "table8_factor_sd.csv")
+
 
 def write_outputs(
     strategy: dict,
@@ -1084,13 +2060,14 @@ def write_outputs(
     out_dir: Path,
     composition: dict[str, pd.Series] | None = None,
     uni_summary: pd.Series | None = None,
+    reversal_factor: str = "losers_only",
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     frames = []
     for wait in waits:
         for pname in PORTFOLIOS:
-            for capital in T1_CAPITALS:
+            for capital in (*T1_CAPITALS, *EXTRA_CAPITALS):
                 s = strategy[wait][pname][capital]
                 frames.append(
                     pd.DataFrame(
@@ -1111,8 +2088,8 @@ def write_outputs(
             if wait not in waits:
                 continue
             for pname in PORTFOLIOS:
-                employed = summary_stats(strategy[wait][pname]["employed"])
-                committed = summary_stats(strategy[wait][pname]["committed"])
+                employed = summary_stats(strategy[wait][pname][T1_FI])
+                committed = summary_stats(strategy[wait][pname][T1_COMMITTED])
                 row = employed.copy()
                 row["committed_mean"] = committed["mean"]
                 row["mean_employed_literal"] = summary_stats(
@@ -1124,41 +2101,73 @@ def write_outputs(
         table1.index.name = "metric"
         table1.to_csv(out_dir / "table1.csv")
 
-        # Table 7 (scored since 2026-10-25): the two books the fully-invested
-        # return is the difference of, summarised the way the paper prints them.
+        # Table 7 (scored since 2026-10-25, its regression block since row 18): the two
+        # books the fully-invested return is the difference of, summarised the way the
+        # paper prints them - four performance rows and, below them, the five-factor
+        # regression of each book's own return less the 30-day bill (the note, p. 821).
+        # The factors are the frame Table 4 uses (`scored_factors_or_none`, the option's
+        # reversal series), so the two tables cannot disagree about the factor model; the
+        # other reversal series is regressed the same way and written beside it, unscored.
+        factors, alt_reversal = (
+            scored_factors_or_none(reversal_factor) if 1 in waits else (None, None))
+        bill = _risk_free_or_none() if factors is not None else None
+        alt_factors = (
+            factors.assign(reversal=alt_reversal.reindex(factors.index)).dropna()
+            if factors is not None and alt_reversal is not None else None
+        )
         if 1 in waits:
-            t7 = {}
+            t7, t7_alt = {}, {}
             for pname in PORTFOLIOS:
                 legs = {"long": strategy[1][pname]["long_book"],
                         "short": strategy[1][pname]["short_book"]}
-                rows = {}
+                rows, alt_rows = {}, {}
                 for side, series in legs.items():
                     st = summary_stats(series)
                     rows[f"{side}: mean monthly return"] = st["mean"]
                     rows[f"{side}: standard error (Newey-West)"] = st["nw_se"]
                     rows[f"{side}: standard deviation"] = st["std"]
-                    rows[f"{side}: monthly serial correlation"] = _monthly_autocorr(series)
+                    rows[f"{side}: monthly serial correlation"] = monthly_autocorr(series)
+                    if bill is None:
+                        continue
+                    book = regression_rows(excess(series, bill), factors)
+                    rows.update({f"{side}: {key}": float(book[key]) for key in FACTOR_ROWS})
+                    rows.update({f"{side}: t_{key}": float(book[f"t_{key}"])
+                                 for key in FACTOR_ROWS if key != "r2"})
+                    if alt_factors is not None:
+                        alt = regression_rows(excess(series, bill), alt_factors)
+                        alt_rows.update({f"{side}: {key}": float(alt[key])
+                                         for key in FACTOR_ROWS})
+                        alt_rows.update({f"{side}: t_{key}": float(alt[f"t_{key}"])
+                                         for key in FACTOR_ROWS if key != "r2"})
                 t7[pname] = pd.Series(rows)
+                if alt_rows:
+                    t7_alt[pname] = pd.Series(alt_rows)
             table7 = pd.DataFrame(t7)
             table7.index.name = "metric"
             table7.to_csv(out_dir / "table7.csv")
+            if t7_alt:
+                alt_table7 = pd.DataFrame(t7_alt)
+                alt_table7.index.name = "metric"
+                alt_table7.to_csv(out_dir / "table7_reversal_alternative.csv")
+            else:
+                (out_dir / "table7_reversal_alternative.csv").unlink(missing_ok=True)
         else:
             (out_dir / "table7.csv").unlink(missing_ok=True)
+            (out_dir / "table7_reversal_alternative.csv").unlink(missing_ok=True)
 
         # Table 5 Panel A's serial correlation and percentiles, Table 8's split at
         # 1988-12 and Table 4 and Figure 4, all of the one-day-wait series. An earlier
         # run's files go first, so a run without wait 1 prints "Not run".
-        for fname in DIAGNOSTIC_FILES + RISK_FILES:
+        for fname in (*DIAGNOSTIC_FILES, "table5b_daily.csv", *RISK_FILES):
             (out_dir / fname).unlink(missing_ok=True)
         if 1 in waits:
-            factors = _factors_or_none()
             var_rows, sub_rows = {}, {}
             split = pd.Timestamp(*SUBPERIOD_SPLIT, 1) + pd.offsets.MonthEnd(0)
             for pname in PORTFOLIOS:
-                s = strategy[1][pname]["employed"].dropna()
+                s = strategy[1][pname][T1_FI].dropna()
                 var_rows[pname] = pd.Series({
-                    "serial_correlation": _monthly_autocorr(s),
-                    **{f"var_{q}": float(s.quantile(q / 100)) for q in (1, 5, 10, 25)},
+                    "serial_correlation": monthly_autocorr(s),
+                    **{f"var_{q}": quantile(s, q / 100) for q in (1, 5, 10, 25)},
                 })
                 pre, post = s[s.index <= split], s[s.index > split]
                 halves = {
@@ -1176,11 +2185,17 @@ def write_outputs(
                 frame = pd.DataFrame(rows)
                 frame.index.name = "statistic"
                 frame.to_csv(out_dir / fname)
-            employed = {p: strategy[1][p]["employed"].dropna() for p in PORTFOLIOS}
+            employed = {p: strategy[1][p][T1_FI].dropna() for p in PORTFOLIOS}
+            # Table 5 Panel B: the same nine statistics on the daily series the
+            # cache stores since format 7 (REVIEW_NOTES section 62).
+            panel_b = pd.DataFrame(
+                {p: _daily_risk_stats(strategy[1][p][DAILY_CAPITAL]) for p in PORTFOLIOS}
+            ).reindex(DAILY_ROWS)
+            panel_b.index.name = "statistic"
+            panel_b.to_csv(out_dir / "table5b_daily.csv")
             write_risk_tables(employed, factors, out_dir, _ibbotson_or_none())
-            losers = _losers_only_or_none() if factors is not None else None
-            if losers is not None:
-                write_reversal_alternative(employed, factors, losers, out_dir)
+            if alt_reversal is not None:
+                write_reversal_alternative(employed, factors, alt_reversal, out_dir)
 
     if trading:
         t2 = pd.DataFrame(trading)
@@ -1191,6 +2206,24 @@ def write_outputs(
         t2b = pd.DataFrame(composition)
         t2b.index.name = "statistic"
         t2b.to_csv(out_dir / "table2_panelB.csv")
+
+    # Section 1.2's hold-out sentence: the top 20 portfolio, fully invested, over
+    # 1999-2002. The no-wait series is the scored reading and the one-day-wait series
+    # prints beside it, unscored; both are written so the check step reads them rather
+    # than recomputing the aggregation.
+    hold = {}
+    for wait in waits:
+        s = strategy[wait]["top20"][T1_FI].dropna()
+        part = s[(s.index >= pd.Timestamp("1999-01-31"))
+                 & (s.index <= pd.Timestamp("2002-12-31"))]
+        st = summary_stats(part)
+        hold[f"wait{wait}"] = {
+            "mean_annual": 12.0 * float(st["mean"]),
+            "sd_annual": float(np.sqrt(12.0) * st["std"]),
+            "t_stat": float(st["t_stat"]),
+            "n_months": int(part.size),
+        }
+    pd.DataFrame(hold).T.rename_axis("reading").to_csv(out_dir / "holdout_1999.csv")
 
     if uni_summary is not None:
         uni = uni_summary.rename("value").to_frame()
@@ -1237,7 +2270,7 @@ def write_comparison(
                 if metric == "committed_mean":
                     ours = summary_stats(strategy[wait][pname]["committed"])["mean"]
                 else:
-                    ours = summary_stats(strategy[wait][pname]["employed"])[metric]
+                    ours = summary_stats(strategy[wait][pname][T1_FI])[metric]
                 cells.append(_fmt(ours, paper))
             lines.append(f"| {metric} | " + " | ".join(cells) + " |")
         lines.append("")
@@ -1247,7 +2280,7 @@ def write_comparison(
                 "'Fully invested' = value-weighted return of the open long positions minus"
                 " that of the open short positions (eq. 2); 'committed capital' scales it by"
                 " the share of selected pairs holding a position."
-                " `mean_employed_literal` (table1.csv only) uses INTERFACES.md's literal"
+                " `mean_employed_literal` (table1.csv only) uses METHOD.md's literal"
                 " denominator for comparison."
             ),
             "",
@@ -1365,9 +2398,17 @@ def _mark(ours: float, paper: float) -> str:
 
 
 def _cell(ours: float, paper: float, pct: bool, tally: list, show_mark: bool = True,
-          digits: int = 2) -> str:
-    fmt = (lambda v: f"{100 * v:.{digits}f}%") if pct else (lambda v: f"{v:.3g}")
+          digits: int = 2, sig: int = 3, fmt_spec: str | None = None) -> str:
+    fmt = (lambda v: f"{100 * v:.{digits}f}%") if pct else (lambda v: f"{v:.{sig}g}")
+    if fmt_spec is not None:
+        fmt = lambda v, s=fmt_spec: format(v, s)
     mark = _mark(ours, paper)
+    if not mark and paper == 0 and np.isfinite(ours):
+        # A printed zero: _mark's relative gap is undefined at a target of exactly
+        # zero, so the cell asks whether ours prints the same value at the paper's
+        # own precision. Table 5 Panel B's 101-120 serial correlation is the one
+        # such value in the check ("0.00", p. 816; REVIEW_NOTES section 62).
+        mark = "✓" if fmt(ours) == fmt(paper) else "✗"
     tally.append(mark)
     if not np.isfinite(ours):
         return f"NA / {fmt(paper)}"
@@ -1375,34 +2416,130 @@ def _cell(ours: float, paper: float, pct: bool, tally: list, show_mark: bool = T
 
 
 def _portfolio_table(frame: pd.DataFrame, paper_tab: dict, title: str, pct: set,
-                     tally: list, show_mark: bool = True, digits: int = 2) -> list[str]:
-    """A check block with one row per paper statistic and one column per portfolio."""
+                     tally: list, show_mark: bool = True, digits: int = 2,
+                     spec: dict[str, str] | None = None) -> list[str]:
+    """A check block with one row per paper statistic and one column per portfolio.
+
+    ``spec`` overrides the number format of named rows (``{"serial_correlation":
+    ".2f"}``); the default is the block's own percentage or three-significant-digit
+    format, so every other block is unaffected.
+    """
+    spec = spec or {}
     lines = [f"## {title}", "", "| statistic | " + " | ".join(PORTFOLIOS) + " |",
              "|---|" + "---|" * len(PORTFOLIOS)]
     for stat in paper_tab["top5"]:
         cells = [_cell(float(frame.loc[stat, p]), paper_tab[p][stat], stat in pct, tally,
-                       show_mark, digits) for p in PORTFOLIOS]
+                       show_mark, digits, fmt_spec=spec.get(stat)) for p in PORTFOLIOS]
         lines.append(f"| {stat} | " + " | ".join(cells) + " |")
     return lines
 
 
-def _alpha_t_rows(frame: pd.DataFrame, title: str) -> list[str]:
-    """Unscored rows: the intercepts' Newey-West t-statistics, ours against the paper's.
+def _t_key(stat: str) -> str:
+    """The frame's t-statistic row for a coefficient row of Tables 4, 7 or 8."""
+    if stat.startswith("ibbotson_"):
+        return "ibbotson_t_" + stat[len("ibbotson_"):]
+    if stat.startswith(("pre_", "post_")):
+        half, name = stat.split("_", 1)
+        return f"{half}_t_{name}"
+    return "t_" + stat
 
-    Written "ours vs paper", without the scored cells' " / ", so the scorer skips them.
-    """
-    halves = {"Table 4": [("full", "t_intercept", "full sample")],
-              "Table 8": [("pre", "pre_t_intercept", "before 1989"),
-                          ("post", "post_t_intercept", "after 1988")]}.get(title.split(" (")[0], [])
-    rows = []
-    for half, key, label in halves:
-        if key not in frame.index:
+
+def _coefficient_table(frame: pd.DataFrame, paper_tab: dict, paper_t: dict, title: str,
+                       pct: set, tally: list, digits: int = 2,
+                       spec: dict[str, str] | None = None) -> list[str]:
+    """A check block with each coefficient row followed by its scored t-statistic row."""
+    lines = [f"## {title}", "", "| statistic | " + " | ".join(PORTFOLIOS) + " |",
+             "|---|" + "---|" * len(PORTFOLIOS)]
+    for stat in paper_tab["top5"]:
+        cells = [_cell(float(frame.loc[stat, p]), paper_tab[p][stat], stat in pct, tally,
+                       digits=digits, fmt_spec=(spec or {}).get(stat)) for p in PORTFOLIOS]
+        lines.append(f"| {stat} | " + " | ".join(cells) + " |")
+        if stat not in paper_t:
             continue
-        cells = [f"{float(frame.loc[key, p]):.2f} vs {PAPER_ALPHA_T[half][p]:.2f}"
+        tkey = _t_key(stat)
+        t_cells = [_cell(float(frame.loc[tkey, p]), paper_t[stat][i], False, tally,
+                         digits=digits) for i, p in enumerate(PORTFOLIOS)]
+        lines.append(f"| t: {stat} | " + " | ".join(t_cells) + " |")
+    return lines
+
+
+def _table7_regression_block(frame: pd.DataFrame, tally: list) -> list[str]:
+    """Table 7's regression block: seven scored rows per book, the t-statistics unscored.
+
+    The paper prints each coefficient over its Newey-West t-statistic; only the
+    coefficients and R2 are compared, as in Tables 4 and 8, and the t rows read
+    "ours vs paper" (the shape ``_alpha_t_rows`` uses) so the scorer skips them.
+    The row labels are the ones ``table7.csv`` carries, the paper's column order.
+    """
+    if not TABLE7_REGRESSION_ROWS or TABLE7_REGRESSION_ROWS[0] not in frame.index:
+        return ["", "Regression block: not run (needs the factor files; the `tables` step",
+                "warns when they are not pulled)."]
+    rows = []
+    for key in TABLE7_REGRESSION_ROWS:
+        cells = [_cell(float(frame.loc[key, p]), PAPER_TABLE7[p][key], key in TABLE7_PCT, tally)
                  for p in PORTFOLIOS]
-        rows.append(f"| alpha t-statistic, {label} (Newey-West, 6 lags; unscored) | "
-                    + " | ".join(cells) + " |")
+        rows.append(f"| {key} | " + " | ".join(cells) + " |")
+        side, name = key.split(": ", 1)
+        if name == "r2":
+            continue
+        t_key = f"{side}: t_{name}"
+        t_cells = [_cell(float(frame.loc[t_key, p]), PAPER_TABLE7_T[p][key], False, tally)
+                   for p in PORTFOLIOS]
+        rows.append(f"| t: {key} | " + " | ".join(t_cells) + " |")
     return rows
+
+
+def _table7_reversal_block(out_dir: Path, frame: pd.DataFrame,
+                           reversal_factor: str) -> list[str]:
+    """The same 56 regression cells under the other reversal series, unscored.
+
+    Table 4's alternative-factor block prints "ours vs paper mark" without the scored
+    cells' " / ", so the scorer skips these; they are the ablation the reversal ambiguity
+    (REVIEW_NOTES section 51) needs, since the block's score depends on which series the
+    paper's own factor is. The scored rows above use the driver's ``--reversal-factor``.
+    """
+    path = out_dir / "table7_reversal_alternative.csv"
+    if not path.exists() or TABLE7_REGRESSION_ROWS[0] not in frame.index:
+        return []
+    alt = pd.read_csv(path, index_col=0)
+    label, scored_name = _reversal_names(reversal_factor)
+    lines = ["", f"### The same block with {label} in the reversal column (unscored)", "",
+             f"The scored rows above use {scored_name}. These are the same 56 cells with the",
+             "other series; marked only for comparison, they do not count.", "",
+             "| statistic | " + " | ".join(PORTFOLIOS) + " |",
+             "|---|" + "---|" * len(PORTFOLIOS)]
+    alt_marks, scored_marks = [], []
+    for key in TABLE7_REGRESSION_ROWS:
+        cells = []
+        for p in PORTFOLIOS:
+            ours, paper = float(alt.loc[key, p]), PAPER_TABLE7[p][key]
+            mark = _mark(ours, paper)
+            alt_marks.append(mark)
+            scored_marks.append(_mark(float(frame.loc[key, p]), paper))
+            fmt = (lambda v: f"{100 * v:.2f}%") if key in TABLE7_PCT else (lambda v: f"{v:.3g}")
+            cells.append(f"{fmt(ours)} vs {fmt(paper)} {mark}")
+        lines.append(f"| {key} | " + " | ".join(cells) + " |")
+        side, name = key.split(": ", 1)
+        if name == "r2":
+            continue
+        t_key = f"{side}: t_{name}"
+        t_cells = []
+        for p in PORTFOLIOS:
+            ours_t = float(alt.loc[t_key, p])
+            paper_t = PAPER_TABLE7_T[p][key]
+            mark = _mark(ours_t, paper_t)
+            alt_marks.append(mark)
+            scored_marks.append(_mark(float(frame.loc[t_key, p]), paper_t))
+            t_cells.append(f"{ours_t:.2f} vs {paper_t:.2f} {mark}")
+        lines.append(f"| t: {key} | " + " | ".join(t_cells) + " |")
+
+    def points(marks: list[str]) -> float:
+        return marks.count("✓") + 0.5 * marks.count("~")
+
+    lines += ["", (f"With {label} these {len(alt_marks)} regression cells score "
+               f"{points(alt_marks):.1f} of {len(alt_marks)}, against "
+               f"{points(scored_marks):.1f} with {scored_name}."), ""]
+    return lines
 
 
 def _tally_line(tally: list) -> str:
@@ -1453,6 +2590,35 @@ def _short_weight_header(short_weights: str) -> tuple[list[str], list[str]]:
             "short by prod(1 - r), and REVIEW_NOTES section 29 compares the two.",
         ]
     return portfolio, disclosure
+
+
+def _table5b_note() -> list[str]:
+    """The conventions Table 5 Panel B's section states (REVIEW_NOTES section 62).
+
+    Prose, not a table row: the scorer counts a cell only in a markdown table row
+    that holds an "ours / paper" body, so a note cannot be mistaken for one.
+    """
+    return [
+        "The daily series is the monthly series' own object one level down: each trading",
+        "day carries the equal-weighted mean over the cohorts trading that day of the",
+        "cohort's daily fully-invested return, the Jegadeesh-Titman overlap average at",
+        "daily frequency, and a day on which a cohort holds no position is skipped there",
+        "exactly as a NaN month is skipped in the monthly average. The cohort cache stores",
+        "that series since format 7, so the block is reproducible from the cache alone.",
+        "Every row is a function of the daily returns, so none of the nine repeats a",
+        "monthly row of Table 5 Panel A or Table 1 Panel B. Percentiles are linearly",
+        "interpolated (pandas' default, as in Panel A) and serial correlation is the lag-1",
+        "autocorrelation of consecutive trading days; the paper states neither estimator.",
+        "The paper prints the 101-120 serial correlation as 0.00, a rounded zero, where a",
+        "ratio is undefined, so that cell is marked on whether ours prints the same two",
+        "decimals. The top five, top twenty and 101-120 columns agree within a few percent",
+        "on every row. The \"all\" column is the loosest: its daily standard deviation is",
+        "0.191% against the paper's 0.169%, 1.13 times, and each quantile moves with it",
+        "(that gap was 1.44 times before the position-weighted short, REVIEW_NOTES 29).",
+        "That is the inconsistency COVERAGE.md item 4 records inside the paper itself,",
+        "where its monthly \"all\" standard deviation is 9.3 of its own daily units while",
+        "the other three columns imply 4-7; it is reported, not adjusted.",
+    ]
 
 
 def _monthly_series(frame: pd.DataFrame, wait: int, portfolio: str, capital: str) -> pd.Series:
@@ -1687,12 +2853,78 @@ def _best_offset(joined: pd.DataFrame) -> int:
     return best
 
 
+def _reversal_factor_header(reversal_factor: str) -> list[str]:
+    """The check header's description of the scored reversal factor."""
+    if reversal_factor == "losers_only":
+        return [
+            "The scored five-factor block's reversal factor is our reading, not the paper's",
+            "stated definition. The paper's own series is unidentified: its printed statistics",
+            "pin a 2.19%/month premium at 7.23% monthly volatility, a before-1989 standard",
+            "deviation of 0.0723, and Table 8 Panel A loadings that need a factor correlated",
+            "+0.81 with the market and +0.79 with SMB, which no long-short construction",
+            "reaches (REVIEW_NOTES section 51). The scored rows use the equal-weighted bottom",
+            "three prior-month deciles less the T-bill instead: standard deviation 0.0685",
+            "before 1989, correlations +0.84 with the market and +0.77 with SMB, premium",
+            "1.30%/month against the implied 2.19%. That is a hypothesis that the paper's",
+            "factor lacks its short leg, i.e. an error in the paper, not a settled reading",
+            "(REVIEW_NOTES section 61). French's ST_Rev is printed unscored below;",
+            "--reversal-factor st_rev restores SCORE_LOG.md row 18's block (262.0).",
+        ]
+    if reversal_factor == "csv":
+        name = Path(REVERSAL_CSV).name if REVERSAL_CSV else "the named CSV"
+        return [
+            "The scored five-factor block's reversal factor is the candidate series in",
+            f"`{name}` (`--reversal-factor csv --reversal-csv`), one construction of the",
+            "p. 813 sentence and footnote 7 chosen by its distance to the standard deviation",
+            "and four correlations Table 8's own arithmetic implies in both subperiods",
+            "(contract Pb; REVIEW_NOTES section 73, claims/REVERSAL_SUBPERIODS.md). It is a",
+            "candidate reading measured here, not a change of default: the losers-only",
+            "series is printed unscored below, and the default remains it",
+            "(--reversal-factor losers_only: SCORE_LOG.md row 20).",
+        ]
+    return [
+        "The scored five-factor block uses French's ST_Rev, the long-short reversal factor the",
+        "text describes (SCORE_LOG.md row 18); the losers-only series the paper's Table 8",
+        "arithmetic implies is printed unscored below (--reversal-factor losers_only, the",
+        "default since row 20, scores it instead: REVIEW_NOTES section 61).",
+    ]
+
+
+def _factor_vintage_header(factor_vintage: str) -> list[str]:
+    """The check header's description of the vintage of French's factors the regressions use."""
+    if factor_vintage == "2005":
+        return [
+            "The five factors are French's 2005 archives, the vintage the paper had: the",
+            "Internet Archive's captures of 30 September and 29 October 2005",
+            "(`F-F_Research_Data_Factors.zip`, `F-F_Momentum_Factor.zip`), committed whole",
+            "under `data/raw/french_vintage_2005` with their provenance. They reproduce",
+            "Table 8's printed factor standard deviations; the files downloaded today do not,",
+            "HML's after-1988 standard deviation being 7.8% short (REVIEW_NOTES section 72).",
+            "The prior-month deciles the reversal series is built from are today's: the",
+            "earliest archived prior-1-0 file is from 2007 and matches them.",
+        ]
+    return [
+        "The five factors are French's files as downloaded today (`data/raw/french`), not the",
+        "2005 vintage the paper used; `--factor-vintage 2005` restores it, and REVIEW_NOTES",
+        "section 72 shows that vintage reproducing Table 8's printed factor standard",
+        "deviations. The prior-month deciles the reversal series is built from are today's.",
+    ]
+
+
 def write_replication_check(out_dir: Path, fig_dir: Path, universe: str,
-                            short_weights: str) -> Path:
-    """Compare Figures 1 and 4 and Tables 1-4, 5A, 7 and 8 with the paper; writes the check."""
+                            short_weights: str,
+                            table9a: pd.DataFrame | None = None,
+                            table9b: pd.DataFrame | None = None,
+                            table6: pd.DataFrame | None = None,
+                            delist100: pd.Series | None = None,
+                            reversal_factor: str = "losers_only") -> Path:
+    """Compare Figures 1 and 4 and Tables 1-4, 5 Panels A and B, 7 and 8 with the paper."""
     portfolio, disclosure = _short_weight_header(short_weights)
+    reversal = _reversal_factor_header(reversal_factor)
+    vintage_note = _factor_vintage_header(vintage())
     lines = [
-        f"# Replication check: GGR (2006) Figures 1 and 4, Tables 1-4, 5 Panel A, 7 and 8 ({universe})",
+        (f"# Replication check: GGR (2006) Figures 1 and 4, Tables 1-4, 5 Panels A and B, "
+         f"6, 7 and 8 ({universe})"),
         "",
         "Cells show ours / paper. ✓ within 10% of the paper, ~ within 25%, ✗ further.",
         "",
@@ -1707,7 +2939,10 @@ def write_replication_check(out_dir: Path, fig_dir: Path, universe: str,
         "matched with another security of its own issuer (same CRSP permco, e.g. two",
         "share classes). The paper states none of these three exclusions beyond",
         "screening out stocks with a no-trade day; REVIEW_NOTES section 18 gives the",
-        "evidence, and SCORE_LOG.md the score without them. Telephone utilities are",
+        "evidence, and claims/CONVENTIONS_865.md prices every convention this header",
+        "names on all 865 cells: its row 9 - same issuer allowed, the near-frozen filter",
+        "off, the trigger's sigma taken about the mean instead of the RMS about zero -",
+        "gains 6.5 and is not adopted. Telephone utilities are",
         "SIC 4811, the 1972 telephone code that CRSP carries before 1987 (4810 and the",
         "1987 codes 4812-4819 are Industrials); the paper gives no SIC ranges, and",
         "REVIEW_NOTES section 20 gives the evidence. Waste management (SIC",
@@ -1722,19 +2957,22 @@ def write_replication_check(out_dir: Path, fig_dir: Path, universe: str,
         "such condition, and dropping it changes no mark (REVIEW_NOTES section 47).",
         "Tables 1 and 3 compound the long and the short book to monthly returns",
         "and then subtract, as the paper's own Table 1 = Table 7 identity requires",
-        "(pp. 807 and 821; REVIEW_NOTES sections 33 and 54).",
+        "(pp. 807 and 821; REVIEW_NOTES sections 33 and 54). Table 5 Panel B is the same",
+        "overlap average at daily frequency (``DAILY_CAPITAL``), percentiles linearly",
+        "interpolated and serial correlation the lag-1 autocorrelation of consecutive",
+        "trading days, neither of which the paper states; REVIEW_NOTES section 62 gives the",
+        "marks, the daily cache's construction and the paper's own \"all\" daily column,",
+        "which does not agree with its monthly \"all\" and is reported, not adjusted.",
         *disclosure,
         "",
-        "The paper's five-factor block rests on a reversal factor it does not name: its",
-        "printed statistics pin a 2.19%/month premium at 7.23% monthly volatility, and the",
-        "Table 8 Panel A loadings need a reversal factor whose variance Mkt-RF/SMB/HML/UMD",
-        "already explain 95% of, where French ST_Rev is 26% explained. That is implausible",
-        "rather than contradictory -- PAPER_CONSISTENCY.md reports the arithmetic, the",
-        "joint test and its rounding sensitivity, and `scripts/paper_consistency.py`",
-        "reproduces them -- so a ✗ in those rows is a gap here as much as in the source.",
+        *reversal,
+        "",
+        *vintage_note,
+        "",
+        "The same arithmetic is in GAPS.md and `scripts/paper_consistency.py`.",
         "",
         "The score total, its history and how it is counted live in SCORE_LOG.md. The",
-        "open gaps are in OPEN_QUESTIONS.md; the 1999 NBER draft is scored separately",
+        "open gaps are in GAPS.md; the 1999 NBER draft is scored separately",
         "in EDITION_1999.md.",
         "",
     ]
@@ -1817,7 +3055,7 @@ def write_replication_check(out_dir: Path, fig_dir: Path, universe: str,
             for i, stat in enumerate(PAPER_TABLE3_ROWS):
                 cells = []
                 for p in ports:
-                    key = (sector, p, "employed")
+                    key = (sector, p, T3_FI)
                     ours = float(t3.loc[key, stat]) if key in t3.index else np.nan
                     cells.append(_cell(ours, ports[p][i], stat in PCT_STATS, tally))
                 lines.append(f"| {stat} | " + " | ".join(cells) + " |")
@@ -1827,15 +3065,27 @@ def write_replication_check(out_dir: Path, fig_dir: Path, universe: str,
         marks += tally
 
     base291 = list(marks)
+    perf7 = []
     if (out_dir / "table7.csv").exists():
         t7 = pd.read_csv(out_dir / "table7.csv", index_col=0)
         tally = []
+        perf7 = []
         title = "Table 7 (long and short books, one-day wait)"
-        lines += _portfolio_table(t7, PAPER_TABLE7, title, TABLE7_PCT, tally)
-        lines += ["", _tally_line(tally), ""]
+        perf7 = []
+        lines += _portfolio_table(t7, TABLE7_PAPER_PERFORMANCE, title, TABLE7_PCT, perf7)
+        rest7 = []
+        lines += _table7_regression_block(t7, rest7)
+        tally = perf7 + rest7
+        lines += ["", _tally_line(tally), "",
+                  "The regression block is each book's own monthly return less the 30-day",
+                  "bill (Table 7's note, p. 821) on the same five factors Table 4 uses, with",
+                  "Newey-West t-statistics at six lags; coefficients, R2 and the t-statistics are",
+                  "scored (SCORE_LOG row 25).",
+                  ""]
+        lines += _table7_reversal_block(out_dir, t7, reversal_factor)
         summary.append("Table 7: " + _tally_line(tally))
         marks += tally
-    base323 = list(marks)
+    base323 = list(base291) + perf7
 
     risk_note = [
         "## Tables 4, 5 Panel A and 8 and Figure 4: conventions",
@@ -1848,9 +3098,9 @@ def write_replication_check(out_dir: Path, fig_dir: Path, universe: str,
         "regressions are OLS on French's market, SMB, HML, momentum and short-term reversal",
         "factors, and on Ibbotson's market, small-stock, default and horizon premia (Ibbotson's",
         "bond returns from Goyal and Welch's data, the small-stock series rebuilt from CRSP by",
-        "its recipe; coefficients and R2 are scored, the paper's Newey-West t-statistics and factor",
-        "standard deviations are not; the intercepts' t-statistics, six lags, are printed beside",
-        "the paper's). Table 4's equity-premium column is French's Mkt-RF, the regressions' market",
+        "its recipe; coefficients, R2 and the Newey-West t-statistics at six lags are scored,",
+        "and its factor standard deviations are too (under Table 8). Table 4's equity-premium column is",
+        "French's Mkt-RF, the regressions' market",
         "factor, which Table 8 names the \"U.S. equity risk-premium\" (REVIEW_NOTES section 50).",
         "French's reversal factor is losers minus winners, the sign",
         "of the paper's printed loadings. The paper built its own reversal factor (French's",
@@ -1864,21 +3114,34 @@ def write_replication_check(out_dir: Path, fig_dir: Path, universe: str,
         "",
     ]
     lines += risk_note
-    for fname, paper_tab, title, pct, digits in (
-        ("table4.csv", PAPER_TABLE4, "Table 4 (systematic risk, one-day wait)", TABLE4_PCT, 3),
-        ("table5_var.csv", PAPER_TABLE5, "Table 5 Panel A (monthly value at risk)",
-         {"var_1", "var_5", "var_10", "var_25"}, 3),
-        ("table8_subperiod.csv", PAPER_TABLE8, "Table 8 (subperiod analysis)", TABLE8_PCT, 3),
+    for fname, paper_tab, paper_t, title, pct, digits, spec in (
+        ("table4.csv", PAPER_TABLE4, PAPER_TABLE4_T,
+         "Table 4 (systematic risk, one-day wait)", TABLE4_PCT, 3, {}),
+        ("table5_var.csv", PAPER_TABLE5, None,
+         "Table 5 Panel A (monthly value at risk)",
+         {"var_1", "var_5", "var_10", "var_25"}, 3, {}),
+        ("table5b_daily.csv", PAPER_TABLE5B, None,
+         "Table 5 Panel B (daily value at risk)",
+         TABLE5B_PCT, 3, {"serial_correlation": ".2f"}),
+        ("table8_subperiod.csv", PAPER_TABLE8, PAPER_TABLE8_T,
+         "Table 8 (subperiod analysis)", TABLE8_PCT, 3, {}),
     ):
         if not (out_dir / fname).exists():
-            lines += [f"## {title}", "", "Not run (needs the one-day-wait series from the",
-                      "`tables` step with `--wait 1`).", ""]
+            why = ("Not run (needs a cohort cache at format 7, rebuilt with `--force`, and",
+                   "the one-day-wait series: `--wait 1`).") if fname == "table5b_daily.csv" else (
+                "Not run (needs the one-day-wait series from the", "`tables` step with `--wait 1`).")
+            lines += [f"## {title}", "", *why, ""]
             continue
         raw = pd.read_csv(out_dir / fname, index_col=0)
-        frame = raw.reindex(list(paper_tab["top5"]))
+        t_keys = [_t_key(s) for s in paper_tab["top5"] if s in paper_t] if paper_t else []
+        frame = raw.reindex(list(paper_tab["top5"]) + t_keys)
         tally = []
-        lines += _portfolio_table(frame, paper_tab, title, pct, tally, digits=digits)
-        lines += _alpha_t_rows(raw, title)
+        if paper_t is None:
+            lines += _portfolio_table(frame, paper_tab, title, pct, tally, digits=digits,
+                                      spec=spec)
+        else:
+            lines += _coefficient_table(frame, paper_tab, paper_t, title, pct, tally,
+                                        digits=digits, spec=spec)
         if title.startswith("Table 4") and (out_dir / "table4_equity_premium.csv").exists():
             ep = pd.read_csv(out_dir / "table4_equity_premium.csv", index_col=0).iloc[:, 0]
             lines += ["", "| statistic | French's Mkt-RF (ours / paper) |", "|---|---|"]
@@ -1886,6 +3149,28 @@ def write_replication_check(out_dir: Path, fig_dir: Path, universe: str,
                 lines.append(f"| equity premium: {stat} | "
                              + _cell(float(ep.get(stat, np.nan)), paper,
                                      stat in {"mean", "std"}, tally, digits=digits) + " |")
+        if fname == "table5b_daily.csv":
+            lines += ["", *_table5b_note()]
+        if title.startswith("Table 8") and (out_dir / "table8_factor_sd.csv").exists():
+            fsd = pd.read_csv(out_dir / "table8_factor_sd.csv", index_col=0)
+            lines += ["", "Table 8's published \"Factor sd\" column: these cells measure the factor",
+                      "inputs the regressions above are built from, over the same months.",
+                      "The first four are French's series at the vintage the run names: at the",
+                      "paper's 2005 files they reproduce the printed values (REVIEW_NOTES",
+                      "sections 49 and 71), today's HML being 7.8% short after 1988; the reversal",
+                      "cell is the hypothesis of section 61 (the",
+                      "losers-only series), which is why its after-1988 value is the one",
+                      "that misses.", "",
+                      "| statistic | before 1989 | after 1988 |", "|---|---|---|"]
+            for name in FACTORS:
+                cells = []
+                for half in ("pre", "post"):
+                    ours = float(fsd.loc[name, half])
+                    paper = PAPER_TABLE8_FACTOR_SD[half][name]
+                    mark = _mark(ours, paper)
+                    tally.append(mark)
+                    cells.append(f"{ours:.5f} / {paper:.5f} {mark}")
+                lines.append(f"| factor sd: {name} | " + " | ".join(cells) + " |")
         lines += ["", _tally_line(tally), ""]
         summary.append(f"{title.split(' (')[0]}: " + _tally_line(tally))
         marks += tally
@@ -1902,7 +3187,196 @@ def write_replication_check(out_dir: Path, fig_dir: Path, universe: str,
         summary.append("Figure 4: " + _tally_line(tally))
         marks += tally
 
-    lines += _reversal_alternative_section(out_dir, marks)
+    text_tally: list = []
+    lines += [
+        "## Numbers printed in the text",
+        "",
+        "The paper prints three result numbers outside its tables: the all-pair",
+        "portfolio's average size in the captions of Tables 1, 5, 8 and 9 (\"The",
+        "average number of pairs in the all-pair portfolio is 2057\"), section 1.2's",
+        "hold-out sentence (p. 800), and footnote 4's delisting result (p. 804). Each",
+        "is scored once here.",
+        "",
+        "| check | ours / paper |",
+        "|---|---|",
+    ]
+    uni_path = out_dir / "universe_summary.csv"
+    if uni_path.exists():
+        uni = pd.read_csv(uni_path, index_col=0)["value"]
+        ours_pairs = float(uni["mean_pairs_per_cohort"])
+        paper_pairs = PAPER_UNIVERSE["mean_pairs_per_cohort"]
+        mark = _mark(ours_pairs, paper_pairs)
+        text_tally.append(mark)
+        lines.append("| the average number of pairs in the all-pair portfolio | "
+                     f"{ours_pairs:.0f} / {paper_pairs:.0f} {mark} |")
+    hold_path = out_dir / "holdout_1999.csv"
+    if hold_path.exists():
+        hold = pd.read_csv(hold_path, index_col=0)
+        lines += [
+            "",
+            "Section 1.2's hold-out sentence (top 20, fully invested, 1999-2002): the",
+            "scored reading is the no-wait rule, as REVIEW_NOTES section 17 recorded",
+            "before these cells were scored; annual figures are twelve times the monthly",
+            "mean and the square root of twelve times the monthly standard deviation,",
+            "and the t-statistic is the six-lag Newey-West t of the monthly mean.",
+            "",
+            "| statistic | ours / paper |",
+            "|---|---|",
+        ]
+        labels = {"mean_annual": "annual excess return",
+                  "sd_annual": "annual standard deviation",
+                  "t_stat": "Newey-West t-statistic"}
+        for key, label in labels.items():
+            lines.append(f"| {label} | "
+                         + _cell(float(hold.loc["wait0", key]), PAPER_HOLDOUT[key],
+                                 key != "t_stat", text_tally) + " |")
+        if "wait1" in hold.index:
+            alt = hold.loc["wait1"]
+            lines += ["",
+                      ("One-day-wait reading, unscored: "
+                      f"{100 * float(alt['mean_annual']):.1f}% vs {100 * PAPER_HOLDOUT['mean_annual']:.1f}%; "
+                      f"{100 * float(alt['sd_annual']):.1f}% vs {100 * PAPER_HOLDOUT['sd_annual']:.1f}%; "
+                      f"t {float(alt['t_stat']):.1f} vs {PAPER_HOLDOUT['t_stat']:.2f}.")]
+    if delist100 is not None:
+        lines += [
+            "",
+            "Footnote 4's delisting assumption (top 20, no wait), from the cache",
+            "--delist-cache names (make delist100 builds it with --long-delisting-loss):",
+            "",
+            "| statistic | ours / paper |",
+            "|---|---|",
+        ]
+        for key, label in (("mean", "mean monthly return"),
+                           ("std", "standard deviation")):
+            lines.append(f"| {label} | "
+                         + _cell(float(delist100[key]), PAPER_FOOTNOTE4[key], True,
+                                 text_tally) + " |")
+    lines += ["", _tally_line(text_tally), ""]
+    summary.append("Numbers printed in the text: " + _tally_line(text_tally))
+    marks += text_tally
+
+    if table9a is not None:
+        tally9a: list = []
+        lines += [
+            "## Table 9 Panel A (top three size deciles, one-day wait)",
+            "",
+            "Section 3.9 (p. 824): pairs formed only from stocks in the top three size",
+            "deciles. The rows are Table 1 Panel B's statistics over that screened",
+            "universe, from the cache --table9a-cache names (make table9a builds it).",
+            "",
+            "The printed skewness and kurtosis rows are scored as printed: our skewness",
+            "against the row labelled Skewness, our kurtosis against Kurtosis. Those two",
+            "rows contradict Table 1's (COVERAGE.md, where the published version",
+            "contradicts itself, 1: the row labelled Kurtosis reads 0.02-1.77 and the",
+            "one labelled Skewness 7.01-11.67). The swapped reading is printed below as",
+            "an unscored diagnostic; the paper's values are the paper's.",
+            "",
+            "| statistic | " + " | ".join(PORTFOLIOS) + " |",
+            "|---|" + "---|" * len(PORTFOLIOS),
+        ]
+        for stat in PAPER_TABLE9A["top5"]:
+            cells = []
+            for p in PORTFOLIOS:
+                ours = float(table9a.loc[stat, p])
+                cells.append(_cell(ours, PAPER_TABLE9A[p][stat],
+                                   stat in PCT_STATS, tally9a))
+            lines.append("| " + stat + " | " + " | ".join(cells) + " |")
+        lines += ["", "The two transposed rows, read swapped (unscored):", ""]
+        lines.append("| statistic | " + " | ".join(PORTFOLIOS) + " |")
+        lines.append("|---|" + "---|" * len(PORTFOLIOS))
+        for stat in ("skew", "kurtosis"):
+            other = "kurtosis" if stat == "skew" else "skew"
+            cells = []
+            for p in PORTFOLIOS:
+                ours = float(table9a.loc[stat, p])
+                cells.append(f"{ours:.2f} vs {PAPER_TABLE9A[p][other]:.2f}")
+            label = TABLE9A_SWAP_LABELS[stat]
+            lines.append(f"| {stat} vs printed {label} | " + " | ".join(cells) + " |")
+        lines += ["", _tally_line(tally9a), ""]
+        summary.append("Table 9 Panel A: " + _tally_line(tally9a))
+        marks += tally9a
+
+    if table9b is not None:
+        tally9b: list = []
+        lines += [
+            "## Table 9 Panel B (short recalls on high volume, one-day wait)",
+            "",
+            "Section 3.9 (pp. 824-825): recalls on the short positions, and the closing",
+            "of the pair, on days with high volume -- daily volume more than one",
+            "standard deviation above its average over the 18 months (both split",
+            "adjusted). High volume is the paper's proxy for divergence of opinion.",
+            "The note fixes the rule: \"Panel B reports the summary statistics for the",
+            "rule that waits one day before opening and closing the position\", 474",
+            "monthly observations, Newey-West six lags, absolute kurtosis.",
+            "",
+            "The reading is the same-day recall close (REVIEW_NOTES section 74,",
+            "claims/TABLE9B_READINGS.md): a recalled short ends the pair at the close of",
+            "the flagged day itself, also under the one-day wait, because the text has",
+            "the closing happen \"on days with high volume\" and a recall is forced",
+            "rather than a trading decision the wait applies to. The pair is re-entered",
+            "only after the spread has come back inside two sigma and a *new* divergence",
+            "fires. This reading scores 21.0 of 44 against 18.0 for the next-day close",
+            "(section 58's reading, --table9b-cache data/processed/replication/",
+            "vol_common_recalls), and like every reading measured it raises the mean",
+            "against Table 1 Panel B where the paper's falls by 4-13 bp, so claim 20 (b)",
+            "stays unreplicated. The rows are Table 1 Panel B's statistics over the",
+            "per-cohort monthly series in the cache --table9b-cache names (make table9b",
+            "builds it with --reading R1), with the committed series supplying the last row.",
+            "",
+            "| statistic | " + " | ".join(PORTFOLIOS) + " |",
+            "|---|" + "---|" * len(PORTFOLIOS),
+        ]
+        for stat in PAPER_TABLE9B["top5"]:
+            cells = []
+            for p in PORTFOLIOS:
+                ours = float(table9b.loc[stat, p])
+                cells.append(_cell(ours, PAPER_TABLE9B[p][stat],
+                                   stat in PCT_STATS, tally9b))
+            label = {"mean": "mean (fully invested)", "committed_mean": "mean (committed)"}
+            lines.append(f"| {label.get(stat, stat)} | " + " | ".join(cells) + " |")
+        lines += ["", _tally_line(tally9b), ""]
+        summary.append("Table 9 Panel B: " + _tally_line(tally9b))
+        marks += tally9b
+    if table6 is not None:
+        tally6: list = []
+
+        lines += [
+            "## Table 6 (random pairs sorted on prior one-month return)",
+            "",
+            "Section 3.6 (pp. 818-819): at each true-pair opening the bootstrap",
+            "replaces the two legs with random securities drawn from the same decile",
+            "of the previous month's return, opens and closes them with the true trade",
+            "and averages each cell over the 200 replications. Our cells are our own",
+            "draws against our own true-pair series from the same cache, not the",
+            "paper's measurement, so this is the least comparable block in the check",
+            "(REVIEW_NOTES section 65). The values come from the per-cohort outputs",
+            "that --table6-cache names (make table6 runs the bootstrap).",
+            "",
+            "The caption (p. 819) says 'value-weighted portfolios of n pairs', so the",
+            "committed rows are the value-weighted book scaled by the share of pairs",
+            "open (the book-share reading, REVIEW_NOTES section 75): that literal-to-",
+            "book-share choice is Table 6's own, and the literal series stays the",
+            "definition for Tables 1, 3, 7 and 9, whose captions do not say",
+            "'value-weighted portfolios'.",
+            "",
+            TABLE6_HEADER,
+        ]
+        for panel, panel_label in TABLE6_PANELS.items():
+            for capital, block_label in TABLE6_BLOCKS.items():
+                for stat, stat_label in TABLE6_STATS.items():
+                    key = f"{panel}|{capital}|{stat}"
+                    cells = [
+                        _cell(float(table6.loc[key, port]), PAPER_TABLE6[key][port],
+                              False, tally6, sig=5)
+                        for port in TABLE6_PORTS
+                    ]
+                    label = f"{panel_label}, {block_label}: {stat_label}"
+                    lines.append(f"| {label} | " + " | ".join(cells) + " |")
+        lines += ["", _tally_line(tally6), ""]
+        summary.append("Table 6: " + _tally_line(tally6))
+        marks += tally6
+
+    lines += _reversal_alternative_section(out_dir, marks, reversal_factor)
 
     if any(marks):
         summary.append(_score_line(marks))
@@ -1976,7 +3450,8 @@ def job_to_shard(job: Job) -> dict:
 
 def job_from_shard(data: dict) -> Job:
     """The inverse of :func:`job_to_shard`."""
-    return Job(**{**data, "end": tuple(data["end"]), "waits": tuple(data["waits"])})
+    return Job(**{**data, "end": tuple(data["end"]), "waits": tuple(data["waits"]),
+                  "extra_capitals": tuple(data.get("extra_capitals") or ())})
 
 
 def cohort_status_file(shard_dir: Path, job: Job) -> Path:
@@ -2285,6 +3760,57 @@ def parse_month(text: str) -> tuple[int, int]:
     return int(y), int(m)
 
 
+def _share_classes_path(reading: str, path: str | None) -> str | None:
+    """The permno map a ``--share-classes wide`` run reads (None: no widening)."""
+    if reading == "common":
+        return None
+    return path or str(ROOT / "data" / "raw" / "shareclass_sb_ad.parquet")
+
+
+def _share_classes_stamp(path: str | None) -> str | None:
+    """The map's identity for the cache stamp (12 hex digits), None without a map."""
+    if path is None or str(path).strip().lower() in ("", "none"):
+        return None
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()[:12]
+
+
+def _estimator_options(args) -> None:
+    """Point the moment tables at the requested estimator conventions (R10-B).
+
+    Four switches, each with the shipped reading as its default, so an
+    unswitched run is byte-identical: ``--moments`` (raw Pearson moments, the
+    reading the caption's "Absolute kurtosis is reported" asks for, p. 807),
+    ``--quantile-method`` (Table 5's percentiles), ``--sign-zero`` ("< 0", the
+    printed row label) and ``--nw-correction`` (Newey-West with or without the
+    n/(n-k) factor). ``--ibbotson-market`` is the fifth, in ``project.factors``.
+    """
+    set_moments(args.moments)
+    set_quantile_method(args.quantile_method)
+    set_sign_zero(args.sign_zero)
+    set_nw_correction(args.nw_correction)
+    set_ibbotson_market(args.ibbotson_market)
+
+
+def _capital_base_options(base: str) -> None:
+    """Point the tables at the requested fully-invested base (``--capital-base``).
+
+    ``book`` is the shipped reading and leaves every global untouched. ``count``
+    swaps in the payoff-count series the cache already holds; ``gross`` and
+    ``long`` are the two book-scaling bases, which have to be built, so they are
+    added to the cache's capital columns for this run only.
+    """
+    global T1_FI, T1_COMMITTED, T3_FI, EXTRA_CAPITALS
+    if base == "book":
+        return
+    if base == "count":
+        T1_FI, T1_COMMITTED, T3_FI = "employed_count", "committed_count", "employed_count"
+        return
+    name = "gross_base" if base == "gross" else "long_base"
+    T1_FI = name
+    T3_FI = name
+    EXTRA_CAPITALS = (name,)
+
+
 def formation_options(args: argparse.Namespace) -> dict:
     """The cache stamp's formation and engine options, each recorded with its value
     so that two builds differing in any setting never share a stamp."""
@@ -2299,8 +3825,27 @@ def formation_options(args: argparse.Namespace) -> dict:
     # Stamped only when on, so a default cache's stamp is unchanged.
     if getattr(args, "long_delisting_loss", False):
         options["long_delisting_loss"] = True
+    if getattr(args, "delist_last_px", "off") != "off":
+        options["delist_last_px"] = args.delist_last_px
     if getattr(args, "waste_sic", "industrials") != "industrials":
         options["waste_sic"] = args.waste_sic
+    if getattr(args, "trigger_mult", 2.0) != 2.0:
+        options["trigger_mult"] = args.trigger_mult
+    if getattr(args, "fresh_divergence", False):
+        options["fresh_divergence"] = True
+    # Stamped only for the bases that add a column to the cache: "count" selects
+    # a series every cache already holds, so it reads the default cache as is.
+    if getattr(args, "capital_base", "book") != "book" and EXTRA_CAPITALS:
+        options["capital_base"] = args.capital_base
+    if getattr(args, "demote_frozen", "none") != "none":
+        options["demote_frozen"] = args.demote_frozen
+        options["demote_frozen_share"] = args.demote_frozen_share
+    if getattr(args, "share_classes", "common") != "common":
+        options["share_classes"] = args.share_classes
+        digest = _share_classes_stamp(_share_classes_path(
+            args.share_classes, getattr(args, "share_classes_file", None)))
+        if digest:
+            options["share_classes_map"] = digest
     # A panel chosen with GGR_PROCESSED_DIR (another data vintage) is stamped by its
     # provenance file, so its cohorts never share a cache with the default panel's.
     source = processed_source_identity()
@@ -2376,9 +3921,122 @@ def main() -> None:
              "stock's value since the trade opened",
     )
     parser.add_argument(
+        "--trigger-mult", type=float, default=2.0, metavar="SIGMAS",
+        help="entry and exit band in formation sigmas (default 2.0, the paper's "
+             "2-sigma rule; 2.33 is the reading that reproduces the paper's printed "
+             "average trigger, REVIEW_NOTES sections 40 and 76)",
+    )
+    parser.add_argument(
+        "--demote-frozen", choices=("none", "one", "both"), default="none",
+        help="rank pairs whose leg(s) are frozen quotes after the rest, pool intact: "
+             "off (default), when either leg is frozen, or only when both are "
+             "(REVIEW_NOTES sections 40 and 77)",
+    )
+    parser.add_argument(
+        "--demote-frozen-share", type=float, default=0.90, metavar="SHARE",
+        help="a leg is frozen when its quote is unchanged on more than this share of "
+             "the formation window's days (default 0.90)",
+    )
+    parser.add_argument(
+        "--share-classes", choices=("common", "wide"), default="common",
+        help="the share filter of the formation universe: CRSP's ordinary common "
+             "shares only (default), or those plus the shares-of-beneficial-interest "
+             "and ADR classes the map names (REVIEW_NOTES section 77)",
+    )
+    parser.add_argument(
+        "--share-classes-file", default=None, metavar="PARQUET",
+        help="permno map --share-classes wide adds; default "
+             "data/raw/shareclass_sb_ad.parquet, the value none the shipped filter",
+    )
+    parser.add_argument(
+        "--moments", choices=("raw", "sample"), default="raw",
+        help="skewness and kurtosis of the moment rows: raw Pearson central moments "
+             "(default; the caption's 'Absolute kurtosis is reported', p. 807) or the "
+             "bias-corrected spreadsheet moments (contract R10-B)",
+    )
+    parser.add_argument(
+        "--quantile-method", choices=QUANTILE_METHODS, default="linear",
+        help="interpolation of Table 5's VaR percentiles: pandas' linear default (the "
+             "shipped reading) or another numpy method (contract R10-B)",
+    )
+    parser.add_argument(
+        "--sign-zero", choices=("strict", "nonpositive"), default="strict",
+        help="the 'Observations with excess return < 0' boundary: a strictly negative "
+             "month (default, the printed label) or also a zero month (R10-B)",
+    )
+    parser.add_argument(
+        "--nw-correction", choices=("none", "df"), default="none",
+        help="Newey-West standard errors without (default) or with statsmodels' n/(n-k) "
+             "small-sample factor; the paper states neither (contract R10-B)",
+    )
+    parser.add_argument(
+        "--ibbotson-market", choices=("geometric", "excess"), default="geometric",
+        help="Table 4's Ibbotson market leg: a geometric difference like the other three "
+             "premia (default) or the arithmetic S&P 500 minus T-bill the caption's "
+             "'in excess of' reads as (contract R10-B)",
+    )
+    parser.add_argument(
+        "--capital-base", choices=("book", "count", "gross", "long"), default="book",
+        help="the fully-invested series Tables 1, 3, 4, 5 Panel A and 8 and Figure 4 read: "
+             "the value-weighted books (default), the payoff counts sum(pi)/n_t, the "
+             "gross-book base 2 sum(dL-dS)/(sum L + sum S) or the long-book base "
+             "sum(dL-dS)/sum L (REVIEW_NOTES sections 25, 29 and 77)",
+    )
+    parser.add_argument(
+        "--cohort-weights", choices=("equal", "positions", "selected"), default="equal",
+        help="weight the overlapping cohorts equally (default, the Jegadeesh-Titman "
+             "average the paper describes) or by the pairs a cohort holds in each "
+             "month / by the pairs it selected (REVIEW_NOTES sections 27 and 76)",
+    )
+    parser.add_argument(
+        "--allow-missing-factors", action="store_true",
+        help="run the factor steps even when the French or Goyal-Welch files are Git LFS "
+             "pointers or missing, leaving their rows out (the old silent fallback: the "
+             "check then prints a score over 544 cells, not 865). Default: exit non-zero "
+             "and name the files.",
+    )
+    parser.add_argument(
+        "--panel-a-cohorts", choices=("complete", "all"), default="complete",
+        help="Table 2 Panel A's cross-cohort moments over the cohorts whose six-month "
+             "window completes inside the sample (default, as the row's 'per six-month "
+             "period' wording asks) or over all of them, censored windows included",
+    )
+    parser.add_argument(
+        "--fresh-divergence", action="store_true",
+        help="open only on a divergence inside the trading period: a pair whose "
+             "spread is already outside the band at the end of formation waits "
+             "until the spread returns inside it (default off)",
+    )
+    parser.add_argument(
+        "--reversal-factor", choices=("st_rev", "losers_only", "csv"), default="losers_only",
+        help="the scored reversal factor of the five-factor block: the losers-only series the "
+             "paper's Table 8 arithmetic implies (default), French's ST_Rev, the long-short "
+             "factor the text describes, or a series read from --reversal-csv (contract Pb; "
+             "REVIEW_NOTES section 73). The losers-only series is printed unscored",
+    )
+    parser.add_argument(
+        "--reversal-csv", default=None,
+        help="CSV with month and reversal columns giving the scored series when "
+             "--reversal-factor csv (REVIEW_NOTES section 73)",
+    )
+    parser.add_argument(
+        "--factor-vintage", choices=("2005", "current"), default="2005",
+        help="vintage of French's factors that Tables 4, 7 and 8 and Figure 4 regress on: the "
+             "2005 archives the paper used, data/raw/french_vintage_2005 (default; "
+             "REVIEW_NOTES section 72), or the files downloaded today",
+    )
+    parser.add_argument(
         "--size-deciles-top", type=_decile_count, default=None,
         help="form pairs only among stocks in the largest N CRSP size deciles at the "
              "formation end (Table 9 Panel A uses 3); default off (no size screen)",
+    )
+    parser.add_argument(
+        "--delist-last-px", choices=("off", *_DELIST_LAST_PX_CLASSES), default="off",
+        help="read the delisting sentence of p. 804 by delisting-code class: the chosen "
+             "classes book the last available price on their terminal row (no delisting "
+             "return), every other class keeps CRSP's return. merge = 2xx mergers, "
+             "nondistress = mergers and exchange/listing moves, all = every class; "
+             "default off, the shipped per-row rule (REVIEW_NOTES 94)",
     )
     parser.add_argument(
         "--long-delisting-loss", action="store_true",
@@ -2399,6 +4057,34 @@ def main() -> None:
         help="build/aggregate every Nth cohort (deterministic samples for benchmarks)",
     )
     parser.add_argument(
+        "--table9a-cache", default=None, metavar="DIR",
+        help="screened cohort cache (--size-deciles-top 3) the check reads Table 9 "
+             "Panel A from; default data/processed/replication/vol_common_top3, "
+             "the value none leaves the section out",
+    )
+    parser.add_argument(
+        "--table9b-cache", default=None, metavar="DIR",
+        help="recall cohort cache (scripts/claims/table9b_recalls.py run --out-root "
+             "DIR) the check reads Table 9 Panel B from; default "
+             "data/processed/replication/vol_common_recalls_r1, the value none leaves "
+             "the section out",
+    )
+    parser.add_argument(
+        "--table6-cache", default=None, metavar="DIR",
+        help="per-cohort outputs of scripts/claims/table6_random_pairs.py --mode run "
+             "--committed-capital book-share (the caption's value-weighted "
+             "portfolios) that the check reads Table 6 from; default "
+             "data/processed/replication/vol_common_t6_book, the value none leaves "
+             "the section out",
+    )
+    parser.add_argument(
+        "--delist-cache", default=None, metavar="DIR",
+        help="cohort cache built with --long-delisting-loss, which the check reads "
+             "footnote 4's two cells from; default "
+             "data/processed/replication/vol_common_delist100, the value none leaves "
+             "them out",
+    )
+    parser.add_argument(
         "--cache-root", default=None,
         help="redirect the cohort cache (and its stamp) to this directory",
     )
@@ -2411,6 +4097,13 @@ def main() -> None:
         help="internal: build the cohorts of one shard file and exit (see run_jobs)",
     )
     args = parser.parse_args()
+    _capital_base_options(args.capital_base)
+    _estimator_options(args)
+    set_vintage(args.factor_vintage)
+    global REVERSAL_CSV
+    REVERSAL_CSV = args.reversal_csv
+    if args.reversal_factor == "csv" and not args.reversal_csv:
+        raise SystemExit("--reversal-factor csv needs --reversal-csv PATH")
     if args.build_shard is not None:
         raise SystemExit(main_shard(args))
     if args.workers is None:
@@ -2423,11 +4116,14 @@ def main() -> None:
     unknown = sorted(set(steps) - set(STEPS))
     if unknown:
         raise SystemExit(f"unknown steps: {unknown}; choose from {STEPS}")
+    guard_factor_inputs(steps, args.allow_missing_factors)
     start = parse_month(args.start)
     end = parse_month(args.end)
     waits = tuple(int(w) for w in args.wait.split(","))
     continued = args.normalization == "continued"
     global CACHE_ROOT_OVERRIDE, OUT_ROOT_OVERRIDE, FORMATION_OPTIONS
+    global COHORT_WEIGHTS, _COHORT_WEIGHTS
+    _capital_base_options(args.capital_base)
     exclude_same_issuer = args.same_issuer == "exclude"
     FORMATION_OPTIONS = formation_options(args)
     cohorts_root = None
@@ -2437,6 +4133,7 @@ def main() -> None:
     if args.out_root:
         OUT_ROOT_OVERRIDE = Path(args.out_root).resolve()
     args.cohorts_root = cohorts_root
+    share_classes_file = _share_classes_path(args.share_classes, args.share_classes_file)
     cohorts = cohort_months(start, end)
     if args.stride > 1:
         cohorts = cohorts[:: args.stride]
@@ -2444,6 +4141,9 @@ def main() -> None:
         cohorts = cohorts[: args.limit_cohorts]
     out_dir = tables_dir(args.universe)
     fig_dir = figures_dir(args.universe)
+    if args.cohort_weights != "equal" and ("tables" in steps or "table3" in steps):
+        COHORT_WEIGHTS = args.cohort_weights
+        _COHORT_WEIGHTS = cohort_weight_table(args.cohort_weights, cohorts, args.universe, waits)
 
     if "tables" in steps or "table3" in steps:
         if args.aggregate_only:
@@ -2466,7 +4166,14 @@ def main() -> None:
                     exclude_same_issuer, args.max_stale_share, args.telephone_sic,
                     args.trigger_sigma, args.short_weights,
                     size_deciles_top=args.size_deciles_top,
-                    long_delisting_loss=args.long_delisting_loss, waste_sic=args.waste_sic)
+                    long_delisting_loss=args.long_delisting_loss, waste_sic=args.waste_sic,
+                    delist_last_px=args.delist_last_px,
+                    trigger_mult=args.trigger_mult,
+                    fresh_divergence=args.fresh_divergence,
+                    extra_capitals=EXTRA_CAPITALS,
+                    demote_frozen=args.demote_frozen,
+                    demote_frozen_share=args.demote_frozen_share,
+                    share_classes_file=share_classes_file)
                 for y, m in cohorts
                 if args.force or not cohort_cache_complete(y, m, waits, args.universe)
             ]
@@ -2479,9 +4186,13 @@ def main() -> None:
             run_jobs(jobs, args.workers)
         monthly, summaries = load_summaries(cohorts, args.universe)
         if "tables" in steps:
+            daily = load_daily_returns(cohorts, args.universe) if 1 in waits else None
             strategy, trading, composition, uni_summary = aggregate(
-                monthly, summaries, waits, end, cohorts)
-            write_outputs(strategy, trading, waits, len(cohorts), out_dir, composition, uni_summary)
+                monthly, summaries, waits, end, cohorts,
+                reversal_factor=args.reversal_factor, daily=daily,
+                panel_a_cohorts=args.panel_a_cohorts)
+            write_outputs(strategy, trading, waits, len(cohorts), out_dir, composition,
+                          uni_summary, args.reversal_factor)
             print(f"Tables 1 and 2 written to {out_dir}", flush=True)
         if "table3" in steps:
             write_table3(*table3_from_cache(monthly, summaries, end), out_dir)
@@ -2493,7 +4204,33 @@ def main() -> None:
         print(f"Figure 1: rank {info['rank']}, trades {info['trades']}, saved {info['png']}")
 
     if "check" in steps:
-        path = write_replication_check(out_dir, fig_dir, args.universe, args.short_weights)
+        table9a = None
+        root = args.table9a_cache
+        if root is None:
+            root = str(ROOT / "data" / "processed" / "replication" / "vol_common_top3")
+        if str(root).lower() != "none":
+            table9a = table9a_from_cache(Path(root), args.universe, cohorts, end)
+        table9b = None
+        root = args.table9b_cache
+        if root is None:
+            root = str(ROOT / "data" / "processed" / "replication" / "vol_common_recalls_r1")
+        if str(root).lower() != "none":
+            table9b = table9b_from_cache(Path(root), cohorts, end)
+        table6 = None
+        t6_root = args.table6_cache
+        if t6_root is None:
+            t6_root = str(ROOT / "data" / "processed" / "replication" / "vol_common_t6_book")
+        if str(t6_root).lower() != "none":
+            table6 = table6_from_cache(Path(t6_root))
+        delist100 = None
+        root = args.delist_cache
+        if root is None:
+            root = str(ROOT / "data" / "processed" / "replication" / "vol_common_delist100")
+        if str(root).lower() != "none":
+            delist100 = delist100_from_cache(Path(root), cohorts, end)
+        path = write_replication_check(out_dir, fig_dir, args.universe, args.short_weights,
+                                       table9a, table9b, table6=table6, delist100=delist100,
+                                       reversal_factor=args.reversal_factor)
         print(f"Replication check written to {path}")
 
 

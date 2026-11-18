@@ -23,7 +23,7 @@ This module therefore reproduces, with arrays, exactly what
   last available row, or the last day of the trading period.  With the one-day
   wait the close is delayed to the day after the crossing, exactly as the
   kernel's ``exit_pending`` does; forced exits are never delayed;
-* missing returns count as 0 (price unchanged), per INTERFACES.md.
+* missing returns count as 0 (price unchanged), per METHOD.md.
 
 The portfolio layer (``evaluation._leg_arrays`` / ``portfolio_daily`` /
 ``cohort_monthly``) is reproduced by :func:`rank_books` / :func:`vw_returns` /
@@ -186,7 +186,7 @@ def account(
         m = (t > open_f) & (t <= close_f)
         if not m.any():
             continue
-        # a missing return counts as no price change (INTERFACES.md); the arrays
+        # a missing return counts as no price change (METHOD.md); the arrays
         # the engine returns already have NaN replaced, this one may not
         rl = np.nan_to_num(returns[t, long_f], nan=0.0)
         rs = np.nan_to_num(returns[t, short_f], nan=0.0)

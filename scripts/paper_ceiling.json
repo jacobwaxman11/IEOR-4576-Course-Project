@@ -1,0 +1,694 @@
+{
+ "source": "RFS 19(3) 2006, pairs-trading-performance-of-a-relative-value-arbitrage-rule_final.pdf; printed page = PDF page + 796",
+ "ceiling": 865,
+ "note": "printed = values the paper prints in that block; scored = cells the check scores; duplicates = printed values that repeat another scored cell and are not scored twice. printed = scored + duplicate cells for every block, and the scored cells sum to the ceiling. Figures 2 and 3 are images (readings shown unscored); Figure 1 is pass or fail and not counted. The text list classifies every result-like number outside the tables (percentages, decimals, bp and month counts). `tables` maps each printed table to its scored blocks, for the mechanical re-count in scripts/paper_ceiling.py.",
+ "blocks": {
+  "Table 1": {
+   "printed": 88,
+   "scored": 88,
+   "pending": 0,
+   "duplicates": []
+  },
+  "Table 2 Panel A": {
+   "printed": 24,
+   "scored": 24,
+   "pending": 0,
+   "duplicates": []
+  },
+  "Table 2 Panel B": {
+   "printed": 40,
+   "scored": 40,
+   "pending": 0,
+   "duplicates": []
+  },
+  "Table 3": {
+   "printed": 139,
+   "scored": 139,
+   "pending": 0,
+   "duplicates": [],
+   "note": "135 values in the table plus the 4 stocks-per-sector counts of its caption (156 / 61 / 371 / 1729, p. 812)"
+  },
+  "Table 4": {
+   "printed": 116,
+   "scored": 104,
+   "pending": 0,
+   "duplicates": [
+    {
+     "cells": 8,
+     "rows": "mean excess return, standard deviation (4 portfolios)",
+     "twin": "Table 1 Panel B"
+    },
+    {
+     "cells": 4,
+     "rows": "monthly serial correlation (4 portfolios)",
+     "twin": "Table 5 Panel A serial correlation"
+    }
+   ]
+  },
+  "Table 5 Panel A": {
+   "printed": 36,
+   "scored": 20,
+   "pending": 0,
+   "duplicates": [
+    {
+     "cells": 16,
+     "rows": "mean, standard deviation, probability of return below 0, minimum historical observation",
+     "twin": "Table 1 Panel B"
+    }
+   ]
+  },
+  "Table 5 Panel B": {
+   "printed": 36,
+   "scored": 36,
+   "pending": 0,
+   "duplicates": []
+  },
+  "Table 6": {
+   "printed": 48,
+   "scored": 48,
+   "pending": 0,
+   "duplicates": []
+  },
+  "Table 7": {
+   "printed": 136,
+   "scored": 136,
+   "pending": 0,
+   "duplicates": []
+  },
+  "Table 8": {
+   "printed": 130,
+   "scored": 130,
+   "pending": 0,
+   "duplicates": []
+  },
+  "Table 9 Panel A": {
+   "printed": 44,
+   "scored": 44,
+   "pending": 0,
+   "duplicates": []
+  },
+  "Table 9 Panel B": {
+   "printed": 44,
+   "scored": 44,
+   "pending": 0,
+   "duplicates": []
+  },
+  "Figure 4": {
+   "printed": 6,
+   "scored": 6,
+   "pending": 0,
+   "duplicates": []
+  },
+  "Numbers printed in the text": {
+   "printed": 6,
+   "scored": 6,
+   "pending": 0,
+   "duplicates": []
+  }
+ },
+ "images": {
+  "Figure 1": "pass or fail: pair rank, five trades, day-0 levels",
+  "Figure 2": "image, readings unscored",
+  "Figure 3": "image, readings unscored"
+ },
+ "text": [
+  {
+   "page": 800,
+   "value": "10.4%",
+   "quote": "the top 20 pairs averaged 10.4% per annum",
+   "status": "scored",
+   "ref": "Numbers printed in the text: hold-out 1999-2002, top 20 fully invested"
+  },
+  {
+   "page": 800,
+   "value": "3.8%",
+   "quote": "with an annual standard deviation of 3.8%",
+   "status": "scored",
+   "ref": "Numbers printed in the text: hold-out 1999-2002, top 20 fully invested"
+  },
+  {
+   "page": 800,
+   "value": "4.82",
+   "quote": "Newey-West-adjusted t-statistic of 4.82",
+   "status": "scored",
+   "ref": "Numbers printed in the text: hold-out 1999-2002, top 20 fully invested"
+  },
+  {
+   "page": 804,
+   "value": "1.32%",
+   "quote": "the average monthly return on the top 20 pairs portfolio is 1.32%",
+   "status": "scored",
+   "ref": "Numbers printed in the text: footnote 4, -100% return on a delisted long"
+  },
+  {
+   "page": 804,
+   "value": "1.9%",
+   "quote": "with a standard deviation of 1.9%",
+   "status": "scored",
+   "ref": "Numbers printed in the text: footnote 4, -100% return on a delisted long"
+  },
+  {
+   "page": 807,
+   "value": "2057",
+   "quote": "The average number of pairs in the all-pair portfolio is 2057",
+   "status": "scored",
+   "ref": "Numbers printed in the text: pairs per cohort (also in the captions of Tables 5, 8 and 9)"
+  },
+  {
+   "page": 822,
+   "value": "0.48",
+   "quote": "the top 20 and the 100-120 pairs portfolios is 0.48",
+   "status": "scored",
+   "ref": "Figure 4"
+  },
+  {
+   "page": 823,
+   "value": "0.51",
+   "quote": "the correlation is 0.51 over the profitable pre-1988 period",
+   "status": "scored",
+   "ref": "Figure 4"
+  },
+  {
+   "page": 823,
+   "value": "0.18",
+   "quote": "much lower (0.18) over the lower excess return post-1988",
+   "status": "scored",
+   "ref": "Figure 4"
+  },
+  {
+   "page": 823,
+   "value": "0.41",
+   "quote": "residuals and the top 100-120 FFMR residuals is 0.41",
+   "status": "scored",
+   "ref": "Figure 4"
+  },
+  {
+   "page": 823,
+   "value": "0.42",
+   "quote": "subperiod FFMR correlations are 0.42",
+   "status": "scored",
+   "ref": "Figure 4"
+  },
+  {
+   "page": 823,
+   "value": "0.20",
+   "quote": "and 0.20",
+   "status": "scored",
+   "ref": "Figure 4"
+  },
+  {
+   "page": 806,
+   "value": "1.31%",
+   "quote": "an average excess monthly return of 1.31%",
+   "status": "duplicate",
+   "ref": "Table 1 Panel A, top 5, mean (0.01308)"
+  },
+  {
+   "page": 806,
+   "value": "8.84",
+   "quote": "(t-statistic = 8.84)",
+   "status": "duplicate",
+   "ref": "Table 1 Panel A, top 5, t-statistic"
+  },
+  {
+   "page": 806,
+   "value": "1.44%",
+   "quote": "the 20 best pairs 1.44% per month",
+   "status": "duplicate",
+   "ref": "Table 1 Panel A, top 20, mean (0.01436)"
+  },
+  {
+   "page": 806,
+   "value": "11.56",
+   "quote": "(t = 11.56)",
+   "status": "duplicate",
+   "ref": "Table 1 Panel A, top 20, t-statistic"
+  },
+  {
+   "page": 806,
+   "value": "0.78",
+   "quote": "excess returns of 0.78",
+   "status": "duplicate",
+   "ref": "Table 1 Panel A, top 5, committed capital (0.00784)"
+  },
+  {
+   "page": 806,
+   "value": "0.81%",
+   "quote": "and 0.81% per month",
+   "status": "duplicate",
+   "ref": "Table 1 Panel A, top 20, committed capital (0.00805)"
+  },
+  {
+   "page": 808,
+   "value": "4.76%",
+   "quote": "prices have diverged by 4.76% or more",
+   "status": "duplicate",
+   "ref": "Table 2 Panel A, top 5, trigger (0.04758)"
+  },
+  {
+   "page": 808,
+   "value": "4.81",
+   "quote": "on average 4.81 open during the trading period",
+   "status": "duplicate",
+   "ref": "Table 2 Panel A, top 5, pairs traded"
+  },
+  {
+   "page": 808,
+   "value": "2.02",
+   "quote": "round trips per pair is 2.02",
+   "status": "duplicate",
+   "ref": "Table 2 Panel A, top 5, round trips"
+  },
+  {
+   "page": 808,
+   "value": "3.75",
+   "quote": "duration of an open position is 3.75 months",
+   "status": "duplicate",
+   "ref": "Table 2 Panel A, top 5, time open"
+  },
+  {
+   "page": 809,
+   "value": "74%",
+   "quote": "74% of the stocks in the top 20 pairs",
+   "status": "duplicate",
+   "ref": "Table 2 Panel B, top 20, top three size deciles (0.74)"
+  },
+  {
+   "page": 809,
+   "value": "91%",
+   "quote": "91% come from the top five size deciles",
+   "status": "duplicate",
+   "ref": "Table 2 Panel B, top 20, top five size deciles (0.91)"
+  },
+  {
+   "page": 809,
+   "value": "71%",
+   "quote": "71% of the stocks in the top 20 pairs",
+   "status": "duplicate",
+   "ref": "Table 2 Panel B, top 20, Utilities (0.71)"
+  },
+  {
+   "page": 809,
+   "value": "20%",
+   "quote": "ranges from 20% for the top five pairs",
+   "status": "duplicate",
+   "ref": "Table 2 Panel B, top 5, mixed sector pairs (0.20)"
+  },
+  {
+   "page": 809,
+   "value": "44%",
+   "quote": "to 44% for pairs 101-120",
+   "status": "duplicate",
+   "ref": "Table 2 Panel B, 101-120, mixed sector pairs (0.44)"
+  },
+  {
+   "page": 810,
+   "value": "1.44%",
+   "quote": "falls from 1.44%, for the top 20 portfolio",
+   "status": "duplicate",
+   "ref": "Table 1 Panel A, top 20, mean"
+  },
+  {
+   "page": 810,
+   "value": "0.90%",
+   "quote": "to 0.90% per month if we postpone",
+   "status": "duplicate",
+   "ref": "Table 1 Panel B, top 20, mean (0.00895)"
+  },
+  {
+   "page": 810,
+   "value": "91%",
+   "quote": "Because 91% of the stocks in the top",
+   "status": "duplicate",
+   "ref": "Table 2 Panel B, top 20, top five size deciles"
+  },
+  {
+   "page": 811,
+   "value": "1.08%",
+   "quote": "the Utilities sector, with 1.08%",
+   "status": "duplicate",
+   "ref": "Table 3, Utilities, top 20, mean"
+  },
+  {
+   "page": 811,
+   "value": "10.26",
+   "quote": "(Newey-West t = 10.26)",
+   "status": "duplicate",
+   "ref": "Table 3, Utilities, top 20, t-statistic"
+  },
+  {
+   "page": 811,
+   "value": "0.58%",
+   "quote": "top 20 pairs earning 0.58%",
+   "status": "duplicate",
+   "ref": "Table 3, Transportation, top 20, mean"
+  },
+  {
+   "page": 811,
+   "value": "4.26",
+   "quote": "(Newey-West t = 4.26)",
+   "status": "duplicate",
+   "ref": "Table 3, Transportation, top 20, t-statistic"
+  },
+  {
+   "page": 811,
+   "value": "0.78%",
+   "quote": "0.78% (Newey-West",
+   "status": "duplicate",
+   "ref": "Table 3, Financials, top 20, mean"
+  },
+  {
+   "page": 812,
+   "value": "7.60",
+   "quote": "t = 7.60",
+   "status": "duplicate",
+   "ref": "Table 3, Financials, top 20, t-statistic"
+  },
+  {
+   "page": 812,
+   "value": "0.61%",
+   "quote": "and 0.61%",
+   "status": "duplicate",
+   "ref": "Table 3, Industrials, top 20, mean"
+  },
+  {
+   "page": 812,
+   "value": "6.93",
+   "quote": "(Newey-West t = 6.93)",
+   "status": "duplicate",
+   "ref": "Table 3, Industrials, top 20, t-statistic"
+  },
+  {
+   "page": 816,
+   "value": "12.6%",
+   "quote": "largest loss ... was 12.6% for the top five pairs portfolio",
+   "status": "duplicate",
+   "ref": "Table 1 Panel B and Table 5 Panel A, top 5, minimum (-0.12628)"
+  },
+  {
+   "page": 816,
+   "value": "8.2%",
+   "quote": "and 8.2% for the top 20 portfolio",
+   "status": "duplicate",
+   "ref": "Table 1 Panel B and Table 5 Panel A, top 20, minimum (-0.08218)"
+  },
+  {
+   "page": 816,
+   "value": "4.32",
+   "quote": "lose more than 4.32",
+   "status": "duplicate",
+   "ref": "Table 5 Panel A, top 5, 1% VAR (-0.04320)"
+  },
+  {
+   "page": 816,
+   "value": "1.94%",
+   "quote": "and 1.94%, respectively",
+   "status": "duplicate",
+   "ref": "Table 5 Panel A, top 20, 1% VAR (-0.01943)"
+  },
+  {
+   "page": 816,
+   "value": "10.08%",
+   "quote": "the top five portfolio recorded a 10.08% loss",
+   "status": "duplicate",
+   "ref": "Table 5 Panel B, top 5, minimum (-0.10079)"
+  },
+  {
+   "page": 816,
+   "value": "6.72%",
+   "quote": "a 6.72% loss of the top 20 portfolio",
+   "status": "duplicate",
+   "ref": "Table 5 Panel B, top 20, minimum (-0.06723)"
+  },
+  {
+   "page": 816,
+   "value": "1.24%",
+   "quote": "lose more than 1.24%",
+   "status": "duplicate",
+   "ref": "Table 5 Panel B, top 5, 1% VAR (-0.01236)"
+  },
+  {
+   "page": 816,
+   "value": "0.65%",
+   "quote": "and 0.65%, respectively",
+   "status": "duplicate",
+   "ref": "Table 5 Panel B, top 20, 1% VAR (-0.00647)"
+  },
+  {
+   "page": 820,
+   "value": "118",
+   "quote": "drops from 118 bp per month",
+   "status": "duplicate",
+   "ref": "Table 8, top 20, mean before 1989"
+  },
+  {
+   "page": 820,
+   "value": "38",
+   "quote": "to about 38 bp per month",
+   "status": "duplicate",
+   "ref": "Table 8, top 20, mean after 1988"
+  },
+  {
+   "page": 820,
+   "value": "67",
+   "quote": "from 67",
+   "status": "duplicate",
+   "ref": "Table 8, 101-120, mean before 1989"
+  },
+  {
+   "page": 820,
+   "value": "42",
+   "quote": "to 42 bp per month",
+   "status": "duplicate",
+   "ref": "Table 8, 101-120, mean after 1988"
+  },
+  {
+   "page": 820,
+   "value": "4.41",
+   "quote": "(t = 4.41",
+   "status": "duplicate",
+   "ref": "Table 8, top 20, intercept t before 1989"
+  },
+  {
+   "page": 820,
+   "value": "3.77",
+   "quote": "and 3.77, respectively)",
+   "status": "duplicate",
+   "ref": "Table 8, top 20, intercept t after 1988"
+  },
+  {
+   "page": 824,
+   "value": "85",
+   "quote": "earns an average of 85 bp per month with short recalls",
+   "status": "duplicate",
+   "ref": "Table 9 Panel B, top 20, mean"
+  },
+  {
+   "page": 824,
+   "value": "9.07",
+   "quote": "a Newey-West t-statistic of 9.07",
+   "status": "duplicate",
+   "ref": "Table 9 Panel B, top 20, t-statistic"
+  },
+  {
+   "page": 797,
+   "value": "11%",
+   "quote": "average annualized excess returns of up to 11%",
+   "status": "derived",
+   "ref": "an annualisation of Table 1's monthly means; the text does not say which column it annualises, so it is checked in CLAIMS rather than scored"
+  },
+  {
+   "page": 798,
+   "value": "11%",
+   "quote": "average annualized excess returns of about 11%",
+   "status": "derived",
+   "ref": "the same annualisation as p. 797"
+  },
+  {
+   "page": 806,
+   "value": "71",
+   "quote": "experienced 71 monthly periods with negative payoffs",
+   "status": "derived",
+   "ref": "Table 1 Panel A, top 20, share below 0 (15%) x 474"
+  },
+  {
+   "page": 806,
+   "value": "124",
+   "quote": "compared to 124 months for a portfolio of 5 pairs",
+   "status": "derived",
+   "ref": "Table 1 Panel A, top 5, share below 0 (26%) x 474"
+  },
+  {
+   "page": 808,
+   "value": "30-55",
+   "quote": "drop by about 30-55 ... basis points",
+   "status": "derived",
+   "ref": "Table 1 Panel A minus Panel B, fully invested means"
+  },
+  {
+   "page": 808,
+   "value": "20-35",
+   "quote": "and 20-35 basis points (bp)",
+   "status": "derived",
+   "ref": "Table 1 Panel A minus Panel B, committed means"
+  },
+  {
+   "page": 810,
+   "value": "324",
+   "quote": "the drop in the excess returns of 324 bp per six months",
+   "status": "derived",
+   "ref": "Table 1 A minus B, top 20 (0.01436 - 0.00895) x 6; CLAIMS 7"
+  },
+  {
+   "page": 810,
+   "value": "162",
+   "quote": "a transaction cost of 162 bp per pair per round trip",
+   "status": "derived",
+   "ref": "324 / Table 2 A round trips (about 2); CLAIMS 8"
+  },
+  {
+   "page": 810,
+   "value": "81",
+   "quote": "an estimated effective spread of 81 bp",
+   "status": "derived",
+   "ref": "162 / 2; CLAIMS 8"
+  },
+  {
+   "page": 810,
+   "value": "70",
+   "quote": "for the all-pair portfolio is 70 bp",
+   "status": "derived",
+   "ref": "the same arithmetic on the all-pair column; CLAIMS 8"
+  },
+  {
+   "page": 810,
+   "value": "437-549",
+   "quote": "range from 437 to 549 bp over a six-month period",
+   "status": "derived",
+   "ref": "Table 1 Panel B means x 6; CLAIMS 9"
+  },
+  {
+   "page": 810,
+   "value": "324",
+   "quote": "an estimate of 324 bp transaction cost per pair",
+   "status": "derived",
+   "ref": "162 x two round trips; CLAIMS 9"
+  },
+  {
+   "page": 810,
+   "value": "113-225",
+   "quote": "average net profits ranging from 113 to 225 bp",
+   "status": "derived",
+   "ref": "437-549 minus 324; CLAIMS 9"
+  },
+  {
+   "page": 811,
+   "value": "50%",
+   "quote": "the fraction of mixed pairs is typically well below 50%",
+   "status": "derived",
+   "ref": "Table 2 Panel B mixed sector pairs (0.20-0.44)"
+  },
+  {
+   "page": 815,
+   "value": "10-20",
+   "quote": "lower than the raw excess returns by about 10-20 bp per month",
+   "status": "derived",
+   "ref": "Table 4 intercepts minus Table 1 Panel B means"
+  },
+  {
+   "page": 824,
+   "value": "2",
+   "quote": "the profits of the top 20 strategy drop by about 2 bp per month",
+   "status": "derived",
+   "ref": "Table 9 Panel A minus Table 1 Panel B, top 20"
+  },
+  {
+   "page": 824,
+   "value": "4-13",
+   "quote": "The profits decline slightly by 4-13 bp per month",
+   "status": "derived",
+   "ref": "Table 9 Panel B minus Table 1 Panel B"
+  },
+  {
+   "page": 803,
+   "value": "12",
+   "quote": "We form pairs over a 12-month period",
+   "status": "parameter",
+   "ref": "formation period"
+  },
+  {
+   "page": 803,
+   "value": "6",
+   "quote": "trade them in the next 6-month period",
+   "status": "parameter",
+   "ref": "trading period"
+  },
+  {
+   "page": 804,
+   "value": "-100%",
+   "quote": "only a long stock experiences a -100% return when it is delisted",
+   "status": "parameter",
+   "ref": "footnote 4's assumption"
+  },
+  {
+   "page": 806,
+   "value": "474",
+   "quote": "During the full sample period of 474 months",
+   "status": "parameter",
+   "ref": "sample length (also the captions' observation count)"
+  },
+  {
+   "page": 819,
+   "value": "200",
+   "quote": "We bootstrapped the entire set of trading dates 200 times",
+   "status": "parameter",
+   "ref": "Table 6 replications"
+  },
+  {
+   "page": 810,
+   "value": "37",
+   "quote": "the effective spread for stocks in the CRSP database in 1991 was 37 bp",
+   "status": "external",
+   "ref": "an outside estimate of effective spreads that the paper quotes for comparison, not its own result"
+  },
+  {
+   "page": 825,
+   "value": "4-15",
+   "quote": "the rebate rate on short sales are low (4-15 bp/year)",
+   "status": "external",
+   "ref": "outside estimate, not a result of the paper"
+  }
+ ],
+ "tables": {
+  "Table 1": [
+   "Table 1"
+  ],
+  "Table 2": [
+   "Table 2 Panel A",
+   "Table 2 Panel B"
+  ],
+  "Table 3": [
+   "Table 3"
+  ],
+  "Table 4": [
+   "Table 4"
+  ],
+  "Table 5": [
+   "Table 5 Panel A",
+   "Table 5 Panel B"
+  ],
+  "Table 6": [
+   "Table 6"
+  ],
+  "Table 7": [
+   "Table 7"
+  ],
+  "Table 8": [
+   "Table 8"
+  ],
+  "Table 9": [
+   "Table 9 Panel A",
+   "Table 9 Panel B"
+  ]
+ }
+}
