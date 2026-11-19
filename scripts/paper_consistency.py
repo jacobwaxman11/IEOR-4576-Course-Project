@@ -12,10 +12,10 @@ The tests are identities that hold for any OLS regression and any sample:
   variance identity  R^2 = beta' Sigma beta / sigma_y^2,  so  0 <= R^2 <= 1
 
 Both use only numbers the paper prints, plus the factor series' own means, standard
-deviations and correlations. Table 8 prints a "Factor sd" column per panel, and seven of
-its ten values reproduce the Fama-French and momentum series we hold to three decimal
-places, so the four FF/momentum factors are identified; only the reversal factor is
-unobserved.
+deviations and correlations. Table 8 prints a "Factor sd" column per panel, and all eight
+Fama-French and momentum values reproduce the series we hold, at the 2005 vintage this
+script reads, to three decimal places, so those four factors are identified; only the
+reversal factor is unobserved.
 
 Every regression is evaluated against the standard deviation the paper prints *for the
 same sample*: Table 8 Panel A against its own pre-1989 ``pre_std``, Panel B against its
@@ -36,8 +36,14 @@ Table 4 control also the WRDS parquets under ``data/raw/wrds_api`` (the Ibbotson
 are geometric differences of CRSP/DFA series, so the control rebuilds the small-stock
 series). No cohort cache is needed.
 
+Two things this script shares with the scored checks, and did not before R12 (REVIEW_NOTES
+99): the factor **vintage** - French's 2005 archives, `FACTOR_VINTAGE`, printed in the
+output - and Table 8's **printed precision**, the five decimals of `PAPER_TABLE8` in
+`scripts/03_replicate.py` rather than `paper_cells.json`'s three significant figures.
+
     python scripts/paper_consistency.py
-    python scripts/paper_consistency.py --json report/replication/paper_consistency.json
+    python scripts/paper_consistency.py --json report/replication/analysis/paper_consistency.json
+    python scripts/paper_consistency.py --factor-vintage current   # the old, unscored reading
 """
 
 from __future__ import annotations
@@ -69,17 +75,27 @@ PAPER_FACTOR_SD = {
     "pre": (0.04580, 0.02923, 0.02597, 0.03506, 0.07228),
     "post": (0.04390, 0.03856, 0.03641, 0.04926, 0.04448),
 }
-#: how many printed FF/momentum sds reproduce ours to three decimals (section 1)
-THREE_DP_MATCHES = 7
+#: how many printed FF/momentum sds reproduce ours to three decimals (section 1): all eight
+#: on the 2005 archives this script reads, seven on today's files (the miss is post-1988
+#: HML, 0.03359 against the printed 0.03641; REVIEW_NOTES 99's vintage table)
+THREE_DP_MATCHES = 8
 #: the sample split Table 8 describes: 7/1963-12/1988 and 1/1989-12/2002
 PRE_MONTHS = 306
 POST_MONTHS = 168
 PRE_WEIGHT = PRE_MONTHS / (PRE_MONTHS + POST_MONTHS)
-#: Printed precision. Table 8 prints the loadings to three significant figures -- so
-#: -0.434 carries 5e-4 of slack but 0.0357 only 5e-5 -- the R^2 column to two decimals,
-#: and the standard deviations to five decimals. The sensitivity test in section 3
-#: perturbs every input within half a unit of its own last printed digit.
-BETA_SIGNIFICANT_FIGURES = 3
+#: The factor vintage every scored check in this repository runs, and so the one this
+#: script reads: French's 2005 archives, the files the paper had (``03_replicate.py``'s
+#: ``--factor-vintage 2005`` default, and the vintage ``scripts/experiments/class_a_audit.py``
+#: reads). Before R12 this script took the module default, ``current``, so every level it
+#: printed was today's files' (REVIEW_NOTES 99, finding 3).
+FACTOR_VINTAGE = "2005"
+#: Printed precision. Table 8 prints the loadings to five decimals (``-0.43395``), which is
+#: what ``scripts/03_replicate.py``'s ``PAPER_TABLE8`` transcribes; ``paper_cells.json``
+#: keeps three significant figures, and that alone moved Panel A's joint R^2 by 0.007
+#: (REVIEW_NOTES 99, finding 1). The R^2 column is printed to two decimals and the
+#: standard deviations to five. The sensitivity test in section 3 perturbs every input
+#: within half a unit of its own last printed digit.
+BETA_DECIMALS = 5
 R2_DECIMALS = 2
 SD_DECIMALS = 5
 SENSITIVITY_TRIALS = 10_000
@@ -92,6 +108,52 @@ def load_paper() -> dict:
 
 def cell(section: dict, row: str, portfolio_index: int) -> float:
     return section[row][str(portfolio_index)]["paper"]
+
+
+def _replicate_module():
+    """`scripts/03_replicate.py` as a module, for its typed paper values only.
+
+    The same import ``scripts/experiments/class_a_audit.py`` makes, and for the same
+    reason: the check's own five-decimal transcriptions live there.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("replicate", ROOT / "scripts" / "03_replicate.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault("replicate", module)
+    spec.loader.exec_module(module)
+    return module
+
+
+#: Table 8 rows the paper prints in percent rather than as a loading or an R^2.
+TABLE8_PCT_ROWS = {"mean", "std", "intercept"}
+
+
+def typed_table8() -> dict:
+    """Table 8's block in `paper_cells.json`'s shape and units, at the print's own precision.
+
+    `paper_cells.json` stores Table 8's loadings at three significant figures (``-0.434``
+    for the printed ``-0.43395``), and that rounding alone moves Panel A's joint R^2 from
+    0.9434 to 0.9502 (REVIEW_NOTES 99, finding 1). The five-decimal transcriptions the
+    check scores against are ``PAPER_TABLE8`` in `scripts/03_replicate.py`, so the same
+    cells are read from there: percent for the mean, the standard deviation and the
+    intercept, as `paper_cells.json` keeps them, and raw for everything else.
+    """
+    table8 = _replicate_module().PAPER_TABLE8
+    rows = sorted({key for values in table8.values() for key in values})
+    out = {}
+    for row in rows:
+        printed_at_percent = row.rsplit("_", 1)[-1] in TABLE8_PCT_ROWS
+        out[row] = {str(index): {"paper": value * 100.0 if printed_at_percent else value,
+                                 "pct": printed_at_percent}
+                    for index, value in enumerate(
+                        (table8[port][row] for port in PORTFOLIOS), start=1)}
+    return out
+
+
+def load_check_factors(vintage: str | None = None) -> pd.DataFrame:
+    """The factor panel at the vintage the scored checks use, ``FACTOR_VINTAGE`` by default."""
+    return load_factors(vintage=vintage or FACTOR_VINTAGE)
 
 
 def fitted_variance(betas: list[float], sds: list[float], corr: np.ndarray) -> float:
@@ -213,9 +275,9 @@ def rounding_sensitivity(betas, reversal_betas, r2s, sigma_ys, sds, corr,
 
     Every published figure is rounded, so a conclusion that flips on the last digit is not
     a finding. Each input is perturbed uniformly within half a unit of *its own* last
-    printed digit -- 5e-4 for a loading printed as 0.434 and 5e-5 for one printed as
-    0.0357 -- and the joint R^2 is recomputed with the same kernel `joint_reversal_r2`
-    uses. Returns the share of draws that stay feasible plus the 1st, 50th and 99th
+    printed digit -- 5e-6 for a loading the paper prints to five decimals (``-0.43395``),
+    half a percent for a two-decimal R^2, 5e-6 for a five-decimal standard deviation -- and
+    the joint R^2 is recomputed with the same kernel `joint_reversal_r2` uses. Returns the share of draws that stay feasible plus the 1st, 50th and 99th
     percentiles, so both the centre and the tail of the distribution are visible.
     """
     rng = np.random.default_rng(seed)
@@ -225,8 +287,8 @@ def rounding_sensitivity(betas, reversal_betas, r2s, sigma_ys, sds, corr,
     r2 = np.asarray(r2s, dtype=float)
     sy = np.asarray(sigma_ys, dtype=float)
     widths = {
-        "beta": half_width(betas, significant_figures=BETA_SIGNIFICANT_FIGURES),
-        "beta_rev": half_width(beta_rev, significant_figures=BETA_SIGNIFICANT_FIGURES),
+        "beta": half_width(betas, decimals=BETA_DECIMALS),
+        "beta_rev": half_width(beta_rev, decimals=BETA_DECIMALS),
         "r2": half_width(r2, decimals=R2_DECIMALS),
         "sigma_y": half_width(sy, decimals=SD_DECIMALS),
         "factor_sd": half_width(sds, decimals=SD_DECIMALS),
@@ -310,6 +372,9 @@ def _row_getter(section: dict, prefix: str):
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", default=None, help="write the findings as JSON here")
+    parser.add_argument("--factor-vintage", choices=("2005", "current"), default=FACTOR_VINTAGE,
+                        help="vintage of French's factors (default 2005, the archives the paper "
+                             "had and the vintage every scored check runs; REVIEW_NOTES 99)")
     args = parser.parse_args()
 
     paper = load_paper()
@@ -317,9 +382,13 @@ def main() -> int:
     t1b = paper["Table 1 Panel B (one-day wait)"]
     t2b = paper["Table 2 Panel B (composition)"]
     t4 = paper["Table 4 (systematic risk, one-day wait)"]
-    t8 = paper["Table 8 (subperiod analysis)"]
+    # Table 8 at the print's own precision, not paper_cells.json's three significant figures
+    t8 = typed_table8()
 
-    factors = load_factors()
+    factors = load_check_factors(args.factor_vintage)
+    print(f"Factors: French's {args.factor_vintage} archives"
+          + (" (the vintage the paper had and every scored check runs)" if args.factor_vintage == "2005"
+             else " (today's files: NOT the scored vintage, for comparison only)"))
     pre = (factors.index >= START) & (factors.index <= SPLIT)
     post = (factors.index > SPLIT) & (factors.index <= END)
     full = (factors.index >= START) & (factors.index <= END)
@@ -332,7 +401,8 @@ def main() -> int:
     reversal_sd = {key: float(factors.loc[mask, "reversal"].std())
                    for key, mask in (("pre", pre), ("post", post), ("full", full))}
 
-    findings: dict = {"factor_sd": {}, "sigma_y_control": {}, "variance_identity": {},
+    findings: dict = {"factor_vintage": args.factor_vintage,
+                      "factor_sd": {}, "sigma_y_control": {}, "variance_identity": {},
                       "joint_test": {},
                       "mean_identity": {}, "ibbotson_control": {}, "table1_tail": {},
                       "table2_panelB": {}}
@@ -567,7 +637,7 @@ def main() -> int:
 
 def _verify(findings: dict, matches: int, worst_mean_bp: float,
             worst_sd_rel: float) -> int:
-    """Fail if any number quoted in PAPER_CONSISTENCY.md stops reproducing."""
+    """Fail if any number quoted in GAPS.md section 11 stops reproducing."""
     panel_a = findings["variance_identity"]["Table 8 Panel A (pre-1989)"]
     panel_b = findings["variance_identity"]["Table 8 Panel B (post-1988)"]
     table2b = findings["table2_panelB"]["avg_decile_diff_mixed_pairs"]
@@ -606,7 +676,7 @@ def _verify(findings: dict, matches: int, worst_mean_bp: float,
     failed = [name for name, ok in checks.items() if ok is False]
     if failed:
         print(f"\nFAILED: {len(failed)} of {len(checks)} checks no longer reproduce "
-              f"({', '.join(failed)}); update PAPER_CONSISTENCY.md before merging",
+              f"({', '.join(failed)}); update GAPS.md before merging",
               file=sys.stderr)
         return 1
     run = sum(1 for ok in checks.values() if ok is not None)

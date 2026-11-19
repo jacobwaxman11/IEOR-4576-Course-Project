@@ -1,6 +1,6 @@
 """Cohort trading simulation for the GGR (2006) replication.
 
-Implements the trading rules of INTERFACES.md / paper §2.2: entry at a 2-sigma
+Implements the trading rules of METHOD.md / paper §2.2: entry at a 2-sigma
 divergence of normalized prices, the wait 0/1 timing, exit at the next
 crossing, end-of-period and delisting/last-row forced closes, re-opening after
 convergence, and buy-and-hold leg accounting with per-pair capital accounts.
@@ -85,12 +85,17 @@ def _empty_result(dates: pd.Index) -> CohortResult:
 
 @numba.njit(cache=True, error_model="numpy")
 def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait, RC, use_recall, recall_lock,
-                      recall_rearm, long_delisting_loss=0):
+                      recall_rearm, long_delisting_loss=0, trigger_mult=2.0,
+                      fresh_divergence=0, recall_immediate=0, recall_either=0):
     """Day loop of the trading rule; see ``simulate_cohort`` for the conventions.
 
     ``RC`` (days x stock columns, bool) marks the high-volume days of a short
     recall and is read only when ``use_recall`` is 1, for the day's *short*
     column; ``converged``, ``end`` and ``delisted`` closes are unaffected.
+    ``recall_immediate`` (default 0) closes the pair at the close of the flagged
+    day itself instead of the next day, and ``recall_either`` (default 0) also
+    tests the long column for a flag; both are recall readings measured in
+    REVIEW_NOTES section 74 and change nothing at their defaults.
     With ``long_delisting_loss`` 1, an open pair's long leg returns -1.0 on a
     ``term`` row of its stock instead of that row's return; the short leg and
     the prices that drive the rule are unaffected.
@@ -136,6 +141,15 @@ def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait, RC, use_re
     tr_payoff = np.empty(cap)
     m = 0
 
+    if fresh_divergence == 1:
+        # "Open a position when prices diverge" read as an event: a pair that
+        # already sits outside the band at the end of formation (day 0 under the
+        # continued normalization) has not diverged inside the trading period,
+        # so it waits until its spread has come back inside the band.
+        for k in range(n):
+            if abs(P[0, col1[k]] - P[0, col2[k]]) > trigger_mult * sigma[k]:
+                disarmed[k] = True
+
     for t in range(T):
         last_day = t == T - 1
         for k in range(n):
@@ -165,18 +179,20 @@ def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait, RC, use_re
             term_t = term[t, a] or term[t, b]
             lastrow_t = last_valid[a] == t or last_valid[b] == t
             alive = last_valid[a] >= t and last_valid[b] >= t
-            if disarmed[k] and abs(spread) <= 2.0 * sigma[k]:
+            if disarmed[k] and abs(spread) <= trigger_mult * sigma[k]:
                 disarmed[k] = False
 
             if is_open[k]:
                 crossing = sign != s0[k]
                 recalled = use_recall == 1 and RC[t, short_col[k]]
+                if recall_either == 1 and use_recall == 1 and not recalled:
+                    recalled = RC[t, long_col[k]]
                 if wait == 0:
                     converge = crossing or recalled
                     forced = recalled
                 else:
-                    converge = exit_pending[k] or recall_pending[k]
-                    forced = recall_pending[k]
+                    forced = recall_pending[k] or (recall_immediate == 1 and recalled)
+                    converge = exit_pending[k] or forced
                 if converge or term_t or lastrow_t or last_day:
                     if term_t:
                         reason = _DELISTED
@@ -230,7 +246,7 @@ def _simulate_kernel(P, R, term, last_valid, col1, col2, sigma, wait, RC, use_re
                 and alive
                 and not term_t
                 and not lastrow_t
-                and abs(spread) > 2.0 * sigma[k]
+                and abs(spread) > trigger_mult * sigma[k]
             ):
                 if wait == 0:
                     if t + 1 <= T - 1:
@@ -270,7 +286,11 @@ def simulate_cohort(
     recall: pd.DataFrame | None = None,
     recall_lock: bool = False,
     recall_rearm: bool = False,
+    recall_immediate: bool = False,
+    recall_either: bool = False,
     long_delisting_loss: bool = False,
+    trigger_mult: float = 2.0,
+    fresh_divergence: bool = False,
 ) -> CohortResult:
     """Simulate one cohort's 6-month trading period.
 
@@ -280,7 +300,7 @@ def simulate_cohort(
         ``select_pairs`` output (rank, permno_1, permno_2, distance, sigma).
     trade_returns:
         Wide (trading dates x permno) daily returns. NaN = no row/unknown and is
-        treated as 0.0 (price unchanged) per INTERFACES.md.
+        treated as 0.0 (price unchanged) per METHOD.md.
     terminal:
         Wide (trading dates x permno) bool flags for ``dlydelflg == 'Y'`` rows.
     wait:
@@ -330,6 +350,13 @@ def simulate_cohort(
         new divergence episode fires. A recall leaves the spread divergent, so
         without this the pair re-opens the next day on the signal that was
         already open, which a recall does not permit. Default False.
+    recall_immediate:
+        Only meaningful with ``recall``: close the pair at the close of the
+        flagged day even under ``wait=1``, since a recall is forced out rather
+        than a trading decision the one-day wait applies to. Default False.
+    recall_either:
+        Only meaningful with ``recall``: a high-volume day on either leg closes
+        the pair, not only on the short leg. Default False, the paper's rule.
     long_delisting_loss:
         The robustness check of the paper's footnote 4 (RFS p. 804): every
         delisted long position is assumed to lose 100%. When True, an open
@@ -403,6 +430,10 @@ def simulate_cohort(
         int(recall_lock),
         int(recall_rearm),
         int(long_delisting_loss),
+        float(trigger_mult),
+        int(fresh_divergence),
+        int(recall_immediate),
+        int(recall_either),
     )
 
     rank_index = pd.Index(ranks, name="rank")

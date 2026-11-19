@@ -12,11 +12,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
-from project import edition1999 as ed
-
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from project import edition1999 as ed  # after the sys.path line above
 
 
 def main() -> int:

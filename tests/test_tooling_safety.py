@@ -1,6 +1,6 @@
 """Guard read-only cache identity and conservative handling of missing data."""
-from argparse import Namespace
 import sys
+from argparse import Namespace
 from pathlib import Path
 
 import numpy as np
@@ -11,8 +11,8 @@ from project.recalls import adjusted_volume
 from project.specification import resolve_profile, stamp_experiment, validate_cache_identity
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts/claims"))
-from table9b_recalls import VolumeSource, volume_wide
 import table7
+from table9b_recalls import VolumeSource, volume_wide
 
 
 def test_observed_volume_needs_valid_adjustment():

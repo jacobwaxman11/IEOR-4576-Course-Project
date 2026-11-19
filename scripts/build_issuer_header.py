@@ -1,6 +1,7 @@
 """Build a local CIZ issuer mapping without changing the original web export."""
 import argparse
 from pathlib import Path
+
 from project.issuer_header import extract_header
 
 if __name__ == '__main__':

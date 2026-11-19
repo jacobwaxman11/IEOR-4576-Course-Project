@@ -11,6 +11,7 @@ import statsmodels.api as sm
 
 from project import evaluation
 from project.evaluation import (
+    BOOK_BASES,
     CAPITAL_CHOICES,
     VW_CAPITALS,
     cohort_monthly,
@@ -23,7 +24,7 @@ from project.evaluation import (
 
 @dataclass
 class CohortStub:
-    """Local stub with the CohortResult fields from INTERFACES.md."""
+    """Local stub with the CohortResult fields from METHOD.md."""
 
     pair_returns: pd.DataFrame
     opened: pd.Series
@@ -440,10 +441,25 @@ def test_engine_payoffs_match_the_return_rebuild():
     res = simulate_cohort(pairs, rets, pd.DataFrame(False, index=idx, columns=rets.columns))
     assert len(res.trades)
     rebuilt = type(res)(pair_returns=res.pair_returns, opened=res.opened, trades=res.trades)
-    for capital in sorted(set(CAPITAL_CHOICES) - VW_CAPITALS):
+    # The two book bases divide by the value of the legs, which this rebuilt result does
+    # not carry: test_book_bases_need_the_engines_legs covers that guard (REVIEW_NOTES 77).
+    for capital in sorted(set(CAPITAL_CHOICES) - VW_CAPITALS - BOOK_BASES):
         a = portfolio_daily(res, None, capital).to_numpy()
         b = portfolio_daily(rebuilt, None, capital).to_numpy()
         np.testing.assert_allclose(a, b, rtol=1e-12, atol=1e-15, equal_nan=True)
+
+
+def test_book_bases_need_the_engines_legs():
+    """A result without the per-leg values cannot be scored on the book bases."""
+    from types import SimpleNamespace
+
+    idx = pd.bdate_range("2020-01-01", periods=3)
+    res = SimpleNamespace(pair_returns=pd.DataFrame({1: [0.0, 0.1, 0.0]}, index=idx),
+                          opened=pd.Series({1: True}),
+                          trades=pd.DataFrame(columns=["rank", "open_date", "close_date"]))
+    for capital in sorted(BOOK_BASES):
+        with pytest.raises(ValueError, match="per-leg values"):
+            portfolio_daily(res, None, capital)
 
 
 def _legs_stub(long_pay, long_val, short_pay, short_val, idx, short_pos=None):
@@ -589,6 +605,34 @@ def test_engine_short_position_value_is_floored_at_zero():
     assert res.short_values[1].to_numpy()[3] > 2.0
     employed = portfolio_daily(res, [1], "employed", short_weights="position")
     assert np.isclose(employed.iloc[3], res.long_payoffs[1].iloc[3] / res.long_values[1].iloc[3])
+
+
+def test_engine_committed_is_the_papers_literal_payoff_series():
+    # GGR §2.3, PDF p. 14: committed capital "scales the portfolio payoffs by
+    # the number of pairs that are selected for trading". On the engine path
+    # (a non-empty trade log) "committed" is that literal sum_p pi_p,t / N,
+    # identical to "committed_count"; the stub without a log keeps the hybrid.
+    from project.models import simulate_cohort
+
+    rng = np.random.default_rng(5)
+    idx = pd.bdate_range("2020-01-01", periods=60)
+    rets = pd.DataFrame(rng.normal(0, 0.02, (60, 4)), index=idx, columns=range(1, 5))
+    pairs = pd.DataFrame({"rank": [1, 2], "permno_1": [1, 3], "permno_2": [2, 4],
+                          "distance": 0.0, "sigma": 0.02})
+    res = simulate_cohort(pairs, rets, pd.DataFrame(False, index=idx, columns=rets.columns))
+    assert len(res.trades)
+    committed = evaluation.portfolio_daily(res, None, "committed")
+    literal = evaluation.portfolio_daily(res, None, "committed_count")
+    pd.testing.assert_series_equal(committed, literal)
+    np.testing.assert_allclose(
+        committed.to_numpy(),
+        np.nansum(res.pair_payoffs.to_numpy(), axis=1) / 2.0,
+        atol=1e-15,
+    )
+    from project.evaluation import cohort_monthly, portfolio_monthly
+
+    monthly = portfolio_monthly(res, None, "committed")
+    pd.testing.assert_series_equal(monthly, cohort_monthly(committed))
 
 
 def test_engine_legs_sum_to_pair_payoffs():

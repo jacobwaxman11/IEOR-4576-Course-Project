@@ -57,7 +57,7 @@ def volume_thresholds(
 
 def high_volume_days(
     volume: pd.DataFrame,
-    thresholds: pd.Series | None = None,
+    thresholds: pd.Series | pd.DataFrame | None = None,
     sd_multiple: float = SD_MULTIPLE,
 ) -> pd.DataFrame:
     """Wide (days x permno) bool: volume above the threshold on the same days.
@@ -66,10 +66,40 @@ def high_volume_days(
     and may be a subset of the frame the thresholds came from -- which is how the
     paper's "average over the 18 months" is kept separate from the days that can
     trigger a recall. Missing volumes are False, and a NaN threshold (a stock
-    with no recorded volume) flags nothing.
+    with no recorded volume) flags nothing. A DataFrame of thresholds gives one
+    limit per day and stock (the rolling reading of ``rolling_volume_thresholds``);
+    it is reindexed to the days and stocks being flagged.
     """
     vol = pd.DataFrame(volume).astype("float64")
-    limits = volume_thresholds(vol, sd_multiple) if thresholds is None else pd.Series(
-        thresholds, dtype="float64"
-    )
+    if isinstance(thresholds, pd.DataFrame):
+        limits: pd.Series | pd.DataFrame = pd.DataFrame(thresholds).astype(
+            "float64"
+        ).reindex(index=vol.index, columns=vol.columns)
+    else:
+        limits = volume_thresholds(vol, sd_multiple) if thresholds is None else pd.Series(
+            thresholds, dtype="float64"
+        )
     return (vol.gt(limits, axis="columns") & vol.notna()).fillna(False).astype(bool)
+
+
+def rolling_volume_thresholds(
+    volume: pd.DataFrame,
+    days: pd.DatetimeIndex,
+    sd_multiple: float = SD_MULTIPLE,
+    months: int = 18,
+) -> pd.DataFrame:
+    """Wide (days x permno) ``mean + k sd`` of the ``months`` *ending the day before*.
+
+    The rolling reading of "average daily volume over the 18 months": at every
+    row the mean and the population standard deviation are taken over the
+    observations of the preceding ``months`` calendar span (the window includes
+    the previous row and excludes the row being tested), so the day a stock's
+    volume is compared with is not one of the days its own average is computed
+    from. Windows with fewer than two recorded observations give NaN, i.e. no
+    high-volume day, as a stock with no average cannot exceed one.
+    """
+    vol = pd.DataFrame(volume).astype("float64").sort_index()
+    span = f"{round(365.25 * months / 12)}D"
+    stats = vol.rolling(span, min_periods=2)
+    limits = (stats.mean() + sd_multiple * stats.std(ddof=0)).shift(1)
+    return limits.reindex(index=pd.DatetimeIndex(days))

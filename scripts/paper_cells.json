@@ -1647,6 +1647,204 @@
     "paper": -0.0708,
     "pct": false
    }
+  },
+  "t: hml": {
+   "1": {
+    "paper": 1.37,
+    "pct": false
+   },
+   "2": {
+    "paper": 1.45,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.59,
+    "pct": false
+   },
+   "4": {
+    "paper": -1.82,
+    "pct": false
+   }
+  },
+  "t: ibbotson_default_premium": {
+   "1": {
+    "paper": 1.11,
+    "pct": false
+   },
+   "2": {
+    "paper": 1.38,
+    "pct": false
+   },
+   "3": {
+    "paper": 1.81,
+    "pct": false
+   },
+   "4": {
+    "paper": 2.82,
+    "pct": false
+   }
+  },
+  "t: ibbotson_horizon_premium": {
+   "1": {
+    "paper": 1.55,
+    "pct": false
+   },
+   "2": {
+    "paper": 1.64,
+    "pct": false
+   },
+   "3": {
+    "paper": 1.04,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.77,
+    "pct": false
+   }
+  },
+  "t: ibbotson_intercept": {
+   "1": {
+    "paper": 6.32,
+    "pct": false
+   },
+   "2": {
+    "paper": 9.25,
+    "pct": false
+   },
+   "3": {
+    "paper": 9.39,
+    "pct": false
+   },
+   "4": {
+    "paper": 7.77,
+    "pct": false
+   }
+  },
+  "t: ibbotson_market": {
+   "1": {
+    "paper": -0.07,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.74,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.9,
+    "pct": false
+   },
+   "4": {
+    "paper": 1.98,
+    "pct": false
+   }
+  },
+  "t: ibbotson_small_premium": {
+   "1": {
+    "paper": 1.32,
+    "pct": false
+   },
+   "2": {
+    "paper": 2.22,
+    "pct": false
+   },
+   "3": {
+    "paper": 1.66,
+    "pct": false
+   },
+   "4": {
+    "paper": 1.93,
+    "pct": false
+   }
+  },
+  "t: intercept": {
+   "1": {
+    "paper": 3.81,
+    "pct": false
+   },
+   "2": {
+    "paper": 7.08,
+    "pct": false
+   },
+   "3": {
+    "paper": 8.66,
+    "pct": false
+   },
+   "4": {
+    "paper": 5.3,
+    "pct": false
+   }
+  },
+  "t: market": {
+   "1": {
+    "paper": -1.03,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.64,
+    "pct": false
+   },
+   "3": {
+    "paper": -1.77,
+    "pct": false
+   },
+   "4": {
+    "paper": -3.1,
+    "pct": false
+   }
+  },
+  "t: momentum": {
+   "1": {
+    "paper": -0.94,
+    "pct": false
+   },
+   "2": {
+    "paper": -2.45,
+    "pct": false
+   },
+   "3": {
+    "paper": -5.83,
+    "pct": false
+   },
+   "4": {
+    "paper": -8.5,
+    "pct": false
+   }
+  },
+  "t: reversal": {
+   "1": {
+    "paper": 1.5,
+    "pct": false
+   },
+   "2": {
+    "paper": 1.27,
+    "pct": false
+   },
+   "3": {
+    "paper": 2.24,
+    "pct": false
+   },
+   "4": {
+    "paper": 4.34,
+    "pct": false
+   }
+  },
+  "t: smb": {
+   "1": {
+    "paper": -0.71,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.02,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.5,
+    "pct": false
+   },
+   "4": {
+    "paper": -1.66,
+    "pct": false
+   }
   }
  },
  "Table 5 Panel A (monthly value at risk)": {
@@ -1741,7 +1939,443 @@
    }
   }
  },
+ "Table 5 Panel B (daily value at risk)": {
+  "mean": {
+   "1": {
+    "paper": 0.033,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.04,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.035,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.027,
+    "pct": true
+   }
+  },
+  "min": {
+   "1": {
+    "paper": -10.079,
+    "pct": true
+   },
+   "2": {
+    "paper": -6.723,
+    "pct": true
+   },
+   "3": {
+    "paper": -1.987,
+    "pct": true
+   },
+   "4": {
+    "paper": -1.069,
+    "pct": true
+   }
+  },
+  "serial_correlation": {
+   "1": {
+    "paper": -0.12,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.06,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.0,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.35,
+    "pct": false
+   }
+  },
+  "share_negative": {
+   "1": {
+    "paper": 0.47,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.44,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.45,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.46,
+    "pct": false
+   }
+  },
+  "std": {
+   "1": {
+    "paper": 0.492,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.296,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.277,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.169,
+    "pct": true
+   }
+  },
+  "var_1": {
+   "1": {
+    "paper": -1.236,
+    "pct": true
+   },
+   "2": {
+    "paper": -0.647,
+    "pct": true
+   },
+   "3": {
+    "paper": -0.653,
+    "pct": true
+   },
+   "4": {
+    "paper": -0.327,
+    "pct": true
+   }
+  },
+  "var_10": {
+   "1": {
+    "paper": -0.504,
+    "pct": true
+   },
+   "2": {
+    "paper": -0.293,
+    "pct": true
+   },
+   "3": {
+    "paper": -0.288,
+    "pct": true
+   },
+   "4": {
+    "paper": -0.149,
+    "pct": true
+   }
+  },
+  "var_25": {
+   "1": {
+    "paper": -0.239,
+    "pct": true
+   },
+   "2": {
+    "paper": -0.133,
+    "pct": true
+   },
+   "3": {
+    "paper": -0.13,
+    "pct": true
+   },
+   "4": {
+    "paper": -0.071,
+    "pct": true
+   }
+  },
+  "var_5": {
+   "1": {
+    "paper": -0.71,
+    "pct": true
+   },
+   "2": {
+    "paper": -0.398,
+    "pct": true
+   },
+   "3": {
+    "paper": -0.4,
+    "pct": true
+   },
+   "4": {
+    "paper": -0.202,
+    "pct": true
+   }
+  }
+ },
+ "Table 6 (random pairs sorted on prior one-month return)": {
+  "A. No waiting, fully invested: Mean excess return": {
+   "1": {
+    "paper": -0.00137,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.00111,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.00105,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.00113,
+    "pct": false
+   }
+  },
+  "A. No waiting, fully invested: Standard deviation": {
+   "1": {
+    "paper": 0.05521,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.02295,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.02264,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.012,
+    "pct": false
+   }
+  },
+  "A. No waiting, fully invested: Median": {
+   "1": {
+    "paper": -0.00192,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.00153,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.00156,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.00162,
+    "pct": false
+   }
+  },
+  "A. No waiting, committed capital: Mean excess return": {
+   "1": {
+    "paper": -0.00083,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.00077,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.00089,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.00091,
+    "pct": false
+   }
+  },
+  "A. No waiting, committed capital: Standard deviation": {
+   "1": {
+    "paper": 0.02635,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.01358,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.01443,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.0076,
+    "pct": false
+   }
+  },
+  "A. No waiting, committed capital: Median": {
+   "1": {
+    "paper": -0.00123,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.001,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.00123,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.00122,
+    "pct": false
+   }
+  },
+  "B. Wait one day, fully invested: Mean excess return": {
+   "1": {
+    "paper": -0.00177,
+    "pct": false
+   },
+   "2": {
+    "paper": -4e-05,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.00154,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.00156,
+    "pct": false
+   }
+  },
+  "B. Wait one day, fully invested: Standard deviation": {
+   "1": {
+    "paper": 0.05966,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.0531,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.02404,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.01213,
+    "pct": false
+   }
+  },
+  "B. Wait one day, fully invested: Median": {
+   "1": {
+    "paper": -0.00241,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.00172,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.00206,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.00201,
+    "pct": false
+   }
+  },
+  "B. Wait one day, committed capital: Mean excess return": {
+   "1": {
+    "paper": -0.00103,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.00094,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.00112,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.00112,
+    "pct": false
+   }
+  },
+  "B. Wait one day, committed capital: Standard deviation": {
+   "1": {
+    "paper": 0.02811,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.01363,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.01449,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.00761,
+    "pct": false
+   }
+  },
+  "B. Wait one day, committed capital: Median": {
+   "1": {
+    "paper": -0.00152,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.00118,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.00148,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.00139,
+    "pct": false
+   }
+  }
+ },
  "Table 7 (long and short books, one-day wait)": {
+  "long: hml": {
+   "1": {
+    "paper": 0.484,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.525,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.395,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.257,
+    "pct": false
+   }
+  },
+  "long: intercept": {
+   "1": {
+    "paper": 0.1,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.24,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.29,
+    "pct": true
+   },
+   "4": {
+    "paper": -0.1,
+    "pct": true
+   }
+  },
+  "long: market": {
+   "1": {
+    "paper": 0.374,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.476,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.485,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.586,
+    "pct": false
+   }
+  },
   "long: mean monthly return": {
    "1": {
     "paper": 1.24,
@@ -1760,6 +2394,24 @@
     "pct": true
    }
   },
+  "long: momentum": {
+   "1": {
+    "paper": -0.0543,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.0446,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.109,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.0883,
+    "pct": false
+   }
+  },
   "long: monthly serial correlation": {
    "1": {
     "paper": 0.06,
@@ -1775,6 +2427,60 @@
    },
    "4": {
     "paper": 0.17,
+    "pct": false
+   }
+  },
+  "long: r2": {
+   "1": {
+    "paper": 0.39,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.48,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.78,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.97,
+    "pct": false
+   }
+  },
+  "long: reversal": {
+   "1": {
+    "paper": 0.159,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.096,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.173,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.392,
+    "pct": false
+   }
+  },
+  "long: smb": {
+   "1": {
+    "paper": -0.168,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.0651,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.0112,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.222,
     "pct": false
    }
   },
@@ -1814,6 +2520,60 @@
     "pct": true
    }
   },
+  "short: hml": {
+   "1": {
+    "paper": 0.427,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.48,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.412,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.311,
+    "pct": false
+   }
+  },
+  "short: intercept": {
+   "1": {
+    "paper": -0.44,
+    "pct": true
+   },
+   "2": {
+    "paper": -0.52,
+    "pct": true
+   },
+   "3": {
+    "paper": -0.43,
+    "pct": true
+   },
+   "4": {
+    "paper": -0.61,
+    "pct": true
+   }
+  },
+  "short: market": {
+   "1": {
+    "paper": 0.441,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.508,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.562,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.731,
+    "pct": false
+   }
+  },
   "short: mean monthly return": {
    "1": {
     "paper": 0.5,
@@ -1832,6 +2592,24 @@
     "pct": true
    }
   },
+  "short: momentum": {
+   "1": {
+    "paper": -0.0262,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.00361,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.00589,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.0925,
+    "pct": false
+   }
+  },
   "short: monthly serial correlation": {
    "1": {
     "paper": 0.11,
@@ -1847,6 +2625,60 @@
    },
    "4": {
     "paper": 0.16,
+    "pct": false
+   }
+  },
+  "short: r2": {
+   "1": {
+    "paper": 0.41,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.49,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.75,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.93,
+    "pct": false
+   }
+  },
+  "short: reversal": {
+   "1": {
+    "paper": 0.0566,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.0237,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.0783,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.191,
+    "pct": false
+   }
+  },
+  "short: smb": {
+   "1": {
+    "paper": -0.125,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.0662,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.0345,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.293,
     "pct": false
    }
   },
@@ -1884,6 +2716,222 @@
    "4": {
     "paper": 0.23,
     "pct": true
+   }
+  },
+  "t: long: hml": {
+   "1": {
+    "paper": 7.12,
+    "pct": false
+   },
+   "2": {
+    "paper": 9.36,
+    "pct": false
+   },
+   "3": {
+    "paper": 9.76,
+    "pct": false
+   },
+   "4": {
+    "paper": 7.49,
+    "pct": false
+   }
+  },
+  "t: long: intercept": {
+   "1": {
+    "paper": 0.47,
+    "pct": false
+   },
+   "2": {
+    "paper": 1.27,
+    "pct": false
+   },
+   "3": {
+    "paper": 2.85,
+    "pct": false
+   },
+   "4": {
+    "paper": -1.32,
+    "pct": false
+   }
+  },
+  "t: long: market": {
+   "1": {
+    "paper": 4.6,
+    "pct": false
+   },
+   "2": {
+    "paper": 6.68,
+    "pct": false
+   },
+   "3": {
+    "paper": 10.2,
+    "pct": false
+   },
+   "4": {
+    "paper": 15.0,
+    "pct": false
+   }
+  },
+  "t: long: momentum": {
+   "1": {
+    "paper": -1.48,
+    "pct": false
+   },
+   "2": {
+    "paper": -1.21,
+    "pct": false
+   },
+   "3": {
+    "paper": -3.53,
+    "pct": false
+   },
+   "4": {
+    "paper": -3.53,
+    "pct": false
+   }
+  },
+  "t: long: reversal": {
+   "1": {
+    "paper": 1.83,
+    "pct": false
+   },
+   "2": {
+    "paper": 1.26,
+    "pct": false
+   },
+   "3": {
+    "paper": 4.33,
+    "pct": false
+   },
+   "4": {
+    "paper": 10.4,
+    "pct": false
+   }
+  },
+  "t: long: smb": {
+   "1": {
+    "paper": -1.74,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.8,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.27,
+    "pct": false
+   },
+   "4": {
+    "paper": 3.45,
+    "pct": false
+   }
+  },
+  "t: short: hml": {
+   "1": {
+    "paper": 6.92,
+    "pct": false
+   },
+   "2": {
+    "paper": 9.47,
+    "pct": false
+   },
+   "3": {
+    "paper": 11.5,
+    "pct": false
+   },
+   "4": {
+    "paper": 8.11,
+    "pct": false
+   }
+  },
+  "t: short: intercept": {
+   "1": {
+    "paper": -2.74,
+    "pct": false
+   },
+   "2": {
+    "paper": -3.35,
+    "pct": false
+   },
+   "3": {
+    "paper": -4.26,
+    "pct": false
+   },
+   "4": {
+    "paper": -5.22,
+    "pct": false
+   }
+  },
+  "t: short: market": {
+   "1": {
+    "paper": 6.19,
+    "pct": false
+   },
+   "2": {
+    "paper": 8.44,
+    "pct": false
+   },
+   "3": {
+    "paper": 9.74,
+    "pct": false
+   },
+   "4": {
+    "paper": 12.1,
+    "pct": false
+   }
+  },
+  "t: short: momentum": {
+   "1": {
+    "paper": -0.65,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.1,
+    "pct": false
+   },
+   "3": {
+    "paper": -0.21,
+    "pct": false
+   },
+   "4": {
+    "paper": 2.81,
+    "pct": false
+   }
+  },
+  "t: short: reversal": {
+   "1": {
+    "paper": 1.13,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.55,
+    "pct": false
+   },
+   "3": {
+    "paper": 1.9,
+    "pct": false
+   },
+   "4": {
+    "paper": 2.98,
+    "pct": false
+   }
+  },
+  "t: short: smb": {
+   "1": {
+    "paper": -2.0,
+    "pct": false
+   },
+   "2": {
+    "paper": -1.22,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.95,
+    "pct": false
+   },
+   "4": {
+    "paper": 3.15,
+    "pct": false
    }
   }
  },
@@ -2209,6 +3257,710 @@
    },
    "4": {
     "paper": 1.651,
+    "pct": true
+   }
+  },
+  "t: post_hml": {
+   "1": {
+    "paper": 0.61,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.45,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.5,
+    "pct": false
+   },
+   "4": {
+    "paper": -2.65,
+    "pct": false
+   }
+  },
+  "t: post_intercept": {
+   "1": {
+    "paper": 2.12,
+    "pct": false
+   },
+   "2": {
+    "paper": 3.77,
+    "pct": false
+   },
+   "3": {
+    "paper": 3.01,
+    "pct": false
+   },
+   "4": {
+    "paper": -0.56,
+    "pct": false
+   }
+  },
+  "t: post_market": {
+   "1": {
+    "paper": 1.68,
+    "pct": false
+   },
+   "2": {
+    "paper": 1.81,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.06,
+    "pct": false
+   },
+   "4": {
+    "paper": -2.43,
+    "pct": false
+   }
+  },
+  "t: post_momentum": {
+   "1": {
+    "paper": -0.13,
+    "pct": false
+   },
+   "2": {
+    "paper": -1.29,
+    "pct": false
+   },
+   "3": {
+    "paper": -4.17,
+    "pct": false
+   },
+   "4": {
+    "paper": -7.59,
+    "pct": false
+   }
+  },
+  "t: post_reversal": {
+   "1": {
+    "paper": -1.76,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.67,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.54,
+    "pct": false
+   },
+   "4": {
+    "paper": 5.56,
+    "pct": false
+   }
+  },
+  "t: post_smb": {
+   "1": {
+    "paper": -0.1,
+    "pct": false
+   },
+   "2": {
+    "paper": 1.32,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.69,
+    "pct": false
+   },
+   "4": {
+    "paper": -2.83,
+    "pct": false
+   }
+  },
+  "t: pre_hml": {
+   "1": {
+    "paper": 0.64,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.73,
+    "pct": false
+   },
+   "3": {
+    "paper": -1.84,
+    "pct": false
+   },
+   "4": {
+    "paper": -1.97,
+    "pct": false
+   }
+  },
+  "t: pre_intercept": {
+   "1": {
+    "paper": 1.72,
+    "pct": false
+   },
+   "2": {
+    "paper": 4.41,
+    "pct": false
+   },
+   "3": {
+    "paper": 6.54,
+    "pct": false
+   },
+   "4": {
+    "paper": 4.19,
+    "pct": false
+   }
+  },
+  "t: pre_market": {
+   "1": {
+    "paper": -4.29,
+    "pct": false
+   },
+   "2": {
+    "paper": -3.57,
+    "pct": false
+   },
+   "3": {
+    "paper": -3.8,
+    "pct": false
+   },
+   "4": {
+    "paper": -7.26,
+    "pct": false
+   }
+  },
+  "t: pre_momentum": {
+   "1": {
+    "paper": 0.29,
+    "pct": false
+   },
+   "2": {
+    "paper": -0.5,
+    "pct": false
+   },
+   "3": {
+    "paper": -2.92,
+    "pct": false
+   },
+   "4": {
+    "paper": -5.01,
+    "pct": false
+   }
+  },
+  "t: pre_reversal": {
+   "1": {
+    "paper": 4.44,
+    "pct": false
+   },
+   "2": {
+    "paper": 3.62,
+    "pct": false
+   },
+   "3": {
+    "paper": 4.05,
+    "pct": false
+   },
+   "4": {
+    "paper": 7.98,
+    "pct": false
+   }
+  },
+  "t: pre_smb": {
+   "1": {
+    "paper": -3.75,
+    "pct": false
+   },
+   "2": {
+    "paper": -2.86,
+    "pct": false
+   },
+   "3": {
+    "paper": -2.86,
+    "pct": false
+   },
+   "4": {
+    "paper": -5.76,
+    "pct": false
+   }
+  },
+  "factor sd: market": {
+   "1": {
+    "paper": 0.0458,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.0439,
+    "pct": false
+   }
+  },
+  "factor sd: smb": {
+   "1": {
+    "paper": 0.02923,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.03856,
+    "pct": false
+   }
+  },
+  "factor sd: hml": {
+   "1": {
+    "paper": 0.02597,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.03641,
+    "pct": false
+   }
+  },
+  "factor sd: momentum": {
+   "1": {
+    "paper": 0.03506,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.04926,
+    "pct": false
+   }
+  },
+  "factor sd: reversal": {
+   "1": {
+    "paper": 0.07228,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.04448,
+    "pct": false
+   }
+  }
+ },
+ "Table 9 Panel A (top three size deciles, one-day wait)": {
+  "committed_mean": {
+   "1": {
+    "paper": 0.49,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.51,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.46,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.4,
+    "pct": true
+   }
+  },
+  "kurtosis": {
+   "1": {
+    "paper": 0.02,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.98,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.8,
+    "pct": false
+   },
+   "4": {
+    "paper": 1.77,
+    "pct": false
+   }
+  },
+  "max": {
+   "1": {
+    "paper": 10.14,
+    "pct": true
+   },
+   "2": {
+    "paper": 10.0,
+    "pct": true
+   },
+   "3": {
+    "paper": 10.64,
+    "pct": true
+   },
+   "4": {
+    "paper": 10.48,
+    "pct": true
+   }
+  },
+  "mean": {
+   "1": {
+    "paper": 0.83,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.91,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.73,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.69,
+    "pct": true
+   }
+  },
+  "median": {
+   "1": {
+    "paper": 0.8,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.79,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.61,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.51,
+    "pct": true
+   }
+  },
+  "min": {
+   "1": {
+    "paper": -10.89,
+    "pct": true
+   },
+   "2": {
+    "paper": -5.65,
+    "pct": true
+   },
+   "3": {
+    "paper": -3.8,
+    "pct": true
+   },
+   "4": {
+    "paper": -2.68,
+    "pct": true
+   }
+  },
+  "nw_se": {
+   "1": {
+    "paper": 0.11,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.1,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.07,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.06,
+    "pct": true
+   }
+  },
+  "share_negative": {
+   "1": {
+    "paper": 0.32,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.26,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.33,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.27,
+    "pct": false
+   }
+  },
+  "skew": {
+   "1": {
+    "paper": 7.01,
+    "pct": false
+   },
+   "2": {
+    "paper": 8.2,
+    "pct": false
+   },
+   "3": {
+    "paper": 6.46,
+    "pct": false
+   },
+   "4": {
+    "paper": 11.7,
+    "pct": false
+   }
+  },
+  "std": {
+   "1": {
+    "paper": 1.9,
+    "pct": true
+   },
+   "2": {
+    "paper": 1.46,
+    "pct": true
+   },
+   "3": {
+    "paper": 1.58,
+    "pct": true
+   },
+   "4": {
+    "paper": 1.29,
+    "pct": true
+   }
+  },
+  "t_stat": {
+   "1": {
+    "paper": 7.47,
+    "pct": false
+   },
+   "2": {
+    "paper": 9.48,
+    "pct": false
+   },
+   "3": {
+    "paper": 9.66,
+    "pct": false
+   },
+   "4": {
+    "paper": 10.8,
+    "pct": false
+   }
+  }
+ },
+ "Table 9 Panel B (short recalls on high volume, one-day wait)": {
+  "kurtosis": {
+   "1": {
+    "paper": 5.39,
+    "pct": false
+   },
+   "2": {
+    "paper": 6,
+    "pct": false
+   },
+   "3": {
+    "paper": 7.39,
+    "pct": false
+   },
+   "4": {
+    "paper": 19,
+    "pct": false
+   }
+  },
+  "max": {
+   "1": {
+    "paper": 10.5,
+    "pct": true
+   },
+   "2": {
+    "paper": 7.26,
+    "pct": true
+   },
+   "3": {
+    "paper": 10.08,
+    "pct": true
+   },
+   "4": {
+    "paper": 14.17,
+    "pct": true
+   }
+  },
+  "mean (committed)": {
+   "1": {
+    "paper": 0.3,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.35,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.3,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.2,
+    "pct": true
+   }
+  },
+  "mean (fully invested)": {
+   "1": {
+    "paper": 0.62,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.85,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.66,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.58,
+    "pct": true
+   }
+  },
+  "median": {
+   "1": {
+    "paper": 0.59,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.7,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.53,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.31,
+    "pct": true
+   }
+  },
+  "min": {
+   "1": {
+    "paper": -9.61,
+    "pct": true
+   },
+   "2": {
+    "paper": -6.59,
+    "pct": true
+   },
+   "3": {
+    "paper": -4.41,
+    "pct": true
+   },
+   "4": {
+    "paper": -3.46,
+    "pct": true
+   }
+  },
+  "nw_se": {
+   "1": {
+    "paper": 0.11,
+    "pct": true
+   },
+   "2": {
+    "paper": 0.09,
+    "pct": true
+   },
+   "3": {
+    "paper": 0.08,
+    "pct": true
+   },
+   "4": {
+    "paper": 0.1,
+    "pct": true
+   }
+  },
+  "share_negative": {
+   "1": {
+    "paper": 0.39,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.26,
+    "pct": false
+   },
+   "3": {
+    "paper": 0.34,
+    "pct": false
+   },
+   "4": {
+    "paper": 0.37,
+    "pct": false
+   }
+  },
+  "skew": {
+   "1": {
+    "paper": 0.15,
+    "pct": false
+   },
+   "2": {
+    "paper": 0.48,
+    "pct": false
+   },
+   "3": {
+    "paper": 1.03,
+    "pct": false
+   },
+   "4": {
+    "paper": 2.82,
+    "pct": false
+   }
+  },
+  "std": {
+   "1": {
+    "paper": 2.21,
+    "pct": true
+   },
+   "2": {
+    "paper": 1.49,
+    "pct": true
+   },
+   "3": {
+    "paper": 1.5,
+    "pct": true
+   },
+   "4": {
+    "paper": 1.55,
+    "pct": true
+   }
+  },
+  "t_stat": {
+   "1": {
+    "paper": 5.39,
+    "pct": false
+   },
+   "2": {
+    "paper": 9.07,
+    "pct": false
+   },
+   "3": {
+    "paper": 7.81,
+    "pct": false
+   },
+   "4": {
+    "paper": 5.95,
+    "pct": false
+   }
+  }
+ },
+ "Numbers printed in the text": {
+  "the average number of pairs in the all-pair portfolio": {
+   "1": {
+    "paper": 2057.0,
+    "pct": false
+   }
+  },
+  "annual excess return": {
+   "1": {
+    "paper": 10.4,
+    "pct": true
+   }
+  },
+  "annual standard deviation": {
+   "1": {
+    "paper": 3.8,
+    "pct": true
+   }
+  },
+  "Newey-West t-statistic": {
+   "1": {
+    "paper": 4.82,
+    "pct": false
+   }
+  },
+  "mean monthly return": {
+   "1": {
+    "paper": 1.32,
+    "pct": true
+   }
+  },
+  "standard deviation": {
+   "1": {
+    "paper": 1.9,
     "pct": true
    }
   }

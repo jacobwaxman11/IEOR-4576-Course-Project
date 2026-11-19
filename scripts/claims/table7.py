@@ -18,9 +18,9 @@ overlap-averages the portfolio, and runs the paper's five-factor regression with
 Newey-West t-statistics at six lags (``project.factors``).
 
 Two readings of one ambiguity are reported. The paper's reversal factor is not published
-(REVIEW_NOTES section 51); the scored regressions keep French's ST_Rev, so that is the
-primary series here, and the losers-only long book that section 51 measures as the paper's
-factor's fingerprint is the documented alternative.
+(REVIEW_NOTES section 51); the scored regressions keep the losers-only series (SCORE_LOG
+row 21, the driver's default), so that is the primary series here, and French's ST_Rev,
+the construction the paper describes, is the documented alternative.
 
 Usage
 -----
@@ -47,8 +47,14 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
-from project.evaluation import summary_stats
-from project.factors import FACTORS, FRENCH_DIR, load_factors, load_losers_only
+import project.table7 as table7_core
+from project.factors import (
+    FACTORS,
+    load_factors,
+    load_losers_only,
+    vintage,
+    vintage_dir,
+)
 
 _spec = importlib.util.spec_from_file_location("replicate", ROOT / "scripts" / "03_replicate.py")
 rep = importlib.util.module_from_spec(_spec)
@@ -62,16 +68,15 @@ import table7_report as report_module
 #: The paper's Table 7, parsed from the PDF and checked against it by ``table7_paper``.
 paper7 = paper_module.load()
 
-#: Paper portfolios, left to right as Table 7 prints them.
-PAPER_PORTFOLIOS = ("top5", "top20", "101-120", "all")
-#: Paper column labels, in the paper's words.
+#: Paper portfolios, left to right as Table 7 prints them; the labels the report prints.
+PAPER_PORTFOLIOS = table7_core.PAPER_PORTFOLIOS
 PAPER_LABELS = {"top5": "Top 5", "top20": "Top 20", "101-120": "20 after top 100", "all": "All"}
-BOOKS = ("long_book", "short_book")
-BOOK_LABELS = {"long_book": "Long", "short_book": "Short"}
+BOOKS = table7_core.BOOKS
+BOOK_LABELS = table7_core.BOOK_LABELS
 #: Rows of Table 7's "Portfolio performance" block, top to bottom.
-PERFORMANCE_ROWS = ("mean", "nw_se", "std", "serial_correlation")
+PERFORMANCE_ROWS = table7_core.PERFORMANCE_ROWS
 #: Rows of Table 7's regression block, in the paper's order.
-REGRESSION_ROWS = ("intercept", "market", "smb", "hml", "momentum", "reversal", "r2")
+REGRESSION_ROWS = table7_core.REGRESSION_ROWS
 #: Display label for every row of the built table, in Table 7's own order.
 ROW_LABELS = (
     ("mean", "Mean monthly return"),
@@ -92,7 +97,7 @@ ROW_LABELS = (
     ("t_reversal", "  t-Statistic"),
     ("r2", "R2"),
 )
-NW_LAGS = 6
+NW_LAGS = table7_core.NW_LAGS
 T_CRIT = 1.96
 #: The shared replication cache, used when this checkout has none (read-only).
 _SHARED_REPLICATION = Path(os.environ.get(
@@ -107,7 +112,7 @@ _SHARED_DATA_ROOT = Path(os.environ.get(
 
 
 # --------------------------------------------------------------------------------------
-# Series
+# Series and statistics: ``project.table7``, shared with the driver's scored check
 # --------------------------------------------------------------------------------------
 def cohort_list(cohorts_dir: Path) -> list[tuple[int, int]]:
     """Every cached cohort, oldest first, from its ``YYYY-MM`` directory name."""
@@ -119,72 +124,29 @@ def cohort_list(cohorts_dir: Path) -> list[tuple[int, int]]:
 
 
 def book_series(monthly: pd.DataFrame, end: tuple[int, int]) -> dict[str, pd.Series]:
-    """Each portfolio's long and short book, overlap-averaged across cohorts (wait 1).
-
-    The monthly rows are the driver's own (``build_cohort`` writes them), so this is the
-    same Jegadeesh-Titman average ``aggregate`` applies to the portfolio series.
-    """
-    t1 = monthly[monthly["table"] == "t1"]
-    groups = dict(tuple(t1.groupby(["wait", "portfolio", "capital"], sort=False)))
-    end_ts = pd.Timestamp(rep.month_end(*end))
-    empty = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
-    out: dict[str, pd.Series] = {}
-    for pname in PAPER_PORTFOLIOS:
-        for book in BOOKS:
-            key = (1, pname, book)
-            series = rep._strategy_series(groups[key], end_ts) if key in groups else empty
-            out[f"{pname}|{book}"] = series.rename(f"{pname}|{book}")
-    return out
+    """Each portfolio's long and short book, overlap-averaged across cohorts (wait 1)."""
+    return table7_core.book_series(monthly, pd.Timestamp(rep.month_end(*end)))
 
 
 def portfolio_series(monthly: pd.DataFrame, end: tuple[int, int],
                      capital: str) -> dict[str, pd.Series]:
     """Each portfolio's own monthly return under ``capital`` (the control run's input)."""
-    t1 = monthly[monthly["table"] == "t1"]
-    groups = dict(tuple(t1.groupby(["wait", "portfolio", "capital"], sort=False)))
-    end_ts = pd.Timestamp(rep.month_end(*end))
-    empty = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
-    return {
-        pname: (
-            rep._strategy_series(groups[(1, pname, capital)], end_ts)
-            if (1, pname, capital) in groups else empty
-        )
-        for pname in PAPER_PORTFOLIOS
-    }
+    return table7_core.portfolio_series(monthly, pd.Timestamp(rep.month_end(*end)), capital)
 
 
 def excess(series: pd.Series, factors: pd.DataFrame) -> pd.Series:
     """``series`` less the 30-day T-bill return: Table 7's regressions are in excess."""
-    return (series - factors["rf"].reindex(series.index)).dropna()
+    return table7_core.excess(series, factors)
 
 
-# --------------------------------------------------------------------------------------
-# Statistics
-# --------------------------------------------------------------------------------------
 def performance_rows(series: pd.Series) -> pd.Series:
     """Table 7's four performance rows for one book's monthly return series."""
-    stats = summary_stats(series)
-    return pd.Series(
-        {
-            "mean": float(stats["mean"]),
-            "nw_se": float(stats["nw_se"]),
-            "std": float(stats["std"]),
-            "serial_correlation": float(rep._monthly_autocorr(series)),
-        }
-    )
+    return table7_core.performance_rows(series)
 
 
 def regression_rows(series: pd.Series, factors: pd.DataFrame) -> pd.Series:
-    """Table 7's regression block: coefficients, Newey-West t-statistics and R2.
-
-    ``series`` is already in excess of the T-bill. The paper prints two rows per
-    coefficient, so the ``t_`` keys carry the statistic and the coefficient keys the value.
-    """
-    coef = rep.factor_regression(series, factors)
-    tstats = rep.factor_tstats(series, factors, lags=NW_LAGS)
-    out = {row: float(coef[row]) for row in REGRESSION_ROWS}
-    out.update({f"t_{row}": float(tstats[row]) for row in REGRESSION_ROWS if row != "r2"})
-    return pd.Series(out)
+    """Table 7's regression block: coefficients, Newey-West t-statistics and R2."""
+    return table7_core.regression_rows(series, factors)
 
 
 def _is_lfs_pointer(path: Path) -> bool:
@@ -196,8 +158,10 @@ def _is_lfs_pointer(path: Path) -> bool:
 
 
 def french_dir_or_none(explicit: str | None = None) -> Path:
-    """The directory holding French's archives, preferring one that is actually pulled.
+    """The directory holding the vintage's French archives, preferring one actually pulled.
 
+    The directory is ``project.factors.vintage_dir()``: ``data/raw/french_vintage_2005`` for the
+    paper's 2005 files (committed whole, never LFS), ``data/raw/french`` for today's.
     ``data/raw/french`` is Git LFS: in a fresh checkout every archive is a 130-byte
     pointer. The shared tree keeps the pulled copies under the gitignored
     ``data/raw/public/french`` (the same local download cache that feeds the panel), so a
@@ -206,12 +170,15 @@ def french_dir_or_none(explicit: str | None = None) -> Path:
     """
     if explicit:
         return Path(explicit)
-    if not _is_lfs_pointer(FRENCH_DIR / "F-F_Research_Data_Factors_CSV.zip"):
-        return FRENCH_DIR
+    directory = vintage_dir()
+    probe = ("F-F_Research_Data_Factors.zip" if vintage() == "2005"
+             else "F-F_Research_Data_Factors_CSV.zip")
+    if not _is_lfs_pointer(directory / probe):
+        return directory
     shared = _SHARED_DATA_ROOT / "raw" / "public" / "french"
-    if not _is_lfs_pointer(shared / "F-F_Research_Data_Factors_CSV.zip"):
+    if not _is_lfs_pointer(shared / probe):
         return shared
-    return FRENCH_DIR
+    return directory
 
 
 def book_rows(series: pd.Series, factors: pd.DataFrame) -> pd.Series:
@@ -391,19 +358,21 @@ def build(cache_root: str | None = None, universe: str = "vol_common",
     books = book_series(monthly, cohorts[-1])
     french = french_dir_or_none(french_dir)
     factors = load_factors(french) if factors is None else factors
-    five = factors[FACTORS]
-    table = book_table(books, factors)
-
     losers = load_losers_only(french)
-    alt = factors.assign(reversal=losers.reindex(factors.index)).dropna()
-    table_alt = book_table(books, alt)
+    #: The scored frame (SCORE_LOG row 21): French's factors with the losers-only
+    #: reversal series, the default of the driver's ``--reversal-factor``.
+    scored = factors.assign(reversal=losers.reindex(factors.index)).dropna()
+    #: French's own short-term reversal, the alternative reading (REVIEW_NOTES 61).
+    st_rev = factors
+    table = book_table(books, scored)
+    table_st_rev = book_table(books, st_rev)
 
     control = portfolio_series(monthly, cohorts[-1], "employed")
     # The shipped Table 4 regresses the pair spread itself: a long-minus-short position
     # needs no bill subtracted, and ``write_risk_tables`` passes ``strategy[...]["employed"]``
     # straight to ``factor_regression``. The control must do the same or it is not one.
     control_rows = pd.DataFrame(
-        {pname: regression_rows(s, five) for pname, s in control.items()}
+        {pname: regression_rows(s, scored[FACTORS]) for pname, s in control.items()}
     )
     return {
         "cache": str(cohorts_dir),
@@ -412,15 +381,15 @@ def build(cache_root: str | None = None, universe: str = "vol_common",
         "n_cohorts": len(cohorts),
         "n_months": len(books["top5|long_book"]),
         "table": table,
-        "table_losers": table_alt,
+        "table_st_rev": table_st_rev,
         "control": control_rows,
         "identity": identity_check(books, control),
         "decomposition": decomposition(table, control_rows),
-        "decomposition_losers": decomposition(table_alt, control_rows),
+        "decomposition_st_rev": decomposition(table_st_rev, control_rows),
         "marks": paper_module.compare(table, paper7),
-        "marks_losers": paper_module.compare(table_alt, paper7),
+        "marks_st_rev": paper_module.compare(table_st_rev, paper7),
         "claim": claim_test(table),
-        "claim_losers": claim_test(table_alt),
+        "claim_st_rev": claim_test(table_st_rev),
     }
 
 
@@ -432,12 +401,12 @@ def render(result: dict) -> str:
         (f"cohorts: {result['n_cohorts']}  months: {result['n_months']}  "
         f"cache meta: {result['cache_meta']}"),
         "",
-        "Table 7 - returns to the long and short components of pairs (ST_Rev, primary)",
+        "Table 7 - returns to the long and short components of pairs (losers-only, scored)",
     ]
     lines.append(table.round(5).to_string())
     lines.append("")
-    lines.append("Alternative reversal factor: losers-only long book (section 51 fingerprint)")
-    lines.append(display(result["table_losers"]).round(5).to_string())
+    lines.append("Alternative reversal factor: French's ST_Rev (unscored)")
+    lines.append(display(result["table_st_rev"]).round(5).to_string())
     lines.append("")
     lines.append("Control: the portfolio series itself, regressed the same way "
                  "(compare REPLICATION_CHECK Table 4)")
@@ -447,16 +416,17 @@ def render(result: dict) -> str:
     lines.append(result["identity"].round(5).to_string())
     lines.append("")
     lines.append("Ours against the paper, cell by cell (✓ within 10%, ~ within 25%, ✗ beyond)")
-    for name, marks in (("ST_Rev", result["marks"]), ("losers-only", result["marks_losers"])):
+    for name, marks in (("losers-only", result["marks"]),
+                        ("ST_Rev", result["marks_st_rev"])):
         lines.append(f"  {name}: {paper_module.tally(marks)}")
     lines.append("")
     lines.append("Alpha decomposition: each book's share of the pairs alpha")
     lines.append(result["decomposition"].round(4).to_string())
     lines.append("")
-    lines.append("Claim test (ST_Rev):")
-    lines.append(json.dumps(result["claim"], indent=2))
     lines.append("Claim test (losers-only reversal):")
-    lines.append(json.dumps(result["claim_losers"], indent=2))
+    lines.append(json.dumps(result["claim"], indent=2))
+    lines.append("Claim test (ST_Rev):")
+    lines.append(json.dumps(result["claim_st_rev"], indent=2))
     return "\n".join(lines) + "\n"
 
 
@@ -510,7 +480,7 @@ def main(argv: list[str] | None = None) -> int:
             "n_cohorts": result["n_cohorts"],
             "n_months": result["n_months"],
             "claim": result["claim"],
-            "claim_losers": result["claim_losers"],
+            "claim_st_rev": result["claim_st_rev"],
             "identity": result["identity"].to_dict(orient="index"),
         }
         Path(args.json).write_text(json.dumps(payload, indent=2, default=float) + "\n")

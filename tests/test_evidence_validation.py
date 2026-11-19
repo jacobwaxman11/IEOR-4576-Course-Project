@@ -2,6 +2,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+
 from project.evidence_validation import validate_bootstrap_sample
 
 

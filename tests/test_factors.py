@@ -11,7 +11,9 @@ import pytest
 
 from project.factors import (
     FACTOR_FILES,
+    VINTAGE_2005_DIR,
     _monthly_block,
+    _txt_monthly_block,
     factor_regression,
     factor_residuals,
     factor_tstats,
@@ -175,3 +177,58 @@ def test_load_ibbotson_factors_refuses_an_lfs_pointer(tmp_path):
     path.write_text("version https://git-lfs.github.com/spec/v1\noid sha256:0\n")
     with pytest.raises(FileNotFoundError, match="git lfs pull"):
         load_ibbotson_factors(path, tmp_path)
+
+
+TXT_2005 = """This file was created by CMPT_ME_BEME_RETS using the 200508 CRSP database.
+The 1-month TBill return is from Ibbotson and Associates, Inc.
+
+        Mkt-RF     SMB     HML      RF
+196307     -0.39   -0.48   -0.81    0.27
+196308      5.07   -0.80    1.70    0.25
+
+ Annual Factors: January-December
+  1964     12.51    0.03    9.12    3.54
+"""
+
+TXT_2005_MOMENTUM = """This file was created by CMPT_ME_PRIOR_RETS using the 200509 CRSP database.  It
+contains a momentum factor, constructed from six value-weight portfolios formed
+using independent sorts on size and prior return of NYSE, AMEX, and NASDAQ stocks.
+
+Missing data are indicated by -99.99 or -999.
+
+          UMD
+196307      1.00
+196308      2.00
+"""
+
+
+def test_txt_monthly_block_reads_frenchs_pre_2006_plain_text_layout():
+    frame = _txt_monthly_block(TXT_2005)
+    assert list(frame.columns) == ["Mkt-RF", "SMB", "HML", "RF"]
+    assert list(frame.index) == [pd.Timestamp("1963-07-31"), pd.Timestamp("1963-08-31")]
+    assert frame.loc["1963-08-31", "Mkt-RF"] == pytest.approx(0.0507)
+    # the annual block (a four-digit year) ends the monthly one
+    assert len(frame) == 2
+    assert _txt_monthly_block(TXT_2005_MOMENTUM).loc["1963-07-31", "UMD"] == pytest.approx(0.01)
+
+
+#: Table 8's printed "Factor sd" column (p. 822), before 1989 and after 1988.
+PAPER_FACTOR_SD = {
+    "pre": {"market": 0.04580, "smb": 0.02923, "hml": 0.02597, "momentum": 0.03506},
+    "post": {"market": 0.04390, "smb": 0.03856, "hml": 0.03641, "momentum": 0.04926},
+}
+
+
+def test_2005_loader_reproduces_the_paper_factor_sd():
+    """French's 2005 archives, not today's revised files, give Table 8's eight printed sds."""
+    if not (VINTAGE_2005_DIR / "F-F_Research_Data_Factors.zip").exists():
+        pytest.skip("the 2005 vintage archives are absent")
+    factors = load_factors(vintage="2005")
+    pre = factors.loc[(factors.index >= pd.Timestamp("1963-07-31"))
+                      & (factors.index <= pd.Timestamp("1988-12-31"))]
+    post = factors.loc[(factors.index >= pd.Timestamp("1989-01-31"))
+                       & (factors.index <= pd.Timestamp("2002-12-31"))]
+    for half, window in (("pre", pre), ("post", post)):
+        for name, paper in PAPER_FACTOR_SD[half].items():
+            ours = float(window[name].std(ddof=1))
+            assert ours == pytest.approx(paper, rel=0.01), f"{half} {name}: {ours} vs {paper}"

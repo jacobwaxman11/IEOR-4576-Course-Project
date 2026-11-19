@@ -4,7 +4,7 @@ The paper takes the market, SMB, HML and momentum factors from Ken French's libr
 printed standard deviations are his to the third or fourth decimal) but builds the reversal
 factor itself; French's ST_Rev, the stand-in the check uses, was added to his library in 2006.
 This script reproduces the three measurements the notes rest on and writes them to
-``report/replication/REVERSAL_FACTOR_AUDIT.md``:
+``report/replication/analysis/reversal_factor_audit.md``:
 
 1. French's 2 x 3 recipe rebuilt from our CRSP monthly file reproduces his published ST_Rev and
    UMD, so the data and the recipe are not the gap.
@@ -32,7 +32,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from project.factors import load_factors, load_losers_only
+from project.factors import load_factors, load_losers_only, set_vintage
 from project.paths import WRDS_API_DIR
 
 _spec = importlib.util.spec_from_file_location("replicate", ROOT / "scripts" / "03_replicate.py")
@@ -135,8 +135,13 @@ def _sd(s: pd.Series, window: tuple[str, str]) -> float:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--out", type=Path,
-                        default=ROOT / "report" / "replication" / "REVERSAL_FACTOR_AUDIT.md")
+                        default=ROOT / "report" / "replication" / "analysis" / "reversal_factor_audit.md")
+    parser.add_argument("--factor-vintage", choices=("2005", "current"), default="2005",
+                        help="vintage of the four known factors the implied covariances are "
+                             "solved from: the paper's 2005 archives (default; REVIEW_NOTES "
+                             "section 72) or today's revised files")
     args = parser.parse_args()
+    set_vintage(args.factor_vintage)
     factors = load_factors()
     losers = load_losers_only()
     lines = ["# Reversal factor audit", "",

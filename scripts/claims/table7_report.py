@@ -39,8 +39,8 @@ ROW_ORDER = (
 )
 DECIMALS = {"mean": 5, "nw_se": 5, "std": 5, "serial_correlation": 2}
 #: The figures REPLICATION_CHECK.md prints for Table 4 (intercept, t-intercept).
-CHECK_INTERCEPT = {"top5": 0.739, "top20": 0.886, "101-120": 0.824, "all": 0.660}
-CHECK_T = {"top5": 6.19, "top20": 8.71, "101-120": 11.04, "all": 10.04}
+CHECK_INTERCEPT = {"top5": 0.794, "top20": 0.895, "101-120": 0.822, "all": 0.634}
+CHECK_T = {"top5": 6.66, "top20": 8.60, "101-120": 11.11, "all": 9.39}
 #: The paper's Table 7 intercept t-statistics, long and short, from the parsed
 #: targets (so they cannot drift from the PDF-checked values).
 _targets = paper.load()
@@ -171,8 +171,8 @@ def report(result: dict, command: str) -> str:
         text, "The table demonstrates that much of the pairs", "3.8 Subperiod")
     note = paper.extract_paragraph(
         text, "Monthly risk profile for the long and short", "821")
-    claim, alt = result["claim"], result["claim_losers"]
-    marks, marks_alt = result["marks"], result["marks_losers"]
+    claim, alt = result["claim"], result["claim_st_rev"]
+    marks, marks_alt = result["marks"], result["marks_st_rev"]
     decom = result["decomposition"]
     p5, p20 = claim["portfolios"]["top5"], claim["portfolios"]["top20"]
     a5 = alt["portfolios"]["top5"]
@@ -234,10 +234,11 @@ def report(result: dict, command: str) -> str:
     add("### Ambiguities, and the reading chosen")
     add("")
     add("1. **The reversal factor.** The paper builds its own and never publishes it. "
-        "Primary: French's ST_Rev, the factor the scored Tables 4 and 8 use. "
-        "Alternative: the losers-only long book that REVIEW_NOTES section 51 "
-        "identifies as the paper's factor's fingerprint. Both reported; ST_Rev is "
-        "primary because it is the construction the paper describes.")
+        "Primary: the losers-only series that REVIEW_NOTES section 51 identifies as "
+        "the paper's factor's fingerprint, the scored regressions' series since "
+        "SCORE_LOG row 21. Alternative: French's ST_Rev, the construction the "
+        "paper describes. Both reported; the losers-only series is primary because "
+        "it is the one the paper's own Table 8 arithmetic implies.")
     add("2. **Excess or raw.** The note puts the bottom half in excess of the 30-day "
         "bill, so the regression's dependent variable is the book less French's RF; "
         "the four performance rows are raw.")
@@ -272,18 +273,18 @@ def report(result: dict, command: str) -> str:
     add("")
     add("Each cell reads `ours / paper mark`: a tick within 10%, a tilde within 25%, a "
         "cross beyond. They are shown and never counted. "
-        f"ST_Rev: {paper.tally(marks)}. Losers-only: {paper.tally(marks_alt)}.")
+        f"Losers-only: {paper.tally(marks)}. ST_Rev: {paper.tally(marks_alt)}.")
     add("")
     lines += ours_and_paper(result["table"], marks, "all")
     add("")
-    add("### Losers-only reversal factor (the alternative reading)")
+    add("### French's ST_Rev (the unscored alternative)")
     add("")
-    lines += ours_and_paper(result["table_losers"], marks_alt, "all")
+    lines += ours_and_paper(result["table_st_rev"], marks_alt, "all")
     add("")
     add("## 5. The effect against our own baseline")
     add("")
     add("Our levels sit above the paper's for reasons already documented (the era "
-        "split in the stock universe, OPEN_QUESTIONS Q8, and the return tails of "
+        "split in the stock universe, GAPS.md Q8, and the return tails of "
         "REVIEW_NOTES section 52), so the claim is tested on our decomposition beside "
         "the paper's, not on the levels. The pair alpha is the control regression's "
         "intercept - the shipped Table 4 alpha - and the books' are Table 7's. A "
@@ -294,7 +295,7 @@ def report(result: dict, command: str) -> str:
     add("")
     add("## 6. The claim test")
     add("")
-    add("| test | ours, ST_Rev | ours, losers-only | paper |")
+    add("| test | ours, losers-only | ours, ST_Rev | paper |")
     add("|---|---|---|---|")
     for label, key in (("short contribution exceeds the long alpha, top 5 / top 20",
                         "short_leg_larger_top"),
@@ -313,34 +314,32 @@ def report(result: dict, command: str) -> str:
         "and for us differs from the portfolio's own alpha in section 5 by the "
         "compounding convention.")
     add(f"Short book's share of that alpha: top 5 {p5['short_share']:.0%} and top "
-        f"20 {p20['short_share']:.0%} under ST_Rev (paper 81% and 68%); "
-        f"{a5['short_share']:.0%} and "
-        f"{alt['portfolios']['top20']['short_share']:.0%} under the losers-only factor.")
+        f"20 {p20['short_share']:.0%} under the losers-only factor (paper 81% and "
+        f"68%); {a5['short_share']:.0%} and "
+        f"{alt['portfolios']['top20']['short_share']:.0%} under ST_Rev.")
     add(f"Long-book alpha: top 5 {p5['long_alpha']:.4f} (t = {p5['long_t']:.2f}), top "
         f"20 {p20['long_alpha']:.4f} (t = {p20['long_t']:.2f}); the paper prints 0.00103 "
         f"(0.47) and 0.00243 (1.27).")
     add("")
     add("## 7. Verdict")
     add("")
-    add("**Not replicated as stated; the asymmetry replicates in substance for the "
-        "top 5 and the top 20.**")
+    add("**Not replicated as stated.**")
     add("")
-    add(f"- The short book carries most of the books' combined alpha for the two headline "
-        f"portfolios: {p5['short_share']:.0%} and {p20['short_share']:.0%} against the "
-        f"paper's 81% and 68%. Same sign, same side of one half, roughly four fifths of "
-        f"the paper's share: the paper's sign and order of magnitude.")
-    add(f"- Its alpha is significant in every column: t = {p5['short_t']:.2f}, "
-        f"{p20['short_t']:.2f}, "
+    add(f"- Neither named portfolio carries more than half the books' combined alpha "
+        f"by the paper's margin: {p5['short_share']:.0%} for the top 5 and "
+        f"{p20['short_share']:.0%} for the top 20, against the paper's 81% and 68%. "
+        f"The top 5 clears one half; the top 20 does not.")
+    add(f"- The short book's alpha is significant in every column: t = "
+        f"{p5['short_t']:.2f}, {p20['short_t']:.2f}, "
         f"{claim['portfolios']['101-120']['short_t']:.2f}, "
         f"{claim['portfolios']['all']['short_t']:.2f} against the paper's -2.74, "
         f"-3.35, -4.26, -5.22. All four are significant wherever the paper's are.")
-    add(f"- The long book's alpha is smaller than the short book's for the top 5 and "
-        f"the top 20, as the paper says, and insignificant for the top 5 "
-        f"(t = {p5['long_t']:.2f} against the paper's 0.47).")
-    add(f"- It is *not* insignificant for the top 20: t = {p20['long_t']:.2f} against "
-        f"the paper's 1.27, and "
-        f"{alt['portfolios']['top20']['long_t']:.2f} under the losers-only factor. The "
-        f"claim's own wording fails on one of its two named portfolios.")
+    add(f"- The long book's alpha is smaller than the short book's for the two headline "
+        f"portfolios, as the paper says, but it is *not* insignificant for either: "
+        f"t = {p5['long_t']:.2f} and {p20['long_t']:.2f} against the paper's 0.47 and "
+        f"1.27. Under French's ST_Rev the top-5 long alpha is "
+        f"{a5['long_alpha']:.4f} (t = {a5['long_t']:.2f}, insignificant) and the "
+        f"top-20 t is {alt['portfolios']['top20']['long_t']:.2f}.")
     add(f"- For the two broad portfolios our attribution is inverted: the long book "
         f"carries {decom.loc['20 after top 100', 'ours_long_share']:.0%} of the pair "
         f"alpha for the 20 after top 100 and "
@@ -348,11 +347,10 @@ def report(result: dict, command: str) -> str:
         f"book carries 40% and -20%.")
     add("")
     add("Against the numeric standard the table fails: "
-        f"ST_Rev {paper.tally(marks)}, losers-only {paper.tally(marks_alt)}. The "
+        f"losers-only {paper.tally(marks)}, ST_Rev {paper.tally(marks_alt)}. The "
         "binding constraint is the loadings, not the books: the books' means reproduce "
         "the paper's closely, while our market and SMB loadings differ and the "
-        "intercept absorbs the difference - the Table 4 story, not a bug in this "
-        "table.")
+        "intercept absorbs the difference - the Table 4 story, not a bug in this table.")
     add("")
     add("## 8. Limitations")
     add("")
@@ -374,9 +372,9 @@ def report(result: dict, command: str) -> str:
 def csv_frame(result: dict) -> pd.DataFrame:
     """Every cell as a long CSV: variant, statistic, portfolio, book, ours, paper, mark."""
     rows = []
-    for variant, table_key, marks_key in (("st_rev", "table", "marks"),
-                                          ("losers_only", "table_losers",
-                                           "marks_losers")):
+    for variant, table_key, marks_key in (("losers_only", "table", "marks"),
+                                          ("st_rev", "table_st_rev",
+                                           "marks_st_rev")):
         table = result[table_key]
         lookup = {(m.statistic, m.portfolio, m.book): m
                   for m in result[marks_key].itertuples()}

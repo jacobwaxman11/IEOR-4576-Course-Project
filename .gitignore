@@ -49,3 +49,5 @@ data/processed/crsp_siz/
 data/processed/crsp_siz_reits/
 data/interim/ciz_issuer_header.parquet
 data/interim/ciz_issuer_header.source.json
+.private/
+/data/processed/replication

@@ -1,6 +1,6 @@
 """Tests for the worker-F daily panel v2 and universe variants (src/project/data.py).
 
-Contract: CONTRACT_F_UNIVERSE.md; spec: INTERFACES.md "Stage 2 amendments".
+Contract: CONTRACT_F_UNIVERSE.md; spec: METHOD.md "Stage 2 amendments".
 Synthetic, hand-checkable cases; no WRDS access.
 """
 

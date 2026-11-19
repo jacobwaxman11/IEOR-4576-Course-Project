@@ -1,2833 +1,2674 @@
-# Coordinator review: data provenance and worker code (2026-10-16)
+# Review notes: the live record
 
-The shipped score and its history are in `SCORE_LOG.md`; the scores quoted below are the
-results of the experiment described in each section.
+This is the short end of a long record. Every review note written for this replication is
+kept, with its number and its text unchanged, so that a citation keeps meaning what it
+meant when it was written:
 
-Scope: Hao asked whether the stage-2 data issues (stale Nasdaq quotes in
-`vol_common`) are download problems or fixable, and for an independent review
-of the workers' logic. Scratch scripts used for these checks are not part of
-the repo; every number below can be reproduced from the files named.
+- **notes 1-77** are in [`REVIEW_NOTES_ARCHIVE.md`](REVIEW_NOTES_ARCHIVE.md), verbatim and
+  in their original order;
+- **notes 78-88, 90 and 91** follow below (no note 89 was written), then notes 92 (the
+  round-9 consolidation) and 93 (the TBD ledger), then the index to the
+  archived notes at the foot of this file. New notes take the next free number and are appended;
+  numbers are never reused.
 
-## 1. Data provenance: is anything wrong with the download?
+Note numbers are stable identifiers. Code comments, tests, `GAPS.md`, `CLAIMS.md`,
+`METHOD.md`, `COVERAGE.md`, `SCORE_LOG.md` and the `claims/` pages all cite them - as
+"REVIEW_NOTES 24", "REVIEW_NOTES section 24" or "REVIEW_NOTES 19.2" - and those citations
+need no edit: look the number up in the index at the foot of this file, then read it in the
+archive. The archive keeps the subsection numbers the citations use - `19.2` is a heading there,
+and note 26's own subsections stay numbered 1-9 inside note 26, as written.
 
-| check | result |
-|---|---|
-| Raw CIZ daily files vs `data/raw/wrds_api/manifest.json` | 66/66 files: row counts match (103,119,940 total) and sha256 hashes match |
-| CIZ vs legacy SIZ `crsp.dsf`, per permno-month, 1962–2002 (`legacy/dsf_monthly_counts.parquet`, server-side counts) | totals identical: closing-trade days (CIZ `TR` = SIZ `prc>0`) 41,488,387; bid/ask days (CIZ `BA` = SIZ `prc<0`) 14,797,393; volume>0 days 44,995,981. Month-level differences are only (a) SIZ NULL counts on exchange X and (b) CIZ's extra delisting-day row |
-| Pre-1983 Nasdaq | both vintages: 6,464,516 `BA` days, 7,011 `TR` days, 110,098 days with volume — CRSP has no Nasdaq trades or volume before Nov 1982 in either product |
-| Raw → processed panel (stale-quote stocks 58828, 58967, 20715) | processed rows reproduce raw `dlyret`, `dlycap`; 58828 is `BA` on all 253 days of 1980 with a frozen 3.5/4.5 quote and NULL volume |
-| Delisting returns | in the **raw download**, the terminal row (`dlydelflg='Y'`) is dated after the last trade and its `dlyret` equals `delisting.delret` on 1,910/1,910 matched rows (1975, 1985, 1995, 2001). **Correction (later the same day): these rows never reached the panel.** They carry `primaryexch='X'`, and the build kept only N/A/Q rows, so the processed panel had 0 delisting rows and no delisting return was ever applied. This entry originally said "applied exactly once"; that was checked on the raw data only. Fixed in the build (see section 7). |
+What a note is: the record of one review, experiment or work contract - what was tried,
+what it measured, and what was shipped, rejected or withdrawn, with the score before and
+after. It is the audit trail, not the status:
 
-| Day-level values for the stale-quote stocks (all 374 permnos in stale top-20 pairs, 1,578,330 stock-days; local WRDS diagnostic) | legacy `crsp.dsf` vs CIZ: returns 100% identical, volume 100% identical (NULL on 100% of 1973 and 99% of 1978 bid/ask days in both), negative legacy price ⇔ CIZ `BA` on 100% of rows, CIZ `dlybid`/`dlyask` = legacy `bidlo`/`askhi` on 100% of bid/ask days; the 0.05% price differences are storage rounding (−0.04688 vs 0.046875) |
+- the shipped score and how it is counted: `SCORE_LOG.md`;
+- what each of the paper's claims stands at today: `CLAIMS.md`;
+- what remains between this replication and the paper: `GAPS.md` (and `TBD.md`);
+- every rule and its evidence: `METHOD.md`;
+- what the paper prints and what is scored for it: `COVERAGE.md`.
 
-**Conclusion: no download defect; one build defect (delisting rows dropped, section 7).** The stale quotes are genuine
-CRSP content: pre-1983 Nasdaq stocks only have bid/ask midpoints and no volume
-field. Which of them count as "no trade" days is a rule choice, not a data fix:
+Round 9 consolidated the report tree (REVIEW_NOTES 92): this file was 5,127 lines in one
+piece and is now this file plus the archive; `report/data_review/` moved to
+`report/archive/data_review/`. No note was edited, deleted or renumbered.
 
-- the CRSP convention (negative price / `BA` = no closing trade) is
-  `price_common`: literal, clean top pairs, but 1,800 stocks vs 2,317;
-- "no trade = recorded zero volume" (`vol_common`) matches the count
-  (2,301) but admits stocks whose quote does not move for months. 327 of
-  2,301 stocks per cohort (867 of 2,129 in the 1970s) have `ret == 0` on at
-  least half their formation days; they reach 17% of top-5 pairs (41% in the
-  1970s) and 24 of the 25 top-20 pairs whose capital account goes negative.
+## 78-80. Reserved for round-5 contracts T, C and G; not used
 
-## 2. Code review
+Round 5 reserved these three numbers for its contracts T (Table 3's sectors), C (the claims under
+round 4's readings) and G (the currency of `GAPS.md` and `METHOD.md`). None of the three landed
+under its number, so nothing is missing here:
 
-| component (worker) | verdict | how checked |
-|---|---|---|
-| `_clean_year`, `universe_flags`, `formation_universe` (C, F) | correct | read; F's 474-cohort permno-exact regression; raw-vs-processed spot check above |
-| `normalized_prices`, `ssd_matrix`, `select_pairs` (D) | correct | read; formation σ recomputed independently for top-20 of 5 cohorts, equal to 1e-9 |
-| `simulate_cohort`, wait 0 (D) | correct | independent re-implementation of the trading rule, top-20 of cohorts 1966-03, 1977-09, 1985-06, 1994-11, 2001-04: every trade's open date, close date and payoff identical (1e-8) |
-| `simulate_cohort`, wait 1 (D, spec by coordinator) | **bug in INTERFACES.md, fixed** | see 3 |
-| `portfolio_daily`, `overlap_average`, `summary_stats`, `trading_stats` (E) | correct implementation of the spec | read; NW SE via statsmodels HAC, 6 lags |
-| `size_deciles`, `sector_of`, `composition_stats`, driver (G) | correct | independent recompute of Panel B on 5 cohorts, exact match |
-| paper targets in `scripts/03_replicate.py` | transcription errors, corrected | checked cell by cell against the RFS tables |
+- **78, T.** Table 3's attribution was finished by round 6's contract R6-C and is section 83
+  (`claims/TABLE3_SECTORS.md`).
+- **79, C.** The claims ledger under round 4's readings is round 7's contract B, section 85.
+- **80, G.** G's currency pass (commit `b419b3e` on `replication/pages-currency`, never merged)
+  lands with round 7's page-currency PR (contract R7-C), ported onto `49e4529`, every statement
+  re-checked against the row-29 check and the code. That PR also regenerates `GAPS.md` section 2's
+  census at row 29 with a script, `scripts/experiments/gaps_census.py`, which reproduces the row-26
+  table from that row's check before it is run on the current one. No cell moves; the score stays
+  411.0.
 
-## 3. Fixed: the one-day-wait rule delayed only the entry
+## 81. S7, the formation universe without the share-type filter: PROPOSED, not landed (2026-11-17): 411.0 -> 417.5 (proposal)
 
-The paper (§3.3) defines Panel B as postponing "the trades to the day
-following the crossing", and its transaction-cost argument charges half a
-spread at divergence and "again" at convergence (2 round trips). INTERFACES.md
-line 30 (the coordinator's spec) delayed only the opening trade. Fixed in
-`src/project/models.py`: under `wait=1` a crossing at the close of day t is
-executed at the close of t+1; forced exits (delisting, last available row, end
-of period) are not delayed. Tests: `test_wait1_delays_the_exit_and_earns_the_extra_day`,
-`test_wait1_forced_exit_is_not_delayed`; `test_wait1_opens_one_day_later`
-updated. Wait-0 results are unchanged; all wait-1 caches and tables were
-rebuilt.
+Written for contract R6-A's outcome rule ("if any reading beats 411.0, prepare it as a scored
+change"). The reading is prepared but deliberately **not** applied: the shipped score on this
+branch stays 411.0 and this section is the record the coordinator needs to decide. Its numbers
+and its five-variant sensitivity table are in `claims/FULLSET_RESCORE.md` section 4.
 
-## 4. Known fragilities (documented, not changed)
+What the paper says, p. 802, section 2.1, the complete screen list: "In each pairs formation
+period, we screen out all stocks from the CRSP daily files that have one or more days with no
+trade. This serves to identify relatively liquid stocks as well as to facilitate pairs
+formation." No share-type restriction appears anywhere in the paper. Our universe row carries
+one (`sharetype='NS'`, METHOD.md), which is our convention.
 
-- **Negative pair accounts.** Pair return = payoff / account, with the
-  account starting at $1. When a short leg multiplies, the account goes to or
-  below zero and the "return" changes sign or explodes. In `vol_common` 2.2%
-  of all pairs touch ≤ 0; in the top 20 it is 25 pairs (24 involve stale
-  quotes) vs 1 in `price_common`. It causes the −133% top-5 fully-invested
-  month (Feb 1981). Committed-capital returns are much less affected because
-  the denominator sums all selected pairs.
-- **Zero account with an open position.** One pair (vol_common 1976-06, rank
-  2421, "all" only) produces non-finite daily returns; the tables stay finite.
-- **Rebasing day.** Normalized prices start at 1 on the close of the first
-  day of each window, so that day's return is excluded from the spread. The
-  paper does not specify; the effect is one day in 126 / 252.
-- **Fully invested.** Superseded by section 9: the denominator is now n̄, the
-  average number of pairs holding a position per day in the cohort.
+What was measured: `--share-classes wide` over all the share types the raw files carry, 417.5 of
+865 (+6.5; Table 2 A +0.5, Table 5 A +0.5, Table 7 +4.5, Table 8 +4.0, numbers in the text
++1.0, Table 2 B -1.0, Table 3 -3.0, Table 4 -3.0), against 411.0.
 
-## 5. Results after the wait-1 fix (all four universes rebuilt)
+What stops it shipping here, in one line each:
 
-Superseded by section 9 and `REPLICATION_CHECK.md`; kept for the history of the fix.
+- The reading is a family, and the family straddles the baseline by ten points: shares of
+  beneficial interest alone 408.0, ADRs alone 418.0, both 414.5, all three classes 417.5. The
+  best of the five (ADRs alone) is the one the paper's printed handles do not support, so taking
+  it would be selection by score.
+- Under the reading 147 marks change (40 tilde-to-check, 39 cross-to-tilde, 34 check-to-tilde,
+  26 tilde-to-cross, 4 each way between the extremes) for a net +3.5: a sixth of the marked set
+  churns and the total moves half a percent.
+- Its printed support is half a support: p. 812's counts move toward the paper for Utilities and
+  Financials and away for Transportation and Industrials, and the count marks do not move;
+  the one printed number that does move hard is Table 2 Panel A's 1.94e3 pairs per period
+  (ours 1.88e3 on `NS`, 1.95e3 wide).
 
-| universe | top-20 wait 0: committed / fully invested | top-20 wait 1: committed / fully invested |
-|---|---|---|
-| paper | 0.805% / 1.436% | 0.520% / 0.895% |
-| **vol_common** | 0.701% / 1.404% | **0.424% / 0.812%** |
-| volpos_common | 0.961% / 1.888% | 0.629% / 1.179% |
-| vol_ns | 0.927% / 1.906% | 0.529% / 1.015% |
-| price_common | 0.961% / 1.890% | 0.630% / 1.182% |
+To adopt it, in this order: rebuild the shared main cache (474 cohorts) and the Table 9 A / Table
+6 side caches under `--share-classes wide`; set the threshold in
+`tests/replication_conformance.json` from 411.0 to 417.5; add the `SCORE_LOG.md` row 30; re-pin
+`scripts/rebuild_manifest.json` and `PINNED_MANIFEST` together after the rebuild; regenerate the
+check and `REPLICATION_CHECK.md`. The row is not prepared here because a row that says 417.5 over a
+check that says 411.0 fails `tests/test_score_log.py`, and 411.0 is what this branch ships.
 
-The waiting cost (wait 0 minus wait 1) for vol_common top 20 is 0.28% committed
-and 0.59% fully invested vs the paper's 0.285% and 0.54%; before the fix it
-was 0.17% and 0.38%. GGR's 1999 NBER version (w7032, Table V caption) states
-the rule explicitly: positions open "the day following the day that prices …
-diverge" and close "the day following the next crossing of prices".
+## 82. Re-ranking the 72 reversal constructions against Table 7 (2026-11-17): 411.0 -> 411.0 (investigation)
 
-## 6. Other replications (checked 2026-10-16)
+Table 7's books reproduce the paper's printed performance rows and its R2 (8 of 8 raw means, 8 of 8
+R2 within 10%), but the loadings do not. On the shipped losers-only reversal series the reversal
+loading is negative in 6 of the 8 book columns where the paper prints +0.024 to +0.392, and the market
+betas run 27% to 77% above the printed ones (0.619 against 0.374 in the top 5 long book, 0.926 against
+0.731 in the all-pairs short book); 43 of the block's 48 coefficient cells (eight books x intercept
+plus five loadings) are outside 25%. Contract Pb ranked the 72 constructions of
+`claims/REVERSAL_SUBPERIODS.md` on Table 8's printed factor SD and correlations only, and no
+construction matched Table 8 in both subperiods (section 73). This contract re-ranks the same 72 on
+what Table 7 prints, without re-running the engine: the books' own monthly return series are already
+in the shipped cache, so a candidate only changes the reversal column of the regression.
 
-None reports GGR's per-sector stock counts or the 2,317 universe.
-Rubesam (rubetron/Pairs_trading) uses a legacy CRSP CSV export, a
-volume > 0 screen, global top-20 distance pairs, no sectors, and delays only
-the entry: 0.67% / 1.25% for wait 1 (our `volpos_common` before the fix:
-0.75% / 1.43%). The Faff line (Do & Faff 2010, 2012; Rad, Low & Faff 2016)
-uses share codes 10/11 plus a volume filter, and Rad, Low & Faff also drop
-the smallest size decile and stocks under $1, which removes the stale
-microcaps but is not GGR's rule. Zhu (2024) uses SIC divisions; S&P 500
-replications use current GICS.
+**Pre-registration, written 2026-11-17 before any candidate's Table 7 regression was run.** The grid
+is `claims/REVERSAL_SUBPERIODS.md`'s and is not re-drawn: the same 72 series, built by the same code
+(`scripts/experiments/reversal_subperiods.py`), named `<sort>_<weighting>_<deciles>_<leg>`.
 
-## 7. Delisting rows were dropped by the panel build (found and fixed 2026-10-16)
+1. *Books.* The long and the short book of the top 5, the top 20, 101-120 and all pairs, the one-day
+   wait, overlap-averaged across cohorts exactly as the check's Table 7 block builds them
+   (`project.table7.book_series`, or the driver's `monthly_returns.parquet`), each less French's
+   30-day bill (Table 7's note, p. 821: "The returns in the bottom half of the table are in excess of
+   the 30-day Treasury bill returns").
+2. *Regressions.* OLS with an intercept of each book's monthly excess return on market, SMB, HML,
+   momentum and the candidate (`project.factors.factor_regression`; months missing on either side
+   dropped), full sample 1963-07 to 2002-12, n reported per candidate. The four known factors are
+   French's 2005 archives, the frame the scored block regresses on (`--factor-vintage 2005`, section
+   72); today's files are reported beside them.
+3. *Targets.* Table 7's printed reversal loadings (p. 821), all positive: long 0.15854 / 0.09601 /
+   0.17288 / 0.39208 and short 0.05662 / 0.02365 / 0.07830 / 0.19131 for the top 5, the top 20,
+   101-120 and all pairs; market loadings 0.37415 / 0.47617 / 0.48520 / 0.58571 long and 0.44075 /
+   0.50772 / 0.56217 / 0.73091 short (`PAPER_TABLE7`).
+4. *Three gaps per candidate*, over the eight book cells b:
+   - `s(c)` = number of cells with reversal loading <= 0 (the paper's eight are strictly positive,
+     so the target is 0; the shipped series has 6);
+   - `R(c)` = sum of |reversal loading - printed| over the eight cells;
+   - `M(c)` = sum of |market loading - printed| over the eight cells.
+5. *Table 8 guard and raw means.* `d(c)` is the distance pre-registered in
+   `claims/REVERSAL_SUBPERIODS.md` (absolute log SD ratio plus the four absolute correlation gaps,
+   summed over the pre-1989 and post-1988 windows), recomputed by that file's own code, in both
+   vintages; the 2005 vintage is primary because it is the frame the scored block uses. Its published
+   values for the shipped series are 0.851 (today) and 0.718 (2005) and are not re-derived here. The
+   eight raw-book means are functions of the book series alone; every run recomputes them and is void
+   unless the eight equal the check's to the last printed digit.
+6. *Ranking key*, and nothing else: `P(c) = R(c)/R(LO) + M(c)/M(LO)`, where LO is the shipped series
+   `french_ew_d3_losers_only`, so `P(LO) = 2` by construction; ascending, ties at 1e-6 broken by
+   `s(c)` and then by name. The table reports all 72 with `s`, `R`, `M`, `P`, both `d`, and whether
+   the construction passes the ship test below.
+7. *Ship test.* A construction ships only if all seven hold: (a) textual support at p. 813 and
+   footnote 7. The sentence names two three-decile groups of prior-month return and their difference
+   ("constructing a short-term reversal factor measured as the excess return of stocks in the top
+   three deciles of prior-month return minus the return on stocks in the bottom three deciles"), and
+   its next sentence fixes the sign ("If pairs strategies sell short-term winners and buy short-term
+   losers, we expect the exposures of pairs portfolios to be positive to the reversal factor"), so
+   the eligible legs are `losers_minus_winners` and `winners_minus_losers` with the three-decile set
+   `d3`. A one-leg series (the shipped losers-only one, the winners-only builds) is not what the
+   sentence describes and `d1`/`d2` are not three deciles, so neither can ship however well it scores;
+   (b) `s(c) < 6`, strictly fewer wrong-sign cells than the shipped series; (c) `R(c) < R(LO)`;
+   (d) `M(c) < M(LO)`; (e) `d(c) <= d(LO)` in both vintages, so Table 8 is not bought with Table 7;
+   (f) the eight raw means unchanged; and, if (a)-(f) all hold, (g) the standard check re-run with
+   `--reversal-factor csv` on that series scores at least the shipped 411.0 of 865, so Table 4 and
+   Table 8 are not bought with Table 7 either.
+8. *Reporting rule.* A candidate that ranks first but fails the text gate is printed at its rank and
+   marked ineligible: the metric ranks, the paper's sentence decides. If none passes, the ranked table
+   is the result, GAPS.md's lever is closed formally, and no scored cell, paper value or mark rule
+   changes here.
 
-A trade-level attribution of the "all" portfolio found no trade, among about
-1.5 million across 474 cohorts, closed for a delisting. CIZ gives every
-delisting row `primaryexch = 'X'` (179 / 565 / 984 rows in 1975 / 1990 /
-2001; the stock was on Q, A or N the day before), and `_clean_year` kept only
-N/A/Q rows, so the panel had none and delisted stocks were closed at their
-last traded price without the delisting return. The strategy is long the
-stock that has fallen, which is the one most likely to delist for
-performance, so this biased returns upward, most of all in weak pairs and
-small stocks.
+**Results, measured 2026-11-17 after the pre-registration above.** One run of
+`python scripts/experiments/table7_rerank.py`, reading the shared `vol_common` cache and
+nothing else; no cohort rebuilt, no engine run, no shared file written. Every construction's
+eight regressions run on the same 474 months (1963-07 to 2002-12), so the sample is not a
+channel through which two candidates can differ.
 
-Fix: `_clean_year` keeps delisting rows whatever their exchange and sets
-their day-rule flags False, so they never count as eligible days
-(`test_delisting_row_off_exchange_is_kept_but_never_eligible`). After the
-rebuild the panel has all 179 / 565 / 984 delisting rows, and the formation
-universes are unchanged (vol_common and price_common identical on 5 cohorts
-checked across decades).
+The eight raw-book means come out at 1.245 / 0.522 / 1.359 / 0.467 / 1.482 / 0.717 / 1.507 /
+0.878 % (top 5, top 20, 101-120, all pairs; long then short), every one within 10% of the printed
+row (ratios 1.000, 1.042, 1.021, 1.074, 1.016, 1.082, 0.928, 0.967), and no candidate can move
+them: the control passes for all 72 by construction, as it must, because the regression is run on
+the same eight book series every time. The shipped series reproduces its own numbers exactly - 6
+wrong signs, R 1.4665, M 1.8629, and the pre-registered distance d 0.7176 with the 2005 factors and
+0.8510 with today's against the 0.718 and 0.851 published in `claims/REVERSAL_SUBPERIODS.md` - so
+the d columns below are section 73's own arithmetic, not a second implementation of it.
 
-## 8. Portfolio returns: account weights replaced by pair counts (2026-10-16)
+**No construction passes the ship test: 0 of 72.** Forty-eight of the 72 are closer to Table 7
+than the shipped series on the pre-registered key P (P < 2), in both factor frames. In the 2005
+frame - the primary one, the frame the scored block regresses on - 34 have fewer wrong-sign reversal
+loadings, 48 a smaller reversal-loading gap and 47 a smaller market-beta gap; with today's factors
+the same three counts are 32, 48 and 46. The script prints one labelled summary per frame, so the
+two sets are not interchangeable, and every count in this paragraph names its frame. But only the
+shipped series itself has a Table 8 distance no worse than the shipped series' in the same frame
+(d <= 0.7176 with the 2005 factors; the today-frame threshold is that frame's own 0.8510, the
+shipped series' distance there): every other construction buys Table 7 with Table 8. Gate (e) alone
+rejects all 71 of them, and gate (a) rejects the ranking leader before that.
 
-INTERFACES.md divided summed pair payoffs by the sum of each pair's
-cumulative capital account. Accounts reach zero or go negative after a short
-leg multiplies, which flipped signs (a loss reported as a +10% return in
-`test_negative_account_does_not_flip_the_sign`) and produced the −133% month.
-The paper divides payoffs by a pair count (§2.3, PDF p. 14), as Rubesam's
-independent implementation also does. `portfolio_daily` now uses counts;
-the old reading survives as `committed_account` / `employed_account`.
+| candidate | s | R | M | P | d | d(today) | p.813 support | gate |
+|---|---|---|---|---|---|---|---|---|
+| crsp_nyseamex_ew_d3_winners_only | 3 | 1.0346 | 1.1881 | 1.3433 | 0.9328 | 1.0591 | no (one leg) | fail |
+| crsp_nyseamex_vw_d3_losers_only | 4 | 0.9816 | 1.3305 | 1.3835 | 1.6083 | 1.7453 | no (one leg) | fail |
+| french_vw_d3_losers_minus_winners | 1 | 0.9338 | 1.5146 | 1.4498 | 3.6073 | 3.7583 | yes | fail |
+| crsp_nyseamex_vw_d3_losers_minus_winners | 1 | 0.9475 | 1.5129 | 1.4582 | 3.3512 | 3.5419 | yes | fail |
+| crsp_nyseamex_vw_d1_losers_minus_winners | 1 | 1.0134 | 1.5102 | 1.5017 | 3.6257 | 3.8005 | no (deciles) | fail |
+| french_vw_d2_losers_minus_winners | 2 | 1.0352 | 1.5256 | 1.5248 | 3.5292 | 3.6897 | no (deciles) | fail |
+| crsp_nyseamex_ew_d3_losers_only | 5 | 1.0899 | 1.4567 | 1.5251 | 0.9477 | 1.1821 | no (one leg) | fail |
+| crsp_nyseamex_vw_d2_losers_minus_winners | 3 | 1.0383 | 1.5247 | 1.5265 | 3.2948 | 3.4908 | no (deciles) | fail |
+| crsp_nyseamex_ew_d2_winners_only | 3 | 1.1430 | 1.4446 | 1.5548 | 0.8818 | 1.0408 | no (deciles) | fail |
+| french_vw_d1_losers_minus_winners | 3 | 1.0816 | 1.5281 | 1.5578 | 3.4891 | 3.6522 | no (deciles) | fail |
+| crsp_all_ew_d2_winners_minus_losers | 1 | 1.0583 | 1.5767 | 1.5680 | 7.0793 | 7.2913 | no (deciles) | fail |
+| crsp_all_ew_d3_winners_minus_losers | 1 | 1.0689 | 1.5717 | 1.5726 | 7.0779 | 7.2929 | yes | fail |
+| crsp_all_vw_d1_losers_minus_winners | 5 | 1.1022 | 1.5303 | 1.5730 | 3.9002 | 4.0656 | no (deciles) | fail |
+| crsp_all_ew_d1_winners_minus_losers | 1 | 1.0681 | 1.5763 | 1.5744 | 7.0675 | 7.2751 | no (deciles) | fail |
+| french_ew_d1_winners_minus_losers | 1 | 1.0781 | 1.5720 | 1.5790 | 6.9675 | 7.1761 | no (deciles) | fail |
+| crsp_all_vw_d3_losers_minus_winners | 6 | 1.1173 | 1.5392 | 1.5881 | 3.6562 | 3.8269 | yes | fail |
+| crsp_nyseamex_ew_d1_winners_minus_losers | 1 | 1.0853 | 1.5804 | 1.5884 | 6.7363 | 6.9362 | no (deciles) | fail |
+| crsp_all_vw_d2_losers_minus_winners | 6 | 1.1333 | 1.5414 | 1.6002 | 3.7693 | 3.9373 | no (deciles) | fail |
+| crsp_nyseamex_ew_d2_winners_minus_losers | 2 | 1.1250 | 1.5721 | 1.6110 | 6.7524 | 6.9566 | no (deciles) | fail |
+| french_vw_d3_losers_only | 5 | 1.1558 | 1.5344 | 1.6118 | 1.7382 | 1.6875 | no (one leg) | fail |
+| french_ew_d2_winners_minus_losers | 3 | 1.1413 | 1.5636 | 1.6176 | 6.8753 | 7.0888 | no (deciles) | fail |
+| crsp_all_vw_d2_winners_minus_losers | 2 | 1.2054 | 1.5414 | 1.6494 | 6.7234 | 6.9429 | no (deciles) | fail |
+| crsp_nyseamex_ew_d3_winners_minus_losers | 3 | 1.2018 | 1.5606 | 1.6572 | 6.9310 | 7.1385 | yes | fail |
+| crsp_all_vw_d3_winners_minus_losers | 2 | 1.2215 | 1.5392 | 1.6592 | 6.7522 | 6.9704 | yes | fail |
+| french_ew_d3_winners_minus_losers | 3 | 1.2079 | 1.5574 | 1.6597 | 7.1411 | 7.3553 | yes | fail |
+| crsp_all_vw_d1_winners_minus_losers | 3 | 1.2366 | 1.5303 | 1.6646 | 6.6331 | 6.8524 | no (deciles) | fail |
+| french_ew_d3_losers_minus_winners | 5 | 1.2313 | 1.5574 | 1.6757 | 3.8145 | 3.9921 | yes | fail |
+| french_vw_d1_winners_minus_losers | 5 | 1.2572 | 1.5281 | 1.6776 | 6.6862 | 6.9018 | no (deciles) | fail |
+| crsp_nyseamex_ew_d3_losers_minus_winners | 5 | 1.2393 | 1.5606 | 1.6828 | 3.6368 | 3.8199 | yes | fail |
+| french_ew_d2_losers_minus_winners | 5 | 1.2626 | 1.5636 | 1.7003 | 3.6482 | 3.8263 | no (deciles) | fail |
+| crsp_nyseamex_vw_d2_winners_minus_losers | 5 | 1.3005 | 1.5247 | 1.7053 | 6.4472 | 6.6453 | no (deciles) | fail |
+| french_vw_d2_winners_minus_losers | 6 | 1.3036 | 1.5256 | 1.7079 | 6.5311 | 6.7507 | no (deciles) | fail |
+| crsp_nyseamex_vw_d1_winners_minus_losers | 7 | 1.3254 | 1.5102 | 1.7144 | 6.2967 | 6.5116 | no (deciles) | fail |
+| crsp_all_ew_d1_losers_minus_winners | 7 | 1.2736 | 1.5763 | 1.7146 | 4.1295 | 4.3133 | no (deciles) | fail |
+| crsp_nyseamex_vw_d2_losers_only | 4 | 1.2349 | 1.6290 | 1.7165 | 1.5475 | 1.6834 | no (deciles) | fail |
+| french_ew_d1_losers_minus_winners | 7 | 1.2836 | 1.5720 | 1.7191 | 3.7731 | 3.9568 | no (deciles) | fail |
+| crsp_nyseamex_ew_d2_losers_minus_winners | 6 | 1.2852 | 1.5721 | 1.7202 | 3.4735 | 3.6608 | no (deciles) | fail |
+| crsp_all_ew_d3_losers_minus_winners | 7 | 1.2995 | 1.5717 | 1.7298 | 3.8787 | 4.0545 | yes | fail |
+| crsp_nyseamex_ew_d1_losers_minus_winners | 7 | 1.2982 | 1.5804 | 1.7336 | 3.7014 | 3.8931 | no (deciles) | fail |
+| crsp_all_ew_d2_losers_minus_winners | 7 | 1.3023 | 1.5767 | 1.7344 | 3.9855 | 4.1646 | no (deciles) | fail |
+| crsp_nyseamex_vw_d1_losers_only | 5 | 1.2533 | 1.6563 | 1.7437 | 1.5262 | 1.7024 | no (deciles) | fail |
+| crsp_nyseamex_vw_d3_winners_minus_losers | 7 | 1.3913 | 1.5129 | 1.7609 | 6.5330 | 6.7377 | yes | fail |
+| french_vw_d3_winners_minus_losers | 7 | 1.4050 | 1.5146 | 1.7711 | 6.4250 | 6.6529 | yes | fail |
+| crsp_nyseamex_ew_d2_losers_only | 6 | 1.2864 | 1.6923 | 1.7856 | 1.2110 | 1.4440 | no (deciles) | fail |
+| french_vw_d2_losers_only | 5 | 1.4040 | 1.8267 | 1.9379 | 1.6763 | 1.5928 | no (deciles) | fail |
+| crsp_all_vw_d1_losers_only | 6 | 1.3931 | 1.8406 | 1.9380 | 1.5480 | 1.5091 | no (deciles) | fail |
+| crsp_nyseamex_ew_d1_losers_only | 6 | 1.4176 | 1.8639 | 1.9672 | 1.6680 | 1.9031 | no (deciles) | fail |
+| crsp_nyseamex_ew_d1_winners_only | 5 | 1.4464 | 1.8345 | 1.9711 | 0.8136 | 1.0119 | no (deciles) | fail |
+| french_ew_d3_losers_only | 6 | 1.4665 | 1.8629 | 2.0000 | 0.7176 | 0.8510 | no (one leg) | fail |
+| french_vw_d1_losers_only | 6 | 1.4693 | 1.9228 | 2.0341 | 1.6523 | 1.5068 | no (deciles) | fail |
+| crsp_all_ew_d1_losers_only | 6 | 1.5050 | 1.9432 | 2.0694 | 1.6300 | 1.7428 | no (deciles) | fail |
+| crsp_all_vw_d2_losers_only | 6 | 1.5053 | 1.9634 | 2.0804 | 1.5792 | 1.4671 | no (deciles) | fail |
+| crsp_all_ew_d3_losers_only | 6 | 1.5351 | 1.9479 | 2.0924 | 0.9762 | 1.0854 | no (one leg) | fail |
+| crsp_all_vw_d3_losers_only | 7 | 1.5259 | 1.9744 | 2.1003 | 1.6611 | 1.5293 | no (one leg) | fail |
+| crsp_all_ew_d2_losers_only | 6 | 1.5594 | 1.9900 | 2.1316 | 1.2082 | 1.3177 | no (deciles) | fail |
+| french_ew_d2_losers_only | 6 | 1.5660 | 1.9821 | 2.1318 | 0.8246 | 0.9284 | no (deciles) | fail |
+| french_ew_d1_losers_only | 6 | 1.6246 | 2.0669 | 2.2173 | 1.1856 | 1.2548 | no (deciles) | fail |
+| crsp_all_vw_d1_winners_only | 7 | 1.6662 | 2.0510 | 2.2372 | 2.2325 | 2.1623 | no (deciles) | fail |
+| crsp_nyseamex_vw_d3_winners_only | 5 | 1.6915 | 2.0727 | 2.2660 | 2.2414 | 2.3889 | no (one leg) | fail |
+| french_ew_d3_winners_only | 6 | 1.7802 | 2.0051 | 2.2902 | 1.1379 | 1.0369 | no (one leg) | fail |
+| crsp_all_ew_d3_winners_only | 6 | 1.7515 | 2.0855 | 2.3138 | 1.3327 | 1.2333 | no (one leg) | fail |
+| crsp_nyseamex_vw_d2_winners_only | 7 | 1.7411 | 2.1308 | 2.3310 | 2.0629 | 2.2056 | no (deciles) | fail |
+| crsp_nyseamex_vw_d1_winners_only | 7 | 1.7549 | 2.1442 | 2.3477 | 1.8408 | 1.9566 | no (deciles) | fail |
+| crsp_all_vw_d2_winners_only | 7 | 1.7640 | 2.1423 | 2.3529 | 2.2718 | 2.0959 | no (deciles) | fail |
+| crsp_all_ew_d1_winners_only | 7 | 1.8029 | 2.1318 | 2.3738 | 1.7643 | 1.6027 | no (deciles) | fail |
+| crsp_all_ew_d2_winners_only | 6 | 1.8313 | 2.1630 | 2.4098 | 1.5359 | 1.4022 | no (deciles) | fail |
+| french_ew_d2_winners_only | 6 | 1.8686 | 2.1885 | 2.4489 | 1.2700 | 1.1788 | no (deciles) | fail |
+| french_vw_d1_winners_only | 7 | 1.8556 | 2.2335 | 2.4643 | 2.1829 | 2.0300 | no (deciles) | fail |
+| crsp_all_vw_d3_winners_only | 7 | 1.9448 | 2.3153 | 2.5690 | 2.3214 | 2.1349 | no (one leg) | fail |
+| french_ew_d1_winners_only | 6 | 1.9665 | 2.3005 | 2.5759 | 1.4908 | 1.3575 | no (deciles) | fail |
+| french_vw_d2_winners_only | 7 | 2.0243 | 2.4048 | 2.6713 | 2.2704 | 2.1777 | no (deciles) | fail |
+| french_vw_d3_winners_only | 7 | 2.1705 | 2.5371 | 2.8419 | 2.3088 | 2.2331 | no (one leg) | fail |
 
-**Superseded on 2026-10-19.** Section 15 replaced the counts with the value-weighted long and
-short books of eq. (2)-(3), which is what ships; `employed_count` / `committed_count` remain
-only for comparison and for scoring the 1999 draft by the measure it states. The account
-denominator this section removed has never come back.
+`P` normalises each gap by the shipped series' own, so the shipped row is exactly 2.0000 and any
+row below it is closer to Table 7 than the shipped series is. `s` counts wrong-sign reversal
+loadings out of eight (the paper prints +0.024 to +0.392, so the target is 0 and the shipped series
+has 6); `R` and `M` are the summed absolute gaps of the eight reversal and eight market loadings;
+`d` is the Table 8 distance with the 2005 factors and `d(today)` with today's.
 
-## 9. Continued normalization, n̄ denominator and Figure 1 (2026-10-16/17)
+**The ranking, read properly.** The leader is `crsp_nyseamex_ew_d3_winners_only` (s 3, P 1.3433):
+the equal-weighted prior-month top three deciles of NYSE/AMEX stocks less the bill. It has one leg,
+so the sentence at p. 813 - a difference between two groups - cannot be read as it, and the
+pre-registered rule makes it ineligible whatever its rank. It fails gate (e) too (d 0.9328).
 
-- **Trading prices continue the formation normalization.** GGR Figure 1 (RFS 2006, p. 804)
-  starts Kennecott and Uniroyal near 1.10 on trading day 0, not at 1.0. Our cached 1963-08
-  cohort gives 1.1006 / 1.106 at the end of formation, ranks the pair 4th, and its five wait-0 trades open and close
-  within two days of the chart: (8, 35), (46, 56), (76, 83), (85, 99), (108, 125) against
-  about (7, 35), (46, 55), (74, 82), (86, 99), (108, 126). The rebased convention (1.0 on
-  day 1) is kept as `--normalization rebased`.
-- **Fully invested = Σπ / n̄.** n̄ is the average number of pairs holding a position per day
-  over the cohort. The paper's fully-invested/committed ratios (1.61-1.81 in Table 1) equal
-  N / n̄; a day-by-day count inflates the "all" portfolio through E[1/n] > 1/E[n].
-- **One driver, one check.** `scripts/03_replicate.py` now writes Tables 1-3, Figure 1 and
-  `replication_check.md`; the current check is copied to `REPLICATION_CHECK.md`.
+The best construction that p. 813 *can* describe is `french_vw_d3_losers_minus_winners` (rank 3,
+s 1, P 1.4498): French's value-weighted bottom three deciles less his top three, one construction
+for the whole sample, which is the sentence's two groups and, in the next sentence's direction,
+losers minus winners. It fixes the sign in 7 of the 8 cells and cuts both gaps by a quarter:
 
-## 10. Universe: what matches and what does not (2026-10-16/17)
-
-| universe rule | pairs/cohort 1962-97 (NBER 1999: 1,870) | pairs/cohort 1962-2002 (RFS: 2,057) | Financials (RFS: 371) |
+| book | printed reversal | shipped (losers-only) | french_vw_d3_losers_minus_winners |
 |---|---|---|---|
-| trade-price screen, common | 1,272 | 1,562 | 229 |
-| volume > 0, common | 1,319 | 1,605 | 235 |
-| **zero volume = no trade, common (primary)** | **1,794** | **2,013** | **350** |
-| zero volume = no trade, all NS share types | 1,849 | 2,093 | 434-437 |
+| top 5 long | +0.1585 | -0.094 | +0.025 |
+| top 5 short | +0.0566 | -0.051 | +0.004 |
+| top 20 long | +0.0960 | -0.077 | +0.036 |
+| top 20 short | +0.0237 | -0.106 | +0.014 |
+| 101-120 long | +0.1729 | -0.094 | +0.075 |
+| 101-120 short | +0.0783 | -0.174 | +0.020 |
+| all long | +0.3921 | +0.255 | +0.085 |
+| all short | +0.1913 | +0.045 | -0.023 |
 
-Both editions of the paper need the pre-Nov-1982 Nasdaq quote-only stocks (CRSP has no
-volume for them in any table or release we checked), and both fall between "common only" and
-"common plus funds". Utilities (160 vs 156) and Transportation (61 vs 61) match; Financials
-are 21 short, and every share or SIC variant either undershoots (343-350) or overshoots
-(434-501).
+The sizes are still 3 to 6 times too small (only the top 20 short book lands near its printed
+0.0237), and the market betas move the wrong way where it matters: 0.517 / 0.533 / 0.566 / 0.556 /
+0.748 / 0.732 for the three named portfolios against printed 0.374 / 0.441 / 0.476 / 0.508 / 0.485 /
+0.562, but 1.048 and 0.977 in the all-pairs books against printed 0.586 / 0.731, where the shipped
+series is 0.793 / 0.926. And its Table 8 distance is 3.6073, five times the shipped 0.7176: the
+value-weighted spread's pre-1989 standard deviation is 3.10% against the printed 7.23% (0.85 of the
+distance on that one term), its post-1988 one 4.39% against 4.45% is nearly exact, and the remaining
+2.75 is the eight correlation gaps, a spread's correlations with the four factors being nowhere near
+the +0.81 / +0.79 / -0.18 / -0.16 and +0.79 / +0.55 / -0.53 / -0.30 that Table 8's loadings, R2 and
+SDs imply.
 
-## 11. CRSP edition (vintage) checks (2026-10-17)
+**What the trade-off is.** Table 7's sign wants the long-short spread; Table 8's standard deviation
+wants the long-only losers leg; the two halves of the paper's own factor pull toward opposite
+constructions of the same sentence. All twelve constructions p. 813 can support land between
+P 1.4498 and 1.7711 - all of them better than the shipped series on Table 7 - and all twelve have a
+Table 8 distance between 3.35 and 7.14 against the shipped 0.7176. The grid is not being asked a
+question it can answer badly; it is being asked to satisfy two printed signatures that no single
+construction satisfies. That is a sharper statement than section 73's, which tested Table 8 alone.
 
-- WRDS holds only the current CRSP releases; no archived editions are available to us.
-- CRSP's December 2002 annual release (CRSPAccess 2.75, the data GGR's RFS tables were built
-  on) lists 24,620 securities in the daily file; our 1962-2002 panel has 24,627.
-- 267 stock-file release notes (Dec 2005 to Jan 2023 from crsp.org; 2002-2006 from CRSP's old
-  sites via the Internet Archive) itemise 88 SIC and 225 share-code edits that touch
-  1962-2002. Reversing them moves Financials by about +0.6 stocks per cohort; the 2003
-  recoding of five closed-end funds from share code 10 to 14 adds at most 0.8.
-- No stock-file notes for 1998-2001 survive online (the archived `release_notes98.pdf` is the
-  mutual-fund database).
-
-Conclusion: the security set is the same as GGR's; the Financials gap reflects an unstated
-classification or share-type choice, not the data edition.
-
-## 12. Other replications, revisited (2026-10-17)
-
-No public replication reproduces Table 3 or reports sector stock counts. Rubesam
-(rubetron/Pairs_trading, 2023) pulls no SIC codes and reports only top-20 statistics:
-
-| top 20, one-day wait | GGR | Rubesam | ours (vol_common) |
-|---|---|---|---|
-| committed capital | 0.52% | 0.67% (+29%) | 0.43% (-17%) |
-| fully invested | 0.90% | 1.25% (+39%) | 0.72% (-19%) |
-
-Zhu (2024) restricts pairs to SIC groups of its own; S&P 500 replications use current GICS
-sectors. The tightest pairs (top 5 and top 20) are the cells most sensitive to which stocks are
-in the universe, in every replication we found.
-
-## 13. PR review fixes, rebuild and speed-up (2026-10-17)
-
-Review comments on PRs #1-#4 were checked and all taken:
-
-| PR | finding | fix | changes results? |
-|---|---|---|---|
-| #1 | `ssd_matrix` on an empty window returned zeros (self-pairs) | raises `ValueError` | no (never hit) |
-| #1 | `earliest_known_sic` relied on file row order | explicit date sort | no |
-| #2 | delisting (`X`) rows not pinned end to end | build-and-load round-trip test | no |
-| #3 | **positions opened after a stock's last row, on frozen prices** | signals and pending opens need both legs alive | **yes** |
-| #3 | delayed convergence on the last day labelled `end` | labelled `converged` | no (no table reads it) |
-| #4 | cache stamped during `--aggregate-only` | reading verifies only; building stamps | no |
-| #4 | Figure 1 indicator one day late | indicator from open day to close day | plot only |
-| #4 | n̄ convention only in a docstring | stated in the check report | no |
-| #4 | capital mask chosen by a hand-kept tuple | `MASK_CAPITALS`, computed once | no |
-
-The frozen-price trades were 0.9% of all trades (2,500 of 287,024 in 90 cohort-wait checks).
-After the rebuild, Table 1 cells within 10% of the paper go from 29 to 30 and Table 3 from 37 to
-39; Table 2 is unchanged. Top-5 means rise 2-3% (toward the paper); pairs opened per cohort
-under wait 1 fall from 1,917.8 to 1,902.1 (paper 1,944.2). No mean moves more than 3.5%.
-
-Verification of the rewrite: the numba engine reproduces every old trade bit for bit except
-the removed ones and the relabels; the vectorized `portfolio_daily` matches the old one within
-4e-17 on 1,920 cohort series; the new cohort job reproduces 330 of 480 sampled monthly series
-exactly and every other one contains a removed trade; Panel B, stock, pair and sector counts
-are unchanged. A full run (474 cohorts, Tables 1-3, Figure 1, check) takes 1 min 45 s on 15
-workers, against more than 30 minutes before.
-
-### 13a. Second review round (2026-10-17)
-
-- **Trade-log capacity (PR #3, critical).** The numba kernel sized the log at
-  `n * (T // 2 + 1)` trades, but a pair can close and reopen on the same day, so one pair can log
-  up to `T - 1` trades. Reproduced: 12 days logged 8 of 10 trades; longer runs could write past
-  the array. Fixed with `n * T` slots (a hard ceiling) and a 126-day test of a pair that flips
-  every day. Production cohorts used at most 3.4% of the old capacity, and the rebuild leaves every
-  table cell unchanged by this fix.
-- **Payoffs from the engine (PR #4 note, and the old zero-account item).** `portfolio_daily`
-  rebuilt payoffs as `r * w_prev`, which loses a pair's payoff whenever its account is zero
-  (non-finite return) and, for inputs with holes, the day after a missing return. The engine
-  now returns `pair_payoffs` and `portfolio_daily` sums them. Only the "all" portfolio moves,
-  in 5-7 months (largest 0.08 percentage points); its mean changes by under 0.02% relative and
-  the replication check is unchanged.
-- **Figure 1 indicator (PR #4).** Kept as is, with the rule moved into
-  `position_indicator` and tested: a position held from the close of the open day to the close
-  of the close day is drawn up over exactly [open day, close day]; also marking the close day
-  would keep it up one day too long under `step(where="post")`.
+**What happens to the score.** Nothing. Gate (g) was never reached, so no series was run through the
+standard check and no scored cell, paper value or mark rule changed: 411.0 of 865 before and after.
+The lever is closed in GAPS.md (section 7 and finding 5 of section 11). If a later contract wants to
+test a construction outside this grid, the pre-registered rule here does not bind it; but within the
+72 the answer is no, and it is not close: the nearest Table 8 distance among the 72 is the shipped
+series' own.
 
 
-### 13c. Third review round (2026-10-18)
+## 83. Table 3 under seven label readings, and claim 9 settled as a pre-1989 population difference (2026-11-17): 411.0 -> 411.0 (investigation)
 
-- **Breakpoint set settled: CRSP = NYSE + AMEX common.** The reviewer
-  measured both readings on the 20-cohort sample (N+A any share 89.0 vs
-  N+A common 88.5) and preferred the common-share filter, which also keeps
-  `composition_stats`'s inputs honest; adopted in PR #7 with the key renamed
-  to `breakpoint_caps`. Full-sample Panel B after the rebuild:
-  avg_size_decile top20 3.11 (paper 2.71), all 4.65 (4.57);
-  weight_top3 top20 0.694 (0.74). The weighted full-sample score moves
-  137.5 -> 145.0 of 291 cells. The paper only says "using CRSP
-  breakpoints"; NYSE + AMEX common is our interpretation, chosen because
-  it fits Panel B best.
-- **The conformance threshold is the shipped sample score (88.5)**, so the
-  paper-conformance test is a regression guard: the weighted score must not
-  fall below the shipped sample score, and the assertion lists any cell
-  that is outside the 25% band.
+Contract R6-C finished T's Table 3 attribution and settled claim 9. No cell moves: the one reading that
+gains anything (`formstart`, 411.5) moves a single cell and has no textual support, so nothing ships.
+`scripts/experiments/table3_sectors.py` gains a label-reading build, a counts pass, an unrestricted-book
+pass and the claim-9 conventions; none of them is on the manifest, which is therefore not re-pinned.
 
-## 14. Frozen prices and the employed-capital denominator (2026-10-18)
+**Table 3's seven readings** (`claims/TABLE3_SECTORS.md`): the group label read from the dated SIC on the
+last formation day (shipped), the header SIC, the dated SIC on the first formation day, the dated SIC on
+the first trading day, the modal 18-month SIC, dropping the unknown-SIC stocks, and 481x telephone. On
+the whole 865-cell check they score 411.0 / 404.5 / 411.5 / 375.0 / 405.5 / 399.5 / 401.5. The
+interesting negatives: `tradestart` collapses Industrials' all column to 0.00200 and costs 35.5 points;
+`nosic_drop` overshoots Industrials' all to 0.00833 and leaves Financials' all 29% high; `481x` matches
+the caption's Utilities count (154.7 against 156) but not its means. No reading fixes the three cells
+that decide the block, because the label cannot reach them: the "all" column is 73-94% ranks 121+ in
+every era, Industrials' all-portfolio shortfall sits in 1989-98 and 1999-2002 (0.00037 and 0.00008)
+while its pre-1989 mean 0.00891 is *above* the paper's full-sample 0.00715, and the top pairs' excess is
+carried by high-cap, low-frozen, cross-2-digit names. That is GAPS.md Q1/Q6/Q9 territory, not a label.
 
-Two changes, each tested against alternatives on the full 474-cohort sample. Score = weighted
-cells of the replication check (✓ = 1, ~ = ½; 291 cells); "means" = the 8 Table 1 and 15
-Table 3 means measured in the paper's own standard errors (Table 1 `nw_se`, Table 3 mean / t).
+**Claim 9** (`claims/CLAIM9_PRE1989.md`). The arithmetic: all-pairs mean 0.629% against the paper's
+0.715%, Newey-West se 0.090% both sides, so the net six-month figure is 59 bp against 113 bp and
+t_net 1.10 against 2.09; crossing 1.96 needs a mean of 0.703% (+11.8%), 72% of it before 1989. Three
+readings were built over all 474 cohorts and scored: `last_px` (a delisted leg closes at its last
+available price, no delisting return: footnote 4's second clause, p. 804) takes t_net to 1.22 and the
+whole check to 412.5 (+1.5, one and a half cells, no support: the sentence names the delisting return
+first, which is what ships); `minpx5` (a $5 floor on the cheaper leg) takes it to 0.66 and scores 398.0; `samesector` (both legs in one group) raises the all-pairs mean to 0.69% and scores 394.5. None is
+defensible as the paper's Table 1 rule (`samesector`
+contradicts "in addition to 'unrestricted' pairs", p. 803; `last_px` is the robustness variant, not the
+stated rule; `minpx5` has no sentence behind it) and none closes the gap.
 
-| run | score | T1 | T2A | T2B | T3 | T1 means within 2 SE (RMS z) | T3 means within 2 SE (RMS z) |
+What the attribution leaves: the pre-1989 unrestricted book holds 1680 pairs per cohort against the
+paper's 2057 (Table 8's caption, p. 822) and its standard deviation is 13% low - a scaled-down version of
+the paper's book - while the whole-sample pair count (2009) and the Table 2 B composition match. The
+1999 draft, measured on its own 1963-1997 sample and its own capital basis, shows the same shortfall
+(0.0266 against 0.0297 on employed, 0.0254 against 0.0288 on committed, with the top 20 matching), so the
+residual is not the RFS window and not a rule we can identify: it is the pre-1989 deep-pair population.
+Claim 9 stays **partly**, now with a named cause rather than an unexplained cell.
+
+*The pair-count sentence above is corrected in section 85: the 2057 is a 474-cohort average, and like
+for like our count is 2-4% short, not 18%.*
+
+## 84. What a recall forgoes: the positions the R1 rule closes, measured (2026-11-17): 411.0 -> 411.0 (investigation)
+
+Claim 20 (b) says short recalls cost "4-13 bp per month" of profit, and every one of the twelve
+readings in sections 58 and 74 *raises* our fully invested row instead. What no note had measured
+is the quantity that decides the sign: what the position the rule closes would have earned had it
+been left open. Contract R6-D measured it on the no-recall path over the full sample
+(`scripts/claims/recall_diagnostic.py`, `claims/RECALL_DIAGNOSTIC.md`,
+`claims/recall_diagnostic.csv`).
+
+**What was measured.** Every position of the no-recall run (the shipped wait-one-day rule) is
+asked whether the R1 flag fires on its short leg after it opens; if it does, the position's own
+return is compounded from the recall day's close to its natural close. The return is the paper's
+per-trade return -- $1 long and $1 short, bought and held, so `r_long - r_short` per day and
+`prod(1 + r_long) - prod(1 + r_short)` over the window -- not the account-based `pi / w` quotient,
+which divides by a value that can cross zero. Positions are attributed to the era of the cohort
+that formed them.
+
+**The controls, all exact.** 474 of 474 cohorts reproduce the shipped cache's trade log; the base
+series of the closing counterfactual reproduce the shipped monthly rows for both the fully invested
+and the committed rows (max gap 0.0); the flag counts are the shipped R1 cache's own, 10,510,416
+flag-days; and the engine's own recall run closes 969,993 of the 978,132 predicted positions on
+the predicted day (0 on another day; 8,139 are absent because an earlier recall of the same pair
+disarmed it before the episode could open).
+
+**What the recalled positions earn afterwards.**
+
+| portfolio | 1963-72 | 1973-82 | 1983-88 | 1989-98 | 1999-2002 | all | t (NW 6) |
 |---|---|---|---|---|---|---|---|
-| main after #7/#8 | 145.0 | 30/25/33 | 13/8/3 | 24/5/11 | 39/40/60 | 7/8 (1.57) | 13/15 (1.50) |
-| + frozen-price exclusion | 160.0 | 43/25/20 | 13/8/3 | 24/5/11 | 40/42/57 | 7/8 (1.23) | 13/15 (1.52) |
-| + daily open count (shipped) | **161.5** | 47/22/19 | 13/8/3 | 24/5/11 | 37/46/56 | **8/8 (0.70)** | **14/15 (1.20)** |
+| top5 | +2.72 | +3.38 | +2.56 | +0.53 | +0.11 | +1.91 | 6.02 |
+| top20 | +3.13 | +4.83 | +3.31 | +1.31 | +1.56 | +2.79 | 8.34 |
+| 101-120 | +1.36 | +4.51 | +4.62 | +1.58 | +5.12 | +2.86 | 7.38 |
+| all | +0.52 | +4.14 | +3.21 | +1.50 | +0.05 | +1.89 | 5.90 |
 
-- **Frozen prices.** The worst top-5 months (1974-04, 1978-08, 1979-03, 1980-10, 1981-01) were
-  rank-1 pairs of two pre-1983 Nasdaq stocks whose quote did not change on 98-100% of formation
-  days (CRSP has no Nasdaq volume before Nov 1982, so `vol_common` keeps them). A constant
-  normalized price pairs at distance zero. `formation_universe` now also drops a stock whose
-  return is zero on every formation day: about one stock per cohort, all counts unchanged
-  (2,013 pairs per cohort, Financials 352). Top-5 Table 1 moves from 1.19% / std 2.99% /
-  min -20.3% to 1.39% / 2.49% / -14.5% (paper 1.31% / 2.28% / -10.6%).
-- **Thresholds instead (not adopted).** Dropping stocks whose quote is unchanged on more than a
-  share of quote-only days scores 138.0 (75%), 147.5 (85%), 156.0 (90%), 158.0 (95%),
-  163.0 (98%), 161.0 (99%). Strict rules (any unchanged quote: 139.0; `volpos_common`: 139.0;
-  `price_common`: 140.0) cut pairs from 2,013 to about 1,600 per cohort and Financials from 352
-  to 229-235 against the paper's 371 (the 50% threshold: 264), so GGR kept most of these
-  stocks. The 95-99% band only adds a tuned parameter, and 95% puts the
-  top-5 mean 2.7 SE above the paper.
-- **Employed capital = pairs open that day.** With the alive-gate and delisting fixes in, the
-  daily count reproduces the paper's fully-invested/committed ratios in every cell (ours
-  1.71/1.70/1.55/1.84 no wait, 1.71/1.70/1.54/1.88 one-day wait; paper 1.67/1.78/1.59/1.80 and
-  1.61/1.72/1.58/1.81). The period-average n̄ gives "all" 1.57, the reason the "all" mean sat at
-  0.85% (now 0.99%, paper 1.10%). A per-calendar-month count overshoots top 5 (ratio 2.2).
-- **Daily-rebalanced legs (not adopted).** Re-marking each pair to a $1/$1 position every day
-  (r_long − r_short compounded) fixes the "all" std in the dot-com months (2.16% -> 1.55%,
-  paper 1.67%) but lowers every mean and flattens the right tail ("all" kurtosis 25.5 -> 11.6,
-  paper 25.2): score 149.0. Buy-and-hold legs stay.
-- **Still open.**
-  - "All" pairs, Dec 1999 to Mar 2000: -8.4%, -18.7%, +15.4% months. Short legs that rose up to
-    27x, spread over 321 stocks; 1963-1998 alone matches the paper (std 1.62% vs 1.67%, min
-    -3.25% vs -2.72%), and our 1999-2002 top-20 matches the paper's hold-out (std 3.6% vs 3.8%
-    a year). GGR's all-pairs series has no such losses.
-  - Table 2 trigger: our top pairs are tighter (top-5 2σ 0.033 vs 0.048). Measuring the spread
-    around zero adds only 5%; the deviation on the signal day fits top 5/20 but overshoots
-    101-120 and "all", and the paper defines the row as an average of two standard deviations.
-    Dual-class pairs (e.g. permnos 17778/83443, 34 cohorts) are 5.5% of top-5 pairs and do not
-    explain it.
-- **Conformance guard.** The 20-cohort sample (every 24th cohort, so no cohorts overlap) moves
-  88.5 -> 86.0 while the full sample moves 145.0 -> 161.5; the threshold is reset to the new
-  shipped sample score. The sample is a weak proxy for the overlap-averaged tables.
+Mean post-recall-day return, bp per day, over 959,560 recalled positions (1,477,939 no-recall
+positions, 66.2% of them closed by the rule, 61.7% of open position-days). It is positive in 4 of 4
+portfolios and 20 of 20 portfolio-era cells: **+39.8 bp per month of position life** for the
+all-pairs portfolio, and +38.7 bp per position over the 48.3 days that remain on average (median
++357.7; 59.6% of positions finish the window in the black). Read as the trade's dollar payoff the
+same positions are -1.41 bp per day for the all-pairs portfolio, because eq. (3) weights each leg
+by its accumulated value and the all-pairs tail is where the legs have drifted furthest apart; the
+three smaller portfolios stay positive on that reading too (+2.29 / +3.12 / +2.23 bp per day).
 
-## 15. Attribution, SIC sensitivity and value-weighted books (2026-10-19)
+**What closing them does to our rows.** The same enumeration was pushed through both of our rows: the book is rebuilt with every recalled position taken out from the day after its recall day, and
+the two overlap-averaged series are differenced. Change in bp per month, all eras:
 
-Marks are the check's: ✓ within 10% of the paper, ~ within 25%, ✗ further; score = ✓ + ½ ~
-over 291 cells. Every run is the full 474-cohort sample.
-
-**Attribution of section 14.** Splitting PR #10 into its two changes:
-
-| step | T1 ✓/~/✗ | T3 ✓/~/✗ | score |
+| row | top5 | top20 | 101-120 | all |
 |---|---|---|---|
-| main after #7/#8 | 30/25/33 | 39/40/60 | 145.0 |
-| + frozen-price exclusion | 43/25/20 | 40/42/57 | 160.0 (+15.0) |
-| + daily open count | 47/22/19 | 37/46/56 | 161.5 (+1.5) |
+| pinned fully invested | +18.6 | +45.6 | +34.9 | +87.7 |
+| committed (`sum pi / N`) | -15.3 | -23.3 | -24.5 | -4.9 |
+| shipped R1 run, fully invested | +5.5 | +20.6 | +20.2 | +62.0 |
+| shipped R1 run, committed | -11.0 | -17.2 | -19.5 | +1.2 |
+| paper (Table 9 B minus Table 1 B), fully invested | -12.6 | -4.1 | -13.0 | -13.0 |
+| paper (Table 9 B minus Table 1 B), committed | -15.9 | -17.3 | -20.7 | -19.4 |
 
-The frozen-price rule carries the gain. The daily open count flipped 63 cells in both
-directions for +1.5 net (Table 3: −1.0); it was chosen for the ratio fit, not the score.
+**The verdict: claim 20 (b) is partly replicated, with the sign explained -- and the explanation is
+the row, not the positions.** The positions the rule closes are not losers thrown out at their
+worst: they keep earning a positive spread return afterwards (+1.89 bp per day, t = 5.9), so the
+recall really does cost the strategy the profit the paper's "opportunity cost" sentence describes.
+On the paper's committed row that cost is there, with the paper's sign in 4 of 4 portfolios and at
+1.0-1.4 times its size in three of them; on our pinned fully invested row the same close *raises*
+the mean, because a closed position takes its accumulated long and short values out of both
+denominators of that value-weighted book (sections 33 and 54). No closing rule can therefore
+produce the paper's decline on the fully invested row under our definition, but the decline is not
+evidence against the paper's mechanism -- it is what the committed row measures and our fully
+invested row does not.
 
-**SIC source does not drive Table 3.** A sector-only harness (same code path, verified to
-reproduce `table3.csv` exactly) ran all 474 cohorts under five SIC sources:
+The proposed `CLAIMS.md` wording for claim 20 (b) is section 6 of
+`claims/RECALL_DIAGNOSTIC.md`; the coordinator applies it. No cell moves with this diagnostic.
 
-| SIC source | U / T / F / I stocks per cohort (paper 156 / 61 / 371 / 1,729) | T3 return cells (of 135) |
-|---|---|---|
-| CRSP dated, own history, then header (shipped) | 161 / 61 / 352 / 1,726 | 56.0 |
-| CRSP dated only (unknown -> Industrials) | 159 / 59 / 321 / 1,762 | 61.5 |
-| CRSP header | 166 / 64 / 347 / 1,724 | 56.5 |
-| Compustat header (CCM link) | 174 / 63 / 349 / 1,714 | 61.0 |
-| Compustat historical SICH (1987+), else header | 176 / 63 / 345 / 1,716 | 62.0 |
+## 85. The claims ledger brought up to date: claim 9's pair count corrected, claim 24 re-read, and the sensitivity page rebuilt over five claims (2026-11-17): 411.0 -> 411.0 (docs)
 
-The spread is about 6 of 135 cells, almost all in tail rows, and every alternative worsens the
-counts. CRSP's December 2002 edition is the same security set (section 11) with 88 itemised SIC
-edits since, so the dated CRSP code is the code GGR had. Compustat SIC is newer and disagreed
-with CRSP on more than a third of firms at two digits in 1974-93 (Kahle and Walkling 1996). No
-SIC crosswalk for S&P's pre-GICS four groups was found. The 1999 NBER version's sector table
-(Table V, six-month cohort returns, 1962-97; it reports excess kurtosis, the RFS raw) gives the
-same ordering: 63-71.5 of 144 cells across sources.
+Round 7's ledger pass. No cell moves: the work is `CLAIMS.md`, `README.md`'s Claims bullet,
+`claims/CLAIM9_PRE1989.md`, `claims/CLAIM_SENSITIVITY.md`, `claims/claim_sensitivity.csv` and
+`scripts/experiments/claim_sensitivity.py`. Every number this section keeps was re-derived on 49e4529
+from the shipped caches and the 2005 factor vintage: the standard check reproduces at
+411.0 of 865 with its "2005 archives" paragraph, byte for byte against `REPLICATION_CHECK.md` except
+the figure path.
 
-**Where Table 3 loses.** Location rows (mean, median, std, t, share negative) earned 44.5 of 75
-cells; tail rows (skew, kurtosis, min, max) 11.5 of 60. Two causes:
+**The claim-9 pair count was compared across unlike windows, and the correction withdraws it.** The
+paper prints one number for the all-pair portfolio's size, "The average number of pairs in the all-pair
+portfolio is 2057", in the notes of Tables 1, 5, 8 and 9 (`paper_rfs.txt`: pp. 807, 815, 822, 825),
+and every one of those notes is for the whole sample - Table 1's "between July 1963 and December 2002
+(474 observations)", and Table 8's the same 2057 over both of its panels. The one other count on that
+window is Table 2 Panel A's "Average number of pairs traded per six-month period" 1944.22 (p. 809).
+No printed count belongs to the pre-1989 or the post-1988 cohorts alone. Section 83's "1680 against
+2057, 18% below" set a 306-cohort average against the 474-cohort one; like for like, from the shipped
+cohort summaries (474 cohorts, `pairs.parquet` cross-checked against `summary.json`):
 
-- *Near-frozen pre-1983 Nasdaq stocks.* Quote-only micro-caps (about $2M) with zero returns on
-  85-99% of formation days pair at tiny distances in Industrials. Cohorts 1981-02 to 1982-10
-  lose 50-72% over six months in the top 5 (NBER worst: −23%), e.g. a short leg (permno 29699)
-  that rose 281% in the 1982 rally. The moves are genuine. Dropping 95%-stale stocks fixes the
-  tails but lifts the Industrials top-5 mean to 0.82% (paper 0.49%), so GGR kept them; no rule
-  the paper states removes them.
-- *February 2000.* Industrials "all" lost 20.4% that month under the count convention, spread
-  over about 2,200 of 2,600 pairs per cohort (the worst 10 pairs carry 20% of the loss): the
-  momentum peak hurting a contrarian rule. Up to 1998 the same series matches the paper (min
-  −3.2% vs −3.4%, mean 0.79% vs 0.71%).
-
-**Value-weighted books (adopted).** Eq. 2 says "the daily returns on the long and short
-positions are calculated as value-weighted returns", weights being each position's value since
-it opened. Read across the portfolio, fully invested = the value-weighted return of the long
-book minus that of the short book; committed scales it by the share of selected pairs holding a
-position. A short leg that has run up 3-5× now weighs in the short book instead of counting as a
-−300% to −500% loss on a $1 pair.
-
-| fully invested / committed | score | T1 ✓/~/✗ | T3 ✓/~/✗ | FI/committed "all" (paper 1.80 / 1.81) |
-|---|---|---|---|---|
-| period-average count n̄ / N | 160.0 | 43/25/20 | 40/42/57 | 1.57 / 1.58 |
-| daily count n_t / N | 161.5 | 47/22/19 | 37/46/56 | 1.84 / 1.88 |
-| value-weighted / N | 163.5 | 47/18/23 | 45/38/56 | 1.95 / 1.99 |
-| **value-weighted / scaled by n_t / N (shipped)** | **164.0** | 48/17/23 | 45/38/56 | **1.80 / 1.83** |
-
-Ratios for the pair shipped then (164.0): 1.71/1.70/1.54/1.80 no wait and 1.70/1.70/1.53/1.83 one-day wait
-(paper 1.67/1.78/1.59/1.80 and 1.61/1.72/1.58/1.81). Industrials "all" February 2000 improves
-from −20.4% to −13.8% (paper min −3.4%) and its skew from −0.29 to +1.04 (paper 2.97). Table 1
-loses some tail cells it had matched ("all" kurtosis 23.4 -> 16.1, paper 25.2). Figure 1 and
-Table 2 are unchanged.
-
-**Realized cash flows (rejected).** Booking each trade's payoff on its close date, as the NBER
-text describes the cash flows, would remove the February 2000 mark-to-market loss but scores
-27-28 of 135 Table 3 cells (marked to market: 56). The RFS says positions are "marked-to-market
-daily".
-
-**Still open.** February 2000 (−13.8% vs a paper minimum of −3.4%) and the 1981-82 Industrials
-top-5 cohorts. Table 2 trigger (section 14).
-
-**Conformance guard.** The guard now has three parts. The shipped full-sample check must score
-at least 164.0; this always runs. The 20-cohort sample smoke test moves 86.0 -> 87.5 and its
-threshold rises with it. `make conformance-full` rebuilds all 474 cohorts and requires the
-shipped check's summary lines to be reproduced (about 70 s with 12 workers).
-
-## 16. The Table 2 Panel B decile-difference row reports the all-pairs average (2026-10-20)
-
-The paper's Table 2 Panel B row "Average decile difference for mixed pairs" is 0.97, 0.97,
-0.97 and 0.98 across the four portfolios. An average of |d1 - d2| over mixed-only pairs is
-at least 1 (integer CRSP decile gaps), so the paper's number cannot be a mixed-only average;
-its own text ("the stocks in mixed pairs differ on average by a single decile") reads like a
-rounded description of a value near 1. The only consistent reading is the average over all
-pairs, with same-decile pairs contributing 0. `composition_stats` now reports the all-pairs
-average in that row (the mixed-only value remains derivable as the all-pairs average divided
-by `share_mixed_decile_pairs`).
-
-Verification: the pinned evaluator (frozen paper values, mark recomputation) scores the full
-sample at 165.0 (from 164.0); the Table 2 Panel B cells move from 24/5/11 to 25/4/11.
-Rejected alternatives measured on the full sample: SIC 46xx to Utilities (+0.5, Utilities
-count 161 to 187 vs paper 156), all of 48xx to Utilities (+1.5, Utilities count 187), SIC
-47xx to Industrials (+1.0), near-frozen (>98% unchanged) exclusion (+0.0), converged-only
-round-trip counts (-2.0). The current SIC map stands: its sector counts (161/61/352/1730)
-are within 10% of the paper's 156/61/371/1729, and the map alternatives trade count cells
-for composition cells. The remaining ~90 miss cells are distribution tails (skew, kurtosis,
-min, max in Table 1 and Table 3) that trace to the pre-1983 Nasdaq stale-quote content of
-CRSP and the 2000-2002 dot-com months, which no rule stated in the paper removes.
-
-## 17. Score experiments under value-weighted books (2026-10-20)
-
-Marks are the check's (✓ within 10%, ~ within 25%, ✗ further; score = ✓ + ½ ~ over 291 cells).
-Every run is the full 474-cohort sample. The baseline is the pre-#13 check, 164.0; section 16
-(PR #13, merged) moves it to 165.0 through the Panel B decile row, which none of these
-experiments touches, so every delta below carries over to the 165.0 baseline.
-
-**Sensitivity, not shipped: Panel A over full six-month periods.** The cohorts starting 2002-08 to
-2002-12 trade for one to five months before the data end, while Panel A's rows are per six-month
-period. Averaging Panel A over the 469 full-period cohorts gives:
-
-| row (ours / paper) | top 5 | top 20 | 101-120 | all |
-|---|---|---|---|---|
-| std time open, all 474 cohorts (shipped) | 0.821 / 0.80 ✓ | 0.502 / 0.45 ~ | 0.448 / 0.38 ~ | 0.311 / 0.17 ✗ |
-| std time open, 469 full periods | 0.786 / 0.80 ✓ | 0.454 / 0.45 ✓ | 0.376 / 0.38 ✓ | 0.198 / 0.17 ~ |
-
-That would move Panel A from 13/8/3 to 15/7/2 (164.0 -> 165.5 on the pre-#13 baseline). The paper's Table 2 caption reads
-"between July 1963 and December 2002 (474 months)" and says nothing about dropping cut-off
-cohorts, so the shipped check keeps all 474.
-
-**Not adopted.**
-
-| test | score | T1 ✓/~/✗ | T2A | T2B | T3 ✓/~/✗ |
+| window | quantity | cohorts | ours | printed | gap |
 |---|---|---|---|---|---|
-| baseline (value-weighted books) | 164.0 | 48/17/23 | 13/8/3 | 24/5/11 | 45/38/56 |
-| drop stocks with unchanged quote-only days > 99% | 163.5 | 48/17/23 | 13/8/3 | 24/5/11 | 43/41/55 |
-| same, > 98% | 164.0 | 49/13/26 | 13/8/3 | 27/3/10 | 41/44/54 |
-| same, > 95% | 158.5 | 37/25/26 | 15/6/3 | 30/1/9 | 37/47/55 |
-| cohorts weighted by open positions ("desk" capital) | 164.0 | 38/24/26 | 13/8/3 | 24/5/11 | 52/37/50 |
-| eq. (3) weights compounded from trading day 1 | 159.5 | 44/20/24 | 13/8/3 | 24/5/11 | 43/38/58 |
-| eq. (3) weights = formation-normalized price | 163.0 | 42/21/25 | 13/8/3 | 24/5/11 | 49/36/54 |
-| no pair of two securities of one company (same permco) | 163.0 | 41/25/22 | 16/7/1 | 24/4/12 | 45/38/56 |
+| July 1963 - December 2002 | pairs in the portfolio | 474 | 2008.9 | 2057 | -2.3% |
+| July 1963 - December 2002 | pairs traded per period | 474 | 1884.0 | 1944.22 | -3.1% |
+| July 1963 - June 1997 (the 1999 draft) | pairs in the portfolio | 408 | 1787.7 | 1870 | -4.4% |
+| July 1963 - December 1988 | pairs in the portfolio | 306 | 1680.4 | none printed | - |
+| January 1989 - December 2002 | pairs in the portfolio | 168 | 2607.3 | none printed | - |
 
-- *Near-frozen quotes, under value-weighted books.* The filter now fixes Panel B composition
-  (95%: top-5 size decile 2.71 vs 2.54, utilities 0.66 vs 0.72) but costs Table 1 and Table 3 as
-  much as it gains, and barely moves the top-5 trigger (0.033 -> 0.035). Section 15's reading
-  stands: GGR kept these stocks.
-- *Desk weighting.* Weighting each cohort's fully invested return by its open positions, rather
-  than the paper's equal-weighted average of the six portfolios, gains 6.5 Table 3 cells but
-  lowers every Table 1 mean by 10-20% (top 5 1.31% -> 1.10%, paper 1.31%). The paper's text is
-  the equal-weighted average; not adopted.
-- *Eq. (3) read literally.* The paper's weight is w_i,t = (1+r_i,1)...(1+r_i,t-1), which could
-  start on the first trading day rather than when the position opens. Compounding from trading
-  day 1 loses 4.5 points; weighting by the formation-normalized price gains Table 3 (49 ✓) but
-  loses Table 1. Weights from the open date stay.
-- *Same-company pairs.* 21% of top-5 pair slots (498 of 2,370) are two share classes of one firm
-  (Viacom/Paramount A/B, Citizens Utilities A/B, Berkshire A/B, A.C. Nielsen A/B, Comcast, ...),
-  pairing at σ ≈ 0.01. Barring them fixes most of Panel A (top-5 trigger 0.033 -> 0.037, round
-  trips 2.31 -> 2.18 vs 2.02) and the top-5 utilities weight (0.59 -> 0.69 vs 0.72), but the
-  top-5 Table 1 mean falls from 1.31% (paper 1.31%) to 1.07%. The paper does not mention share
-  classes; not adopted.
-- *Trigger averaging.* Averaging 2σ over opened pairs, over trades or by median gives 0.032-0.034
-  for top 5 (paper 0.048); the gap is in the pairs, not the averaging.
+Our count rises over the sample (846.0 / 2405.5 / 1793.2 / 2306.2 / 3360.1 pairs per cohort in
+1963-72, 1973-82, 1983-88, 1989-98 and 1999-2002), so a pre-1989 average below the full-sample one is
+what our own era profile produces and says nothing about the paper's. The 1999 draft's Table I note
+reads "There are 408 observations, from 2/1963 until 12/1997"; its own label spans 419 months, so the
+count and not the label fixes the window at the 408 cohorts July 1963 - June 1997 that section 4 of
+`GAPS.md` and `EDITION_1999.md` score it on. What survives from section 83 is the shortfall itself,
+located but not explained: the deep book carries it, 72% of the full-sample mean gap is pre-1989,
+Table 8 Panel A's all-pairs mean is 9.7% low and its standard deviation 13.0% low, and the draft's
+same 408 cohorts show a mean 10-12% low on its own capital bases with a standard deviation that
+matches (0.0309 against 0.0312). `claims/CLAIM9_PRE1989.md` is rewritten to say that and retitled.
 
-**Diagnosed, not changed.** The worst top-5 month, April 1974 (−13.9%, paper minimum −10.6%), is
-one stock, Consolidated Edison (permno 11404), held long across all six cohorts while it fell after
-its dividend omission.
-The Utilities 101-120 maximum (25.7% in January 2001, paper 12.1%) is one cohort, 2001-01, earning
-94% fully invested in its first month. Neither is a code error.
+**Claim 24's verdict was mis-tallied, and the row was right.** The Summary listed it as "partly
+replicated (all but the top 5)" while its own row said "replicated in substance". The check's Table 8
+post-1988 intercept and t rows: ours 0.271% (t 2.08), 0.367% (4.46), 0.564% (7.51), 0.213% (2.12)
+against the paper's 0.337% (2.12), 0.417% (3.77), 0.363% (3.01), -0.065% (-0.56). Our t is above 1.96
+everywhere the paper's is, and above it in the all-pairs column where the paper's is -0.56, which is
+the ledger's "in substance" standard (direction, sign and significance where the paper's t > 2). The
+top-5 cell is within a standard error of the line (and is the one that falls below it under ST_Rev in
+`claims/CLAIM_SENSITIVITY.md`), not a failed column. The tally becomes 5 replicated with numbers /
+15 in substance / 3 partly / 1 not as stated, and `README.md`'s Claims bullet follows it.
 
-### Second edition and sub-period checks (2026-10-20)
+**Claim 9, claim 20 (b) and the stale references.** Claim 9's row now says what the corrected page
+says - the shortfall is located, not explained, the all-pairs net t crossing 1.96 in 2 of the 12
+readings of the rebuilt sensitivity page, both at zero lags on the window to 1998-12; claim 20 (b)
+takes `claims/RECALL_DIAGNOSTIC.md` section 6's proposed wording, checked against its own tables
+(+1.89 bp per day, t 5.9, over 959,560 recalled positions; committed -15.3 / -23.3 / -24.5 / -4.9 bp
+against the paper's -15.9 / -17.3 / -20.7 / -19.4; fully invested +18.6 / +45.6 / +34.9 / +87.7).
+Six stale numbers went with them, each re-read off the check: the scored base is SCORE_LOG row 29
+(411.0 of 865), not row 26 (406.0); Table 6's marks are 8 / 10 / 30, not 8 / 6 / 34; claim 19's means
+are all four within 10% (not three) and its change against Table 1 Panel B runs -10 to +18 bp, not
+single-digit throughout; claim 6's intercepts are 16-47% above the paper's, not 15-46%; claim 16's
+top-20 long t is below 1.96 in 9 of the 24 readings (none of the six full-sample ones), not 10.
 
-The February 2006 draft in the repo has the same Tables 1-3 and text as the RFS; the 1999 NBER
-draft (`w7032`) is a different experiment with its own Tables I-II: 408 cohorts (1963-07 to
-1997-06), 6-month cohort returns, Table II in the no-wait version. Scored with the same marks
-(1999 Table I 72 cells, Table II 24 cells; its kurtosis is excess, its "employed" capital is
-about committed x N / pairs opened):
+**The sensitivity page is rebuilt over all five claims.** The round-5 leftover
+`round5_wip/wCl.diff` applied cleanly (`git apply --3way`), was extended to regeneration on 49e4529
+and now runs against the shipped caches read-only: the control section reproduces 42 of 42 cells the
+check prints for the shipped reading at the check's own precision, so the grid's baseline is the
+published one rather than a re-derivation. Two of its readings differ from the numbers previously
+quoted in `CLAIMS.md` and are the ones kept: the cost the one-day wait measures is 314.4 bp (the
+script's own compounding of Table 1 A minus B, replacing a hardcoded 297), and the all-pairs net t
+runs 0.97-2.52, not 1.0-2.9. The page regenerates byte for byte (page and CSV) with
 
-| run | RFS check (291) | 1999 Table I (72) | 1999 Table II (24) |
-|---|---|---|---|
-| baseline | 164.0 | 33.5 | 22.5 |
-| stale-quote filter > 99% | 163.5 | 35.0 | 22.5 |
-| > 98% | 164.0 | 39.5 | 22.5 |
-| > 95% | 158.5 | 46.5 | 22.5 |
-| literal eq. (3), from trading day 1 | 159.5 | 33.0 | 22.5 |
-| no same-company pairs | 163.0 | 29.5 | 23.5 |
-| wait-1 signal must persist on the open day | 154.5 | 32.5 | 22.5 |
-| no new signal on the day a position closes | 163.5 | 34.0 | 22.5 |
-| both wait-1 changes | 155.5 | 33.0 | 22.5 |
+    GGR_SHARED_REPLICATION=$Q/data/processed/replication $PY scripts/experiments/claim_sensitivity.py
 
-- *The engine is right.* On the 1999 sample (wait 0) round trips are 2.47/2.28/1.93/1.73 vs
-  2.4/2.2/1.9/1.7, time open 3.9/4.0/4.2/4.1 vs 3.8/3.8/4.0/3.9, pairs opened 4.88/19.67/19.73/1,726
-  vs 4.97/19.81/19.77/1,814; 21 of 24 cells ✓, none ✗. The 1999 trigger is 0.0399/0.0449/0.0683/0.1518
-  (ours 0.0343/0.0413/0.0668/0.1544). The 2006 Table 2 differs from the 1999 one by more than our
-  engine does, so the editions are not the same experiment. The one-day-wait rule is not the lever:
-  none of the three variants above helps either edition.
-- *Near-frozen quotes matter before 1989 in both editions.* On the 1999 sample the 95% filter
-  lifts the top-20 minimum from -24.7% (cohort 1982-11, Nasdaq micro-caps whose short legs rose
-  3x) to -8.4% (paper -7.9%), the share of negative cohorts from 12.3% to 7.8% (paper 9%), skew
-  from -0.12 to 0.81 (paper 0.98). Table 8 (wait 1, fully invested, 1963-88) agrees:
+under the 2005 vintage. Its matrix moves one verdict: claim 24's top-5 column sits below 1.96 under
+ST_Rev (t 1.58 with the 2005 files, 1.66 with today's), while the shipped losers-only d1-3 series
+gives 2.08. Claims 9, 10 and 20 (b) rest on rows no factor, lag or vintage reading reaches.
 
-| 1963-88 | top 5 | top 20 | 101-120 | all |
+**What is not settled.** Whether the 4.4% of pairs the draft's window holds and ours does not would
+carry the mean gap; what the paper's cross-group pairs earn (our cross-group book is the weak one,
+but the paper prints no such split and its mixed-sector share is 33% against our 29.7%); and the
+reversal reading the paper itself used. None is measurable from what either edition prints, and none
+is claimed here.
+
+## 86. Does anything outside the score support S7? Referee tests (2026-11-17): 411.0 -> 411.0 (support test; S7all reads 415.0)
+
+Contract R7-D. Section 81 proposes S7 (drop `sharetype='NS'` from the formation universe) at 417.5
+against 411.0, and section 81's five-variant table already shows the family straddling the baseline.
+This section asks the question section 81 could not: does anything the score does not reward -- the
+paper's printed counts, and the 1999 NBER draft -- point the same way? Full tables, sources and the
+reproduce commands are in `claims/S7_SUPPORT.md`; the tests are `scripts/experiments/s7_support.py`
+(`check` records the driver's own `_mark` arguments at full precision, `report` builds the tables).
+
+**Conventions.** A "wide" reading means `--share-classes wide` over the non-`NS` share types inside
+CRSP's EQTY/COM: SB (shares of beneficial interest), AD (ADRs), CE, and for the complete map UG
+(units). `s7all` = SB+AD+CE (1,690 permnos), `s7ad` = 1,378, `s7` = SB+AD (1,677), `s7sb` = 299, and
+`s7full` = all four (2,079), the reading the paper's own sentence implies, read from contract R7-A's
+`wide_main`. Every check holds the four side caches (`vol_common_top3`, `_recalls_r1`, `_t6_book`,
+`_delist100`) at their shipped NS versions, so only the formation universe moves; the factor vintage
+is the shipped 2005 one (`grep -c "2005 archives"` = 1 on all six). The draft comparison maps the
+published edition's first 408 cohorts to the draft's 408 (1963-07..1997-06); the draft caption's own
+dates (2/1963-12/1997) are 419 months, and the mapping is corroborated by the draft's trigger row,
+which our first 408 cohorts reproduce to four digits (0.0399 against 0.0399).
+
+**The score is +4.0, not +6.5, and the family is 407.5 to 415.0.** On the shipped vintage: `ns` 411.0,
+`s7sb` 407.5, `s7` 411.0, `s7full` 412.0, `s7all` 415.0, `s7ad` 415.0. R6-A's 417.5/414.5/418.0 came
+from checks aggregated with today's factor files (their `base.md` has no "2005 archives" paragraph and
+differs from the shipped check in Tables 4, 7 and 8); the base reads 411.0 on both vintages by
+coincidence. The reading that gains most is the one the paper's words do **not** single out (ADRs
+alone, +4.0 = the same as all three classes), and the literal no-filter map is worth +1.0.
+
+**Printed counts (p. 807's 2,057 pairs; p. 812's 156/61/371/1,729 stocks; the draft's 1,870).**
+
+| handle (window) | printed | `ns` | `s7all` | `s7full` |
 |---|---|---|---|---|
-| paper mean / std | 1.034 / 2.259 | 1.181 / 1.689 | 1.052 / 1.527 | 0.992 / 1.651 |
-| baseline | 0.812 / 2.475 | 1.044 / 1.766 | 0.885 / 1.555 | 0.995 / 1.524 |
-| filter > 95% | 1.091 / 2.245 | 1.263 / 1.626 | 0.926 / 1.543 | 1.002 / 1.527 |
+| pairs per cohort, 474 (1963-07..2002-12) | 2,057 | 2,008.9 (-2.3%) | 2,086.7 (+1.4%) | 2,103.0 (+2.2%) |
+| pairs per cohort, first 408 (draft) | 1,870 | 1,787.7 (-4.4%) | 1,844.6 (-1.4%) | 1,858.4 (-0.6%) |
+| pairs per cohort, last 66 (implied 3,213, hypothesis) | 3,213 | 3,376.8 (+5.1%) | 3,583.4 (+11.5%) | 3,614.9 (+12.5%) |
+| stocks per cohort, 474 (sum of p. 812's four groups) | 2,317 | 2,293.1 (-1.0%) | 2,381.6 (+2.8%) | 2,400.1 (+3.6%) |
+| Table 2 A pairs traded, all (wait 1, 469 cohorts, p. 809) | 1,944.22 | 1,881.02 (-3.3%) | 1,953.24 (+0.5%) | 1,968.95 (+1.3%) |
 
-- *After 1988 the filter changes nothing, and we are too high.* 1989-2002 means (paper / ours):
-  top 5 0.217 / 0.443, 101-120 0.327 / 0.605, all 0.212 / 0.396; "all" std 1.295 / 2.324, entirely
-  from 1999-2002 (ours 3.80; 1989-98 is 1.37). The unfiltered full-sample match therefore pairs a
-  pre-1989 shortfall with a post-1988 excess that offset; the filter fixes the first and exposes
-  the second, which is why the RFS full-sample score falls (158.5) while both pre-1989 checks and
-  the 1999 edition rise.
-- *The hold-out sentence is about the no-wait rule.* "Using the original model" the top-20 fully
-  invested portfolio earned 10.4% a year (std 3.8%, t 4.82) in 1999-2002. Ours: no wait 7.6% (std
-  3.8%, t 4.0); wait 1 3.8% (std 3.5%, t 2.2).
-- *Not shipped.* The filter is a tuned threshold the paper does not state ("one or more days with
-  no trade" read strictly cuts Financials to 229-235 vs 371), and it lowers the RFS score. It is
-  the one convention that improves three independent checks (1999 Tables I-II, Table 8 pre-1989)
-  while lowering the fourth, so it stays a sensitivity.
+The pair counts move toward the paper in three windows and away in the implied late one; the stock
+count moves away in every variant, and `ns` is already within 1.0% of it. The four sector levels are
+a wash (Financials -6.6% -> +2.7% and Industrials +1.1% -> +4.0%; mean |gap| 3.97% against 4.03%),
+and Utilities is 10-12% short in every reading, so it cannot discriminate. By sector **mix** (derived
+from the printed counts, not printed) the wide readings do land closer: Financials 16.00 against
+16.01 per cent, Industrials 75.5 against 74.6, `ns` 15.12 and 76.23. Both pair-count cells already
+score ✓ under `ns` (the band is 10%), so these handles are evidence about direction and cannot carry
+the +4.0.
 
-**Joint scorecard (both editions, Table 1 only).** RFS Table 1 is 88 cells; the 1999 Table I is 72.
+**The 1999 draft falls 5.5.** Its 136 cells on the same 408 cohorts: `ns` 83.0, `s7all` 77.5
+(Table I -4.5, Table II B -1.0, II A unchanged at 23.5), `s7full` 78.5, `s7` 78.0, `s7sb` 79.5,
+`s7ad` 82.0. Every wide reading lowers it. The registered draft level is 77.0 (SCORE_LOG row 13), but
+the shipped scorer returns 83.0 on the current shared cache with no argument changed (Table I 39.0
+against 32.0 registered), so the cache refresh moved the level; all six rows above are one cache, and
+only the differences are used. Per the user's rule this is counter-evidence to record, not a block.
 
-| run | RFS Table 1 | 1999 Table I | RFS total | Table 8 (16) |
-|---|---|---|---|---|
-| baseline | 56.5 | 33.5 | 164.0 | 8.5 |
-| stale-quote filter > 99% | 56.5 | 35.0 | 163.5 | 8.5 |
-| > 98% | 55.5 | 39.5 | 164.0 | 8.5 |
-| > 95% | 49.5 | 46.5 | 158.5 | 9.5 |
-| no new signal on the day a position closes | 57.0 | 34.0 | 163.5 | n/a |
-| wait-1 signal must persist | 54.0 | 32.5 | 154.5 | n/a |
-| literal eq. (3), formation-normalized weights | 52.5 | 31.5 | 163.0 | n/a |
-| no same-company pairs | 53.5 | 29.5 | 163.0 | n/a |
+**The +4.0 is edge churn.** 107 marks change under `s7all` (59 up, 48 down). The 26 cells within one
+percentage point of the band edge they cross carry +4.0; the other 81 changes net exactly 0.0, and
+the 28 that are more than 5pp from every edge net +0.5. For `s7full` the edge cells carry +5.5 and
+everything else nets -4.5 (-7.5 beyond 2.5pp). The values move hard as well: 697 of 865 cells change value
+and 696 of them by more than 0.01% relative, the median changed cell moves its gap by 9.9 percentage points, 53 by more
+than 10pp and 17 by more than 25pp -- e.g. Industrials top-5 kurtosis 4.75 -> 14.23 (✓ -> ✗) and
+`t: smb` at 101-120 -0.52 -> -1.17 (✓ -> ✗), against one ✗ -> ✓ flip between two near-zero reversal
+loadings. By block the gain is Table 7 +3.0 (2.5 of it in the 101-120 column), Table 8 +2.5, the text
+cells +1.0, offset by Table 4 -2.5 and Table 3 -0.5.
 
-No convention lifts both Table 1s by more than noise. The > 98% filter leaves the RFS total
-unchanged and lifts the 1999 Table I by 6; the > 95% filter lifts the 1999 side most and costs the
-RFS side most, because the RFS sample adds 1989-2002, where we are too high.
+**What the added stocks are, and the controls.** 715 of the 1,690 mapped permnos ever become a leg
+(489 ADR, 217 SB, 9 CE; 69% not US-incorporated; 350 NYSE, 301 Nasdaq, 64 AMEX; 177 REIT issuers),
+88.5 a cohort. They hold 0.39 of the 5 top-5 slots, 1.41 of the 20 top-20 slots and 7.3 of the 20
+101-120 slots (1.72 with an added leg, 5.60 NS pairs moved in by rank shifts), the last being where a
+third of the window's membership changes. Across 2,370 cohort-variant comparisons there are **0** new
+pairs with two NS legs and **0** NS legs lost, so every changed pair traces to an added security; the
+`s7sb` cache leaves 65 cohorts untouched and all 65 reproduce the shipped `monthly.parquet` exactly,
+so the wide caches are the same engine on a wider panel.
 
-- *Capital conventions do not explain post-1988.* Top-5 1989-2002 mean is 0.43-0.44 under the
-  volume-weighted and the count-based fully invested series alike (paper 0.217).
-- *Footnote 4 calibration.* The paper reports that treating a delisted long as -100% lowers the
-  top-20 no-wait fully invested mean from 1.436% to 1.32% and raises the std from 1.69% to 1.9%.
-  On our data the same assumption moves it from 1.333% to 1.169% (std 1.74% to 2.07%): about 1.4x
-  the mean effect and 1.6x the std effect. Our long legs carry more delisting exposure than the
-  paper's, or milder actual delisting returns; 140 of 20,774 top-20 trades close on a delisting.
-  The extreme assumption itself scores 129.5 (Table 1: 18 of 88 within 10%), so the paper's own
-  figure is not our data's. *Superseded by section 55*, which re-measures it on the current
-  accounting with the `--long-delisting-loss` flag: 1.387% to 1.274%, the paper's size.
+**The verdict: neither.** S7 is a reading the paper's words allow (p. 803's screens name a no-trade
+screen and no share type -- the same sentence section 81 quotes at the working paper's p. 802) and its
+numbers do not corroborate: the counts are mixed, the stock count and the second edition both move the
+wrong way, and the score gain sits on the bands. Nothing here prevents the coordinator adopting S7 for
+faithfulness; it cannot be adopted as supported.
 
-- *Missing delisting returns do not explain post-1988.* The CIZ delisting table (local,
-  `delisting.parquet`, 29,727 rows) has no return for 62% of for-cause (GDR) delistings before 1989
-  and 19% after; the panel build zero-fills them, i.e. "the last available price" the paper names.
-  Filling them with -30% (Shumway) instead gives RFS 163.0, 1999 Table I 33.5, Table 8 8.0/16, and
-  post-1988 top-5 stays at 0.44% (paper 0.217%); a -100% fill gives 150.0 / 30.0 / 6.5. Only 140 of
-  20,774 top-20 no-wait trades close on a delisting, so the paper's footnote-4 sensitivity
-  (every delisted long at -100%, including mergers) is driven by the merged names, not by the
-  missing returns.
+Everything above: `claims/S7_SUPPORT.md`; run artefacts in `.review/r7/D/report`
+(`counts_windows.csv`, `table2a.csv`, `edition1999.json`, `added.csv`, `slots.csv`, `checks.csv`,
+`margins.md`, `changes_*.csv`) and the six checks in `.review/wt/r7-D/.private/s7d2/<variant>/`.
 
-### Time-profile checks against Tables 5, 8 and Figures 2-3 (2026-10-20)
+## 87. S7 as one consistent universe, re-measured: 411.0 -> 411.0 (investigation)
 
-Diagnostics for the Table 1 gap, not extra targets. All use the shipped (vw_base) one-day-wait fully
-invested series.
+Section 81 proposed S7 (the formation universe with no share-type filter) at 417.5 of 865, +6.5 on
+the shipped score. The proposal does not survive being made consistent. Its map was never pinned
+(section 81 says 1690 permnos, but the flag it says produced that number resolves to a 1677-permno
+file), its four side caches were the shipped `NS` ones, and R6-A's scores were made on today's
+factor files, not the 2005 archives the check ships with. Rebuilt as one universe applied to all
+five caches, S7 scores **411.0 of 865, exactly the shipped score**, with **139 of the 865 marks
+moving for a net of zero**. Nothing is adopted; the shipped score stays 411.0.
 
-- *Table 5 (monthly, one-day wait).* Our 1% quantile and minimum match for the top 5 (−4.28% vs
-  −4.32%; min −15.2% vs −12.6%) and the minimum for the top 20 (−8.13% in April 1974 vs −8.22%;
-  Figure 2 draws the paper's minimum in 1974 too). The top-20 1% (−2.97% vs −1.94%) and the "all"
-  tail do not: "all" minimum −12.3% vs −2.95%, 1% −2.84% vs −1.99%.
-- *Serial correlation and co-movement.* Top 20 serial correlation 0.28 (paper 0.24); 101-120 0.05
-  (0.19); "all" 0.07 (0.12). Correlation of the top-20 and 101-120 series: 0.35 full sample, 0.41
-  pre-1989, 0.06 post-1988 (paper 0.48 / 0.51 / 0.18). Post-1988 the paper's looser portfolios still
-  share a common component and ours do not.
-- *Where "all" loses (Table 1 shape rows).* Skew 1.28 vs 3.42, kurtosis 16.1 vs 25.3, min −12.6% vs
-  −2.7%, std 1.99% vs 1.67% (no wait). Every row is the dot-com window: December 1999 −5.8%,
-  February 2000 −12.3%, September 2000 −4.3%, March 2000 +11.1%, January 2001 +12.5%.
-- *February 2000 is the data, not a bug.* Cohort 1999-09 closes 5,420 trades that month; the 2,532
-  that run to the end of the window average −65% of a $1 pair (mean +29% for the 2,638 that
-  converged). 97% of the loss is on Nasdaq short legs (SIC 73, 28, 36, 35, 38), ranks 1,000-3,300
-  (loosely matched pairs). The worst short is permno 79006: +135% on 16 Feb 2000 alone, +12.5x
-  over the window. Booking payoffs on the close date (realized, committed x 1.8) still gives
-  February 2000 −7.7% (min −7.7%, max +8.0%), so the mark-to-market convention is not the cause.
-- *Figure 3 (digitized, ±0.15 pp/month).* Cumulative top-20 fully invested: paper 24.1 at 1989, 40.0
-  at 2002; ours 23.8 and 45.3. The totals agree, the years do not: 1989-93 paper 0.25 vs ours
-  0.63 %/month, 1994-98 0.42 vs 0.26. Pre-1989 the yearly profile differs by 0.75 rmse (1980 and
-  1982: ours 0.9 and −1.2 vs 2.1 and 0.6). The >95% stale-quote variant cuts that rmse to 0.60 and
-  lifts the profile correlation 0.54 → 0.71; nothing we tried moves post-1988 (0.31-0.37, near the
-  digitization noise). So the stale-quote question is a pre-1989 matter and the post-1988 gap is in
-  the looser portfolios (top 5, 101-120, "all"), which no figure shows.
-- *Figure 2.* The paper's maximum (about +13.5%, about nine months after the April 1974 minimum,
-  i.e. January 1975) is +5.0% in our top-20 series (our maximum 7.6%, January 1974). This is the
-  Table 1 top-20 "max" cell (paper 13.3% no wait; ours 9.8%).
+**What the paper says.** Section 2.1, printed p. 803 of the RFS text layer
+(`.review/paper_rfs.txt`): "In each pairs formation period, we screen out all stocks from the CRSP
+daily files that have one or more days with no trade. This serves to identify relatively liquid
+stocks as well as to facilitate pairs formation." That is the whole screen; no share-type
+restriction appears anywhere in the article. Our `sharetype='NS'` is our convention (METHOD.md's
+universe row), with an independent, non-fitted basis: `report/data_review/A_FINDINGS.md` records
+that `EQTY`/`COM`/`NS` is the legacy SHRCD 10/11 equivalence the paper's "common stocks" reads as,
+and that `AD` is the SHRCD-30xx analogue the shipped filter drops. Section 81 and
+`FULLSET_RESCORE.md` section 4 cited p. 802 for this sentence; in the RFS text layer it is p. 803
+(the p. 802 footer closes the page before it). Sections 77 and 81 are left as written; this
+section supersedes their map description and their score.
 
-### Same-issuer pairs plus stale quotes: the first joint gain (2026-10-20)
+**What the raw files carry.** Every `securitytype`/`securitysubtype`/`sharetype` triple in the raw
+WRDS daily extract on the exchanges the panel keeps (N, A, Q), permnos and daily rows:
 
-Aligning the small portfolios first (top 5, top 20, 101-120) turned up one structural cause. 21% of
-the top-5 pair slots are two share classes of one issuer (same PERMCO): 0% in the 1960s, 13% in the
-1970s, 43% in the 1990s and 80% in 2000-02 (Berkshire A/B, Paramount, Raytheon, Comcast), with
-spreads of 0.005-0.011 against 0.018 for other pairs. Together with the near-frozen Nasdaq quotes
-this explains the too-tight top pairs. Neither does it alone.
-
-| run (all unshipped) | RFS score | 1999 Table I + II | top-5 trigger (paper 0.0476) | top-5 utilities (0.72) | top-5 / top-20 mean post-1988 (0.217 / 0.375) |
-|---|---|---|---|---|---|
-| baseline (pre-#13 shipped) | 164.0 | 33.5 + 22.5 | 0.033 | 0.587 | 0.443 / 0.412 |
-| no same-PERMCO pairs | 163.0 | 29.5 + 23.5 | 0.037 | 0.690 | 0.299 / 0.429 |
-| stale > 95% | 158.5 | 46.5 + 22.5 | n/a | n/a | n/a |
-| **both** | **169.0** | **46.5 + 23.5** | **0.039** | **0.777** | **0.299 / 0.429** |
-
-Both together: pre-1989 mean / std (Table 8: paper) top 5 1.01 / 2.31 (1.03 / 2.26), top 20 1.26 /
-1.64 (1.18 / 1.69), 101-120 0.94 / 1.52 (1.05 / 1.53), all 1.00 / 1.53 (0.99 / 1.65); post-1988 top 20
-0.43 / 0.99 (0.375 / 0.987). Table 5 top-20 quantiles (ours / paper): 1% −2.35 / −1.94, 5% −0.99 /
-−1.00, 10% −0.58 / −0.58, 25% +0.01 / +0.05, P(<0) 0.25 / 0.23, serial 0.25 / 0.24. Table 2 Panel B top
-5 / top 20: size decile 2.65 / 2.74 (2.54 / 2.71), top-3 weight 0.77 / 0.74 (0.78 / 0.74). RFS cells
-✓/~/✗: Table 1 50/16/22, Table 2A 14/9/1, Table 2B 27/2/11, Table 3 41/47/51.
-
-Still off: 101-120 post-1988 (0.59 / 1.37 vs 0.327 / 1.12), "all" post-1988 (0.40 / 2.33 vs 0.212 /
-1.30), top-5 post-1988 std (1.45 vs 1.66), the Table 2 trigger (top 5 0.039 vs 0.048, top 20 0.045
-vs 0.053). The 1989-2002 101-120 pairs are ordinary loose pairs (1% related names, 32% utilities).
-
-Not shipped: neither rule is in the paper (the 1999 draft and the RFS both say only that stocks
-with a no-trade day are screened out), so both stay sensitivities until the paper's words support
-them. Diff: scratchpad `exp/nsf_s95.diff` (env `NOSAMEFIRM=1 STALE_MAX=0.95`).
-
-### Table 2 trigger, Table 7 long/short books and 101-120 (2026-10-20)
-
-Follow-up to the same-issuer + stale-quote run (unshipped; env `NOSAMEFIRM=1 STALE_MAX=0.95`).
-
-- **Table 7 (long and short book mean monthly return, one-day wait, full sample).** Value-weighted
-  books from the engine's per-leg payoffs (diff `exp/nsf_ls_books.diff`). Long / short, in %:
-
-  | run | top 5 | top 20 | 101-120 | all |
-  |---|---|---|---|---|
-  | paper | 1.245 / 0.501 | 1.330 / 0.435 | 1.458 / 0.663 | 1.623 / 0.908 |
-  | baseline | 1.140 / 0.435 | 1.293 / 0.465 | 1.467 / 0.667 | 1.500 / 0.702 |
-  | no same-PERMCO | 1.166 / 0.543 | 1.290 / 0.473 | 1.462 / 0.684 | 1.501 / 0.702 |
-  | stale > 95% | 1.272 / 0.380 | 1.360 / 0.387 | 1.468 / 0.643 | 1.503 / 0.701 |
-  | both | 1.265 / 0.476 | 1.363 / 0.388 | 1.479 / 0.654 | 1.504 / 0.700 |
-
-  The top-5 books are closest with both rules (long +1.6%, short −5%; baseline −8%, −13%). 101-120
-  matches under every variant (the level there is right). "All" is low in both books under every
-  variant (long −7%, short −23%): the paper's all-pairs stocks earn more raw return, and no
-  convention we tested changes that.
-- **101-120 post-1988 is a timing split, not a level error.** Full-sample 101-120 fully invested is
-  0.825% (paper 0.795%), but ours is 0.947% pre-1989 (paper 1.052%) and 0.603% post-1988 (0.327%).
-  Our series declines less across 1989 than the paper's in every portfolio (post/pre ratio top 5 0.32
-  vs 0.21, top 20 0.35 vs 0.32, 101-120 0.64 vs 0.31, all 0.40 vs 0.21). The post-1988 pairs
-  are ordinary loose pairs (1% related names, 32% utilities).
-- **Table 2 trigger (not resolved).** Formation 2σ with both rules: 0.039 / 0.045 / 0.069 / 0.166
-  (paper 0.0476 / 0.0528 / 0.0756 / 0.1689); the paper/ours ratio falls with looseness
-  (1.21 / 1.18 / 1.10 / 1.02). Tried and rejected: RMS about zero (0.041 / 0.047 / 0.072 / 0.173),
-  trading-period std (2x too high), 18-month RMS (2x), median. The realized deviation at the signal
-  (0.049 / 0.054 / 0.083 / 0.200) fits top 5 and top 20 but overshoots "all" by 18%, and the table
-  note defines the row as the cross-sectional average of two standard deviations of the pair-price
-  difference. The 1999 draft's Table II (0.0399 / 0.0449 / 0.0683 / 0.1518) fits our 2σ, so the two
-  editions disagree on this row by more than the sample extension explains.
-- **Where the pairs earn.** Mean payoff per pair by exchange mix and size (every third cohort):
-  post-1988 only the Big Board pairs (NN +0.0115) are positive; Nasdaq-Nasdaq −0.0086, mixed −0.006;
-  pairs ranked > 1,600 lose −0.0176 after 1988. No attribute isolates the 101-120 excess.
-
-## 18. Same-issuer and near-frozen-quote exclusions are now on by default (2026-10-20)
-
-`03_replicate.py` now runs with `--same-issuer exclude` and `--max-stale-share 0.95`; the stack
-before it (#14 ledger, #15 options) shipped them off. The shipped check moves 165.0 -> 169.5.
-
-| RFS cells ✓/~/✗ | before (165.0) | now (169.5) |
+| type triple | all years (1961-2026) | 1962-2002 |
 |---|---|---|
-| Table 1 (88) | 48/17/23 | 50/16/22 |
-| Table 2 Panel A (24) | 13/8/3 | 14/9/1 |
-| Table 2 Panel B (40) | 24/7/9 | 27/3/10 |
-| Table 3 (139) | 45/38/56 | 41/47/51 |
-
-The 20-cohort smoke sample moves 87.5 -> 91.0, and Figure 1 is unchanged (pair rank 4, trades
-within 3 days). The 1999 draft's Tables I-II, which this change was not tuned on, move from
-33.5 + 22.5 to 46.5 + 23.5.
-
-**What is and is not in the paper.** Section 2.1 says only that stocks "that have one or more
-days with no trade" are screened out. A stock whose quote is frozen (no volume field, price
-unchanged) and a second share class of the same company are not mentioned. Both rules are our
-reading, and the check's header says so. They are shipped because they are the only change that
-raises both editions together and the improvement shows up in tables the rules were not fitted to:
-
-- *Table 2 composition (top 5 / top 20, ours vs paper):* utilities 0.78 / 0.77 (0.72 / 0.71),
-  average size decile 2.65 / 2.74 (2.54 / 2.71), top-3 deciles 0.77 / 0.74 (0.78 / 0.74).
-- *Table 5 (top 20, one-day wait):* 5% −0.99% (−1.00%), 10% −0.58% (−0.58%), serial correlation 0.25
-  (0.24).
-- *Table 7 (long / short books, top 5):* 1.265 / 0.476 (1.245 / 0.501), baseline 1.140 / 0.435.
-- *Table 8, pre-1989 (mean / std):* top 5 1.01 / 2.31 (1.03 / 2.26), top 20 1.26 / 1.64 (1.18 /
-  1.69), 101-120 0.94 / 1.52 (1.05 / 1.53), all 1.00 / 1.53 (0.99 / 1.65).
-
-Neither rule helps alone (pre-#13 baseline 164.0): same-issuer only 163.0, stale only 158.5. The
-rules are why section 17's "not adopted" rows lose points one at a time and win together.
-
-**Switching them off.** `--same-issuer allow --max-stale-share none` reproduces the 165.0 check.
-
-**Still open** (none of it changes with these rules):
-
-- Table 1 "all" tails: skew 1.28 vs 3.42, kurtosis 16 vs 25, min −12.6% vs −2.7%, all from December
-  1999 to January 2001 (section 17).
-- 101-120 and "all" after 1988 (0.59% / 0.40% vs 0.327% / 0.212%): the level is right over the whole
-  sample (Table 7), the split between 1963-88 and 1989-2002 is not.
-- Table 2 trigger: 0.039 / 0.045 / 0.069 / 0.166 vs 0.0476 / 0.0528 / 0.0756 / 0.1689. The 1999
-  draft's trigger (0.0399 / 0.0449 / 0.0683 / 0.1518) fits our 2σ, so the editions disagree.
-- Table 3: ✓ falls 45 -> 41 while ~ rises 38 -> 47; the Table 3 total is about even.
-
-## 19. Daily panel, post-1988 "all" and a re-read of both editions (2026-10-20)
-
-No code or shipped number changes. Experiments ran on the shipped configuration (same-issuer
-exclusion, stale limit 0.95), wait 1, all 474 cohorts, 16 workers; scratch scripts are not in the repo.
-
-### 19.1 Details re-read from both editions
-
-- **Universe size.** The Table 1 caption gives 2,057 pairs in the all-pair portfolio (1,870 in the
-  1999 draft) and Table 3 gives 156 / 61 / 371 / 1,729 stocks (2,317). Ours: 2,009 pairs (-2.3%) and
-  2,292 stocks (-1%). Over the 408 cohorts of the 1999 draft ours is 1,788 against 1,870 (-4.4%);
-  over the 66 later cohorts ours is 3,377 against 3,213 implied by 2,057 x 474 - 1,870 x 408 (+5.1%,
-  assuming the 1999 count averages those 408 cohorts). Strict no-trade screens give 1,562-1,605
-  pairs (-22% to -24%) and stale limits 0.75 / 0.50 give 1,885 / 1,734 (-8% / -16%), so the paper
-  keeps the pre-1983 Nasdaq quote-only stocks. Opened / formed pairs is 94.5% in both (1,944 / 2,057
-  against ours 1,899 / 2,009).
-- **Fully invested against committed.** The RFS text divides by "pairs that open", which gives a
-  ratio of 1.03-1.06 (5 / 4.81, 20 / 19.30, 20 / 19.41, 2,057 / 1,944), but the RFS means imply
-  1.58-1.81. The 1999 draft is literal (employed 6.01% against committed 5.98%; 4.23% against
-  4.10%). Our open-pair-days reading gives 1.53-1.83 for the RFS.
-- **Table 7 rows are leg returns.** Long 1.245% minus short 0.501% is 0.744%, Table 1's top-5 wait-1
-  mean (0.745%); for "all" 1.623% - 0.908% = 0.715%.
-- **Figure 1.** The paper's pair is "pair 5" in the cohort trading from August 1963 (the text says
-  1962, but CRSP daily starts in July 1962). Ours ranks Kennecott-Uniroyal 4th (ranks 1-3: Exxon-
-  Texaco, Allegheny-Avista, AT&T-Avista), so one pair above it in the paper is below it in ours.
-- **Decile difference.** 0.97-0.98 (RFS) and 1.0 (1999) in every column, with the text saying mixed
-  pairs "differ on average by a single decile"; a mean over integer gaps of mixed pairs cannot be
-  below 1. Ours is 1.12 / 1.22 / 1.61 / 2.15.
-- **Table 1 text.** "The minimum realized return increases with the number of pairs": paper
-  -10.6 / -6.6 / -3.9 / -2.7%; ours -14.9 / -7.9 / -4.0 / -12.6%.
-
-### 19.2 Daily panel against Table 5 Panel B
-
-Ours / paper, fully invested, pairs formed and traded as in the wait-1 rule:
-
-| daily | top 5 | top 20 | 101-120 | all |
-|---|---|---|---|---|
-| mean (%) | 0.038 / 0.033 | 0.047 / 0.040 | 0.040 / 0.035 | 0.038 / 0.027 |
-| std (%) | 0.495 / 0.492 | 0.302 / 0.296 | 0.290 / 0.277 | **0.243 / 0.169** |
-| 1st percentile (%) | -1.18 / -1.24 | -0.64 / -0.65 | -0.65 / -0.65 | **-0.51 / -0.33** |
-| lag-1 serial correlation | -0.10 / -0.12 | -0.06 / -0.06 | 0.05 / 0.00 | 0.35 / 0.35 |
-| share of days below 0 | 0.47 / 0.47 | 0.44 / 0.44 | 0.45 / 0.45 | 0.45 / 0.46 |
-| worst day (%) | -10.01 / -10.08 | -5.94 / -6.72 | -1.89 / -1.99 | **-2.06 / -1.07** |
-
-The three top columns match to within a few percent on every row (our top-5 worst day is
-23 April 1974 at -10.0%). Every capital reading in `portfolio_daily` was tried for "all": its daily
-std ranges from 157 (committed) to 271 (period-average count) against 169, and its worst day from
--1.46% to -3.19%; none fits. The paper's own "all" column looks off against its monthly numbers
-(mean x 26.5 days against about 22.5 for the other three), so Table 8 is the better target for "all".
-
-### 19.3 Post-1988 "all"
-
-Table 8 mean / std, ours (paper), %:
-
-| | top 5 | top 20 | 101-120 | all |
-|---|---|---|---|---|
-| pre-1989 | 1.01 / 2.31 (1.03 / 2.26) | 1.26 / 1.64 (1.18 / 1.69) | 0.93 / 1.52 (1.05 / 1.53) | 1.00 / 1.53 (0.99 / 1.65) |
-| post-1988 | 0.30 / 1.45 (0.22 / 1.66) | 0.43 / 0.99 (0.38 / 0.99) | 0.59 / 1.37 (0.33 / 1.12) | **0.40 / 2.33 (0.21 / 1.29)** |
-
-Pre-1989 matches in every portfolio; post-1988 only "all" (and 101-120 in part) is off. One -12.3%
-month adds 0.90 to the paper's post-1988 "all" variance of 1.68, so the paper's series contains no
-month like February 2000 at our size. Our daily "all" std is 197-217 in 1963-98 and 431 in
-1999-2002 (589 in 2000).
-
-Monthly employed return by rank band, 1999-2002 (54 cohorts):
-
-| rank band | pairs per cohort | mean (%) | std (%) | worst month |
-|---|---|---|---|---|
-| 1-100 | 100 | 0.86 | 1.22 | -1.9% |
-| 101-500 | 400 | 0.87 | 1.56 | -1.9% |
-| 501-1000 | 500 | 0.67 | 2.51 | -6.6% |
-| 1001-2000 | 1,000 | 0.21 | 4.14 | -14.1% |
-| 2001+ | 1,374 | 0.27 | 5.32 | -14.1% |
-
-### 19.4 February 2000, pair level
-
-The six active cohorts lose 16.6 / 14.7 / 15.7 / 14.6 / 12.9 / 4.5% (mean -13.2%); 18 of the 20
-days are negative. By rank band the contribution to the portfolio return is -0.07 (1-100),
--0.25 (101-500), -0.84 (501-1000), -3.94 (1001-2000) and -8.07 (2001+); the short books drag 19.4
-points and the long books add 6.2. It is broad, not a few blowups: the top 10 short stocks are 10%
-of the drag, the top 50 31%, the top 200 68% (3,445 stocks). 18.6 of the 19.4 points sit on Nasdaq
-short legs, led by SIC 28 (5.9), 36 (4.6), 73 (3.4), 38 (1.6), 87 (1.4) and 35 (1.1): genomics,
-electronics and software names that kept running (ARIAD, Oruka, Superconductor Technologies, PDL,
-CuraGen, Myriad, Incyte). The Fama-French factors that month were SMB +21.3%, UMD +18.1%, HML -9.7%,
-market +2.5%. The paper's own Table 4 loadings for "all" (without the reversal term) imply -4.1%
-for February 2000 (-3.0% with the Table 8 post-1988 loadings), and its all-pair minimum, -2.95% in
-Table 1 panel B, is plausibly the same month. Our four-factor loadings for "all" (no reversal
-factor, so only indicative) are UMD -0.31 over the full sample and -0.33 post-1988, against the
-paper's -0.18 and -0.13 with five factors.
-
-### 19.5 Figure 2 and January 1975
-
-Digitizing Figure 2 (Yale ICF working paper, p. 44, top 20, wait 1): we match the tall bars of
-Apr 1974 (-8.9% against -8.3%), Jan 1974 (+7.6 against +7.2), Oct 1974 (+7.5 against +7.5) and
-Nov-Dec 1983. We miss Jan 1975 (+3.6% against +13.5%, the whole of the max gap), Sep-Oct 1998
-(+2.1 / +2.6 against +5.6) and Mar-May 1980 (+4.2 / +4.3 / +2.4 against +6.1). Across about 40
-experiment variants Jan 1975 is 3.6-7.7%. Pair level (cohorts 1974-05..1975-01, 180 top-20 slots
-per variant): 89 slots are pairs with a leg stale on more than half the formation days; they earn
-0.4% in January against 3.6% for the pairs both variants share and 4.4% for the pairs a stale limit
-of 0.50 brings in (distance 0.228 against 0.163). At 0.50 the Aug / Oct / Nov 1974 cohorts earn
-15.2 / 13.5 / 13.5% in January, but the universe shrinks to 1,734 pairs (-16%) and 264 Financials
-(paper 371), so it is not adopted, and the paper's own count means its top 20 was not free of
-those stocks.
-
-### 19.6 Open
-
-The remaining "all" tail cells (Table 1 skew, kurtosis, minimum; Table 3 "all" columns) come down
-to loosely matched pairs (ranks beyond about 500) in 1999-2002, about 2.5-4x too volatile in ours;
-the paper's own loadings imply a milder February 2000. Not resolved: the paper keeps about 3,200
-pairs per late cohort, so the difference is not how many loose pairs trade. January 1975, September
-1998 and March 1980 are separate misses. Nothing here is fitted into the shipped check.
-
-## 20. Telephone utilities are SIC 4811, the 1972 code (2026-10-22)
-
-`sector_of` now counts telephone as SIC 4811 only (`--telephone-sic 4811`, the default); the old
-map took 4810-4819. The shipped check moves 169.5 -> 172.0.
-
-| RFS cells ✓/~/✗ | before (169.5) | now (172.0) |
-|---|---|---|
-| Table 1 (88) | 50/16/22 | 50/16/22 |
-| Table 2 Panel A (24) | 14/9/1 | 14/9/1 |
-| Table 2 Panel B (40) | 27/3/10 | 28/2/10 |
-| Table 3 (139) | 41/47/51 | 43/47/49 |
-
-Only sector labels move, so Table 1, Table 2 Panel A and Figure 1 are unchanged. The 20-cohort smoke
-sample moves 91.0 -> 94.5; the 1999 draft's Tables I-II move from 91.0 to 91.5.
-
-**What is and is not in the paper.** Section 2.1 names the four S&P groups and says each stock is
-assigned "based on the stock's SIC code"; it gives no ranges. The map is our reading, and the
-check's header says so.
-
-**Why 4811.** CRSP's dated SIC follows the 1972 SIC manual before 1987, where telephone
-communication is 4811 (AT&T and the Bell operating companies), and the 1987 manual after it, where
-4812 is radiotelephone and 4813 wireline telephone (the regional Bells and GTE from then on). 4810
-is CRSP's three-digit filler and holds the 1990s Nasdaq telecoms (MCI, WorldCom, Global Crossing,
-Nextel, Qwest, Level 3, Exodus), which an S&P utilities group of the time would not have held. A
-telephone rule written from the 1972 manual has 4811 only. The improvement shows up beyond the
-cells it moves:
-
-- *Table 3 Utilities:* 101-120 standard deviation 3.42% -> 2.64% (paper 2.64%), "all" standard
-  deviation 1.77% -> 1.55% (1.47%), "all" minimum -6.2% -> -4.2% (-3.5%).
-- *Sector count:* 144 Utilities per cohort (paper 156, within 10%; before 161).
-- *1999 draft:* 91.0 -> 91.5, which was not used to choose the map.
-
-**Alternatives** (OPEN_QUESTIONS round six, with the RMS trigger): 4810 + 4811 gives exactly 156
-utilities but a larger Utilities error; 4811 + 4813 and 4811 + 4812 + 4813 score 174.5 and 175.0
-against 176.0 for 4811 alone.
-
-**Switching it off.** `--telephone-sic 481x` reproduces the 169.5 check (verified).
-
-## 21. The trigger's sigma is the spread's root mean square about zero (2026-10-22)
-
-`select_pairs` now sets each pair's sigma to sqrt(SSD / N), the root mean square of the formation
-spread of normalized prices about zero (`--trigger-sigma rms`, the default); it was the standard
-deviation about the spread's mean. The shipped check moves 172.0 -> 176.0.
-
-| RFS cells ✓/~/✗ | before (172.0) | now (176.0) |
-|---|---|---|
-| Table 1 (88) | 50/16/22 | 52/14/22 |
-| Table 2 Panel A (24) | 14/9/1 | 16/7/1 |
-| Table 2 Panel B (40) | 28/2/10 | 28/2/10 |
-| Table 3 (139) | 43/47/49 | 43/51/45 |
-
-Figure 1 is unchanged (pair rank 4, the same five trades; Kennecott-Uniroyal's sigma moves 0.0217
--> 0.0218). The 20-cohort smoke sample falls 94.5 -> 92.5, so its threshold is lowered with it; the
-module note already says the sample can move against the full result.
-
-**What is and is not in the paper.** Section 2.2 opens a pair "when prices diverge by more than two
-historical standard deviations, as estimated during the pairs formation period", and closes it at
-the next crossing. It does not say about which centre the deviation is measured. The rule measures
-divergence from parity (zero spread), and the paper already computes the SSD of the two normalized
-series as its distance, so sqrt(SSD / N) is the standard deviation of the price difference about
-the point the rule trades around. It equals the demeaned standard deviation plus each pair's
-squared mean spread, under the root. This is our reading, and the check's header says so.
-
-**Evidence beyond the cells it moves:**
-
-- *1999 draft, Table II A trigger (408 cohorts of its window):* top 5 0.0399 against the draft's
-  0.0399 (demeaned: 0.0383), top 20 0.0453 against 0.0449 (0.0433). The draft was not used to
-  choose the reading.
-- *RFS Table 2 A:* top-5 / top-20 trigger 0.0392 / 0.0446 -> 0.0409 / 0.0467 (paper 0.0476 /
-  0.0528); round trips top 20 2.20 -> 2.10 (1.96); std of round trips 101-120 0.305 -> 0.292 (0.27).
-- *Table 3 Financials 101-120 tails:* kurtosis 7.3 -> 18.5 (18.3), maximum 11.5% -> 19.3% (19.6%),
-  skew 1.07 -> 2.34 (1.98).
-
-**Against.** The 1999 draft's Tables I-II fall 91.5 -> 86.5, all in Table I (46.5 -> 41.5). Every
-lost cell is a mean or median that was already 5-9% below the draft and crosses the 10% line (top-5
-six-month mean 5.59% -> 5.36%, draft 5.98%); no cell moves from within 25% to beyond it. The draft
-can veto a change; this is read as an objection, not a veto, because the same draft's trigger, which
-measures sigma directly, is matched exactly. The RFS trigger stays 12-14% low for the top 5 and top
-20 (OPEN_QUESTIONS Q7). A fitted alternative, sigma squared plus a constant, matches the RFS trigger
-but lowers the 1999 score to 80.0 and is not adopted.
-
-**Switching it off.** `--trigger-sigma std` reproduces the 172.0 check (verified).
-
-## 22. Unknown-SIC fallback order: the security-header SIC first (2026-10-23)
-
-`run_jobs` now fills unknown (0) dated codes from the CRSP security-header SIC before the earliest
-known dated SIC (`fallbacks = (header, earliest_known_sic())`); it was earliest-first. The paper
-names no SIC source for the sector assignment, and the header classification is the stock's own
-primary label where the earliest-ever dated code is a proxy that can postdate the formation window.
-The shipped check moves 176.0 -> 177.5; SCORE_LOG row 10.
-
-| RFS cells ✓/~/✗ | before (176.0) | now (177.5) |
-|---|---|---|
-| Table 1 (88) | 52/14/22 | 52/14/22 |
-| Table 2 Panel A (24) | 16/7/1 | 16/7/1 |
-| Table 2 Panel B (40) | 28/2/10 | 28/2/10 |
-| Table 3 (139) | 43/51/45 | 47/47/46 |
-
-The Table 3 movers, cell by cell: Financials t_stat[1] and share_negative[4], Industrials
-min[2] and Transportation share_negative[1], Utilities t_stat[1] gain ✓; Utilities median[4]
-loses ✓; Industrials skew[2] and Utilities skew[3] fall ~ -> ✗. The top-pair sector-mix cells
-(Q5) do not move. The 20-cohort smoke sample and Figure 1 are unchanged; the 1999 draft edition
-stays 86.5. The improvement loop found and pre-measured the variant (its "V2" experiment); the
-cohort cache was rebuilt with the new convention (474/474).
-
-## 23. Table 2 Panel A over completed trading windows (2026-10-23)
-
-The last five cohorts (formed 2002-08..2002-12) are force-closed at the sample end after 1-5
-months, so their per-pair total time open is censored downward and the across-cohort dispersion
-rows are inflated. `trading_stats_from_components` now drops cohorts whose six-month window was
-cut by the sample end (`_window_censored`: a calendar that spans fewer than six months and runs
-from the first trading day of its first month to the last of its last month was cut; stored
-per-cohort flags, or cache-derived flags matched to the aggregated cohort labels by identity).
-The shipped check moves 177.5 -> 178.5; SCORE_LOG row 11.
-
-| row (paper) | all 474 | complete-only 469 |
-|---|---|---|
-| std time open, top5 (0.80) | 0.736 ✓ | 0.707 ~ |
-| std time open, top20 (0.45) | 0.508 ~ | 0.461 ✓ |
-| std time open, 101-120 (0.38) | 0.444 ~ | 0.368 ✓ |
-| std time open, all (0.17) | 0.309 ✗ | 0.199 ~ |
-
-Every other Panel A cell keeps its mark (checked cell by cell). The paper's caption ("474 months")
-describes the sample, not the trading-window cohort count; the paper's own std of time open (0.17)
-matches the completed-window reading better than the all-474 one, which is the reading's defense.
-This closes Q1's Table 2 Panel A cell; the same sensitivity was recorded at the 169.5-era score in
-cross-checks, round two. The 20-cohort smoke sample, Figure 1 and the 1999 draft edition (86.5)
-are unchanged.
-
-Two discriminating tests, run after a reward-hacking challenge to this change:
-
-1. **Placebo (RFS, wait 1):** dropping five *mid-sample completed* cohorts while keeping the
-   censored five leaves the dispersion at the all-474 values (0.737 / 0.510 / 0.442 / 0.308
-   against 0.736 / 0.508 / 0.444 / 0.309). The move toward the paper is carried specifically by
-   the censored windows, not by "dropping five of anything".
-2. **1999 draft edition (independent paper values, sample 1963-07..1997-06, wait 0):** every
-   draft cohort completes inside our cache, and the draft's published std of months open
-   (0.70 / 0.50 / 0.40 / 0.20) matches the completed-window computation to 2-6%
-   (0.713 / 0.472 / 0.369 / 0.205); dropping the draft's own trailing five does nothing
-   (0.715 / 0.472 / 0.370 / 0.206). So in the edition where nothing is censored, the paper's
-   numbers are the completed-window numbers — the filter corrects censoring, it is not a
-   trailing-count knob.
-
-## 24. We classify 495x (waste management) as Industrials (2026-10-24)
-
-We now assign sanitary services and waste management, SIC 4950-4959, to
-Industrials rather than Utilities. This is a **classification choice, not a
-recovered fact**: GICS - the post-1999 S&P/MSCI scheme - puts waste management in
-Industrials, while S&P's contemporaneous pre-1999 scheme, which is what the 2006
-paper describes, is **not verified**, and the 1999 NBER draft is neutral on it
-(see the second-edition check below). What justifies shipping it is the
-measurement: **178.5 -> 183.5** (+5.0), with six of the eight gains inside the
-Utilities 101-120 band.
-
-Eight cells improve and three regress, and the gains are coherent: every one is in
-the Utilities 101-120 column, which sits at the far end of a ~120-pair pool and is
-therefore the most membership-sensitive band in Table 3.
-
-| Utilities 101-120 | before | after | paper |
-|---|---|---|---|
-| mean | 0.77% | 0.95% | 0.93% |
-| t-statistic | 3.90 | 5.76 | 6.11 |
-| kurtosis | 9.65 | 5.97 | 5.52 |
-| minimum | -12.64% | -7.80% | -7.87% |
-| maximum | 18.48% | 12.61% | 12.13% |
-| skewness | 0.31 | 0.52 | 0.66 |
-
-Plus the Utilities all-pair minimum (-4.47% -> -3.80% against -3.52%) and the
-Industrials 101-120 minimum. Regressions: the Utilities stock count (144 -> 137
-against the paper's 156) drops from ✓ to ~, and the Utilities 101-120 median and
-standard deviation each lose half a cell.
-
-The change does **not** touch Q5: the top-pair sector mix is unchanged
-(weight_utilities 0.774 in both states, weight_industrials 0.0745), because the
-waste-management stocks never reached the top-five pairs. It works on the far end
-of the sector ranking, not on the tight bands.
-
-**Second edition check (veto test).** `EDITION_1999.md` makes the 1999 NBER draft
-a second opinion that may veto a change. `scripts/edition_1999.py --cohorts
-<cache>` scores **86.5 of 136 before and after** (Table I 41.5, Table II A 23.5,
-Table II B 21.5 in both) - identical to row 9 of `EDITION_1999.md`. The draft does
-not veto, because it has no by-sector table beyond the Table II B weights and
-those barely move (weight_utilities 0.774 in both states). It also cannot
-corroborate the classification. The case therefore rests on the RFS Table 3 cells
-above and on GICS, with S&P's contemporaneous scheme left unresolved.
-
-Neighbouring classification decisions were measured in the same session and all
-lose, so this is a single supported change rather than a general "shrink the
-sector pool" rule:
-
-| probe | score |
+| EQTY / COM / NS | 30,036 permnos, 80,834,069 rows | 22,449 permnos, 52,098,131 rows |
+| EQTY / COM / AD | 1,378, 3,668,195 | 775, 1,471,213 |
+| EQTY / COM / UG | 394, 1,015,774 | 202, 403,429 |
+| EQTY / COM / SB | 299, 865,930 | 268, 629,151 |
+| EQTY / COM / CE | 13, 38,176 | 13, 29,947 |
+
+Six other triples lie outside the `EQTY`/`COM` pair (FUND/CEF with `NS`, `SB`, `UG` or `CE`;
+FUND/ETF `NS`; DERV/ATR `NS`) and stay out, as they do under the shipped filter. Inside `EQTY`/`COM` there are therefore **five**
+share types, not the three R6-A's `--classes SB,AD,CE` took: `UG` (units) was missed.
+"No share-type filter" is defined here as every type the files carry under the existing
+`securitytype`/`securitysubtype`/exchange filters with no selection among them, which is
+`SB` + `AD` + `UG` + `CE` = **2,079 permnos** (1,256 of them have 1962-2002 rows; 1,254 of
+the 1,256 carry a non-`NS` type inside the sample, the other two being mapped by a post-2002
+type).
+
+**The map, pinned.** `share_class_map.py --classes all` writes the union, and one command
+regenerates it byte for byte. The map this section scores:
+
+| item | value |
 |---|---|
-| pipelines 4922-4924 out of Utilities | 168.5 |
-| real estate 65xx out of Financials | 176.0 |
-| holding/investment offices 67xx out of Financials | 165.0 |
-| brokers 62xx out of Financials | 179.5 |
-| local transit 41xx out of Transportation | 182.0 |
-| transportation services 47xx out of Transportation | 183.0 |
-| pipelines 46xx out of Transportation | tie with the shipped configuration |
-| all of 48xx added to Utilities alongside 495x out | 174.5 |
-| 481x telephone with 495x out (restores the count to 155) | 177.5 |
-| no SIC fallback: unknown codes stay Industrials | 177.5 |
-| wait-1 delays the opening only (Panel B caption read literally) | 160.5 |
-| trigger sigma from spread innovations scaled to the level | 57.0 |
+| file | `.review/r7/A/maps/shareclass_all.parquet` (scratch; not committed) |
+| sha256 | `5433e8b4be8dbe30bd5d2253953aafeed24fcec4402914101959613defb0b0a7` (stamp `5433e8b4be8d`) |
+| permnos | 2,079 = AD 1,378 + SB 299 + UG 394 + CE 13 less the overlaps (SB&UG 4, CE&UG 1) |
+| equals the union of the raw files' non-`NS` `EQTY`/`COM` permnos | yes, 0 permnos either way (an independent scan, `verify_enum.py`) |
+| in-sample coverage | 1,256 permnos with 1962-2002 rows; those rows add 2,535,904 daily rows beyond the `NS` filter |
 
-Those twelve were measured on this session's working copy, a snapshot taken
-before #22 and #23 landed, so treat the numbers as directional rather than as
-deltas against this base. Two of them are worth keeping for other questions: the
-entry-only delay collapses Table 1 Panel B from 30.5 to 21.5 points, which is
-independent confirmation of the 2026-10-16 fix in section 3; and the
-innovation-scaled trigger produces 22% triggers, closing Q7's remaining
-alternative.
+**What the permno map adds beyond the row-level definition, measured.** The map is per permno, so
+a mapped permno is admitted on every day the day rule passes, whatever its type that day. Of the
+2,535,904 in-sample rows the map adds, **2,164 rows (1 permno) are outside the row-level definition**
+- `EQTY`/`COM` with `NS`, `SB`, `AD`, `UG` or `CE`. The permno is 56979, and its history is a
+reclassification rather than a stray fund: `EQTY`/`COM`/`NS` 1973 to mid-1986, `EQTY`/`COM`/`SB`
+mid-1986 to mid-1994, `FUND`/`CEF`/`SB` mid-1994 to 2006. The leak rows are its 1994-2002
+certificate-fund days, and the permno is a leg in the selected pairs of 150 of the 474 cohorts.
+The per-permno map keeps it on its fund-typed days; a row-level rule would not. That convention
+is not a rounding detail: a 474-cohort rebuild under the same map with that one permno removed
+(stamp `865f64a48233`) scores **406.0** against 412.0 for the same set with it, 18 marks
+flipping (8 check-to-tilde, 7 tilde-to-cross, 2 cross-to-tilde, 1 tilde-to-check). One security
+out of 2,079 is worth 6.0 points - more than every share class in the debate is worth combined.
 
-`--waste-sic utilities` restores the old map as a flag; section 55 re-measures it on the
-current code (261.0 -> 259.0, the same Utilities 101-120 cells in reverse).
+**Why R6-A's two S7 directories disagree (414.5 vs 417.5).** `--share-classes wide` without
+`--share-classes-file` resolves to `<repo>/data/raw/shareclass_sb_ad.parquet`: that file holds
+**1,677** permnos (SB 299 + AD 1,378, no `CE`, no `UG`), sha256 `178de40c806b`. R6-A's `s7` (414.5)
+is that default; `s7all` (417.5) passed `--share-classes-file /tmp/allcls.parquet`, which holds
+1,690 (SB + AD + CE) and is stamped `share_classes_map: 2749b4168e8a`. The 3.0-point gap is
+therefore the **13 `CE` permnos**, not a map that changed between runs - and it is 4.0 points, not
+3.0, when both caches are re-aggregated on the 2005 archives (411.0 -> 415.0), which is the third
+reason the pair cannot be compared with 411.0. That two runs of the same flag differ by 3-4 points
+across 13 of 2,079 permnos is the fragility signal itself: on the 2005 vintage those 13 permnos
+move 16 marks (8 tilde-to-check, 4 cross-to-tilde, 2 check-to-tilde, 2 tilde-to-cross), taking
+Table 3 Financials +1.5, Transportation +1.0, Table 4 +1.0, Table 2 B +0.5, against Table 8 0.0,
+Table 5 A 0.0 and Table 3 Industrials 0.0. The `s7` and `s7sb` stamps name the flag but not the map
+because they were written at 13:31 and 13:43, before the driver in R6-A's worktree wrote
+`share_classes_map`; the 13:50 and 13:57 stamps carry it. `s7ad` is `/tmp/ad_only.parquet`
+(1,378, `9275cc56eb96`) and `s7sb` is `/tmp/sb_only.parquet` (299, `8dd63b32da98`).
 
-## 25. Payoff-count returns measured and rejected (2026-10-24)
+**The consistent build.** Five caches, all stamped `share_classes_map: 5433e8b4be8d`, all in
+`.review/r7/A/`: `wide_main` (474 cohorts, `--force`, 67 s at 6 workers), `wide_top3` (Table 9 A
+recipe, `--size-deciles-top 3`, 41 s), `wide_recalls_r1` (Table 9 B, `--reading R1`, 6 shards),
+`wide_t6_book` (Table 6, 200 reps, 623 s), `wide_delist100` (footnote 4 recipe,
+`--long-delisting-loss`, 59 s). Which scripts had to be told about the universe:
 
-The paper's sentence on p. 14 -- fully invested "divides the payoffs by the number
-of pairs", committed "scales the portfolio payoffs by the number of pairs that are
-selected" -- can also be read as pure payoff counts, `Σπ_t / n_t` and `Σπ / N`,
-which `employed_count` and `committed_count` already cache. Measured on top of
-section 24 it scores **184.5 against 183.5 (+1.0)**, nine cells up and nine down.
-Rejected; recorded so it is not re-run.
+- `scripts/03_replicate.py` already carries `--share-classes wide --share-classes-file`, and the
+  map enters the *formation* only (`Job.share_classes_file`), so an aggregate-only re-score reads
+  each cache's own pairs and the flag affects nothing but the stamp.
+- `table9b_recalls.py` needs no pass-through: it takes its permnos from the cohort cache's
+  `pairs.parquet` (line 405), so a wide cache gives a wide recall run. Its 132-row results differ
+  from the shipped cache in 121 rows, so the rebuild is real.
+- `table6_random_pairs.py` had no share-class option: the bootstrap drew its random legs from the
+  shipped `common` pool even over a wide cohort cache, so a true leg of an added class was missing
+  from the draw pool. The pass-through added here is **default off** (`--share-classes-file`,
+  `share_class_permnos`, `formation_universe(..., extra_permnos=...)`); a run without it stamps and
+  draws exactly as before (its `run_params.json` gains `share_classes_map` only when a map is
+  passed), and `tests/test_table6.py` pins both behaviours.
 
-The gains are in the higher moments: Panel A top-5 kurtosis 9.15 -> 7.41 (paper
-7.81), Panel A "all" 15.9 -> 22.9 (25.2), Panel B "all" 15.5 -> 23.5 (25.7),
-Panel B top-5 minimum -15.16% -> -13.13% (-12.63%). The losses are the "all"
-column's level and dispersion: mean 1.04% -> 0.99% (paper 1.10%), standard
-deviation 2.00% -> 2.10% (1.67%), and its 101-120 share of negative months.
+**The scores, all on the 2005 archives.** Aggregate-only over each cache set:
 
-Two reasons it loses, both raised in review of the PR that proposed it:
+| main cache | side caches | score | marks moved vs shipped |
+|---|---|---|---|
+| `NS` (shipped) | `NS` | 411.0 | - |
+| SB+AD, 1,677 (`/tmp/S/s7`) | `NS` | 411.0 | 103 |
+| + CE, 1,690 (`/tmp/S/s7all`) | `NS` | 415.0 | 107 |
+| + UG + CE, 2,079 (this contract) | `NS` | 412.0 | 116 |
+| + UG + CE, 2,079 | **wide** | **411.0** | **139** |
 
-- **The paper's own consistency check.** Its fully-invested/committed ratios are
-  the only internal test it offers. The shipped book reading gives
-  1.68 / 1.71 / 1.60 / 1.88 (no wait) and 1.64 / 1.69 / 1.61 / 1.90 (one-day wait)
-  against the paper's 1.67 / 1.78 / 1.59 / 1.80 and 1.61 / 1.72 / 1.58 / 1.81;
-  the payoff counts give 1.69 / 1.71 / 1.61 / **1.92** and 1.65 / 1.69 / 1.62 /
-  **1.96**. The gap on the "all" column widens from 4.2% and 5.2% to 6.7% and
-  8.3%, and "all" is exactly the column the +1.0 comes from. Section 29 re-measured
-  all sixteen ratios and this paragraph has been corrected to them: it first read
-  1.69 / 1.86 and 1.70 / 1.90 for the shipped set, 3.5% and 5.0% for the shipped gap,
-  and 8.8% for the payoff-count gap, which divided by the no-wait paper value in both
-  panels.
-- **One artifact, one capital definition.** Table 3 keeps the book reading
-  (`TABLE3_CAPITALS`), so adopting counts for Table 1 alone would make the two
-  tables incomparable inside a single check, and the check's own header text
-  (which quotes ratios of 1.58-1.81) would contradict the Table 1 below it.
-  Adopting it would mean moving `INTERFACES.md`, the check header, the score log
-  and the conformance thresholds together, plus a test pinning which capital
-  series Table 1 reports; none of that is worth 1.0 point.
+The fully consistent check, against the shipped score, per block (✓/~/✗):
 
-**Correction to earlier figures.** `INTERFACES.md` and section 17 quote
-1.71 / 1.70 / 1.54 / 1.80 and 1.70 / 1.70 / 1.53 / 1.83. Those were measured at
-the 164.0-era configuration; the current values are the ones above, and
-`INTERFACES.md` now carries them.
+| block | shipped | consistent wide | delta |
+|---|---|---|---|
+| Table 1 | 49/15/24 | 47/16/25 | -1.5 |
+| Table 2 A | 17/7/0 | 18/6/0 | +0.5 |
+| Table 2 B | 28/1/11 | 28/1/11 | 0.0 |
+| Table 3 | 58/44/37 | 59/37/43 | -2.5 |
+| Table 4 | 28/22/54 | 23/23/58 | -4.5 |
+| Table 5 A | 7/6/7 | 9/3/8 | +0.5 |
+| Table 5 B | 26/8/2 | 27/7/2 | +0.5 |
+| Table 6 | 8/10/30 | 9/9/30 | +0.5 |
+| Table 7 | 34/20/82 | 42/11/83 | +3.5 |
+| Table 8 | 27/19/84 | 25/27/78 | +2.0 |
+| Table 9 A | 22/10/12 | 22/12/10 | +1.0 |
+| Table 9 B | 15/12/17 | 12/13/19 | -2.5 |
+| Figure 4 | 0/2/4 | 0/3/3 | +0.5 |
+| Numbers in the text | 3/2/1 | 6/0/0 | +2.0 |
+| **total** | **411.0** | **411.0** | **0.0** |
 
-## 26. Where 183.5 sits: the two editions on one window, and what 200 would need (2026-10-24)
+**The churn.** 139 of 865 marks (16.1%) move: 45 tilde-to-check, 35 check-to-tilde, 23
+tilde-to-cross, 23 cross-to-tilde, 9 check-to-cross, 4 cross-to-check; net 0.0. Read as a chain,
+each step isolates one change (2005 archives throughout):
 
-Third attempt at the remaining 16.5 points, after the searches of rounds five and six in
-`OPEN_QUESTIONS.md`. Nothing is shipped and the score stays at 183.5. The round did three
-things the earlier ones had not: it cut our series at the date the 1999 draft stops and asked
-which statistics the paper then matches; it asked how much of the gap any correction of the
-extreme months could recover; and it checked whether the largest losses are bad prices.
+- the map's SB+AD permnos: 411.0 -> 411.0, 103 marks move (32 tilde-to-check, 27 check-to-tilde,
+  19 cross-to-tilde, 18 tilde-to-cross, 5 check-to-cross, 2 cross-to-check), net 0.0. `SB`+`AD`
+  alone are already a wash, not a no-op: an eighth of the marked set churns.
+- the 13 `CE` permnos: 411.0 -> 415.0, 16 marks, net +4.0, cells listed above.
+- `UG` plus the leak row: 415.0 -> 412.0, 60 marks, net -3.0. Table 3 Utilities -2.0, Table 4 -2.0,
+  Table 1 B -1.5, Table 3 Transportation -1.0, Financials -1.0, Table 8 -0.5, against Industrials
+  +2.0 and the text's numbers +1.0.
+- the four side caches: 412.0 -> 411.0, 23 marks, net -1.0 - Table 9 B -2.5 (the recall run now
+  covers the added permnos), Table 9 A +1.0, Table 6 +0.5. Only those three blocks move, which is
+  what a side-cache-only change should do.
 
-**Verdict up front.** On the pre-1999 window our monthly "all" series matches the published
-paper on mean, median, standard deviation and minimum to within 4.4%, and on the draft's own
-window our six-month distribution matches the draft's maximum to within 3% and its minimum to
-within 8%. Where it does not match is the *right* tail of the monthly series, where the paper's
-largest month is 49% larger than ours; but section 5 shows that plugging the paper's extremes
-into our series does not close the skewness and kurtosis rows either, so no correction of the
-months we know are wrong reaches the paper's shape, and 200 is not reachable by any rule we
-hold. Section 6 says why in the check's own numbers: 48 of the 73 ✗ cells are more than 40% off,
-and none of the 69 ~ cells sits close enough to a line for a small improvement to flip a block.
+**Where section 81's +6.5 went.** Three places, none of them a property of the paper: 3-4 points
+from scoring on today's factor files rather than the 2005 archives (the same caches read 411.0 and
+415.0 here, 414.5 and 417.5 there); about 2 points that a partially wide universe earned and the
+complete one does not (`UG` and its leak row cost 3.0 against the `CE` gain); and 1.0 point that
+came from side caches built on the `NS` universe, which the consistent rebuild removes. The
+complete definition - the one with no free parameter, which section 81 called "the defensible
+choice" - is worth 0.0.
 
-### 1. Cutting the sample where the draft cuts it: four of seven rows match
+**Verdict: S7 is not a gain, and the family is the reason to leave the universe alone.** On one
+vintage the defensible variants span 7.5 points: `SB` alone 407.5, `SB`+`AD` 411.0, `AD` alone
+415.0, `SB`+`AD`+`CE` 415.0, all four types 411.0-412.0. A definitional choice that swings the
+score by 7.5 points across its own options and lands on the baseline when all the options are
+taken cannot be adopted by taking the top of the range; that would be selection by score. The
+printed support also splits: the p. 812 industry counts move toward the paper for Utilities and
+Financials and away for Transportation and Industrials, and the count marks do not move at all;
+the one printed number that moves hard is Table 2 A's pairs per period (1.88e3 on `NS`, 1.95e3
+wide, against the paper's 1.94e3). The honest summary is that a wider universe is *plausible*
+from the paper's silence about share types, and *unmeasurable* as a score gain: the check's 865
+marks cannot tell the two universes apart.
 
-Monthly, fully invested, no wait, "all", on 474 month-ends as the paper reports:
+**To adopt it anyway**, if the user wants the paper's literal screen rather than the score: rebuild
+the shared main cache and the four side caches under the pinned map, set
+`tests/replication_conformance.json` to 411.0 (unchanged - the row would be a rebuild with no score
+move), add a `SCORE_LOG.md` row recording 411.0 of 865 under the wide universe, re-pin
+`scripts/rebuild_manifest.json` and `PINNED_MANIFEST` after the rebuild, and regenerate the check
+and `REPLICATION_CHECK.md`. The commands are in section 6 of `claims/FULLSET_RESCORE.md`. None of
+that is done here.
 
-| row | ours, 1963-07 to 2002-12 | ours, 1963-07 to 1998-12 | RFS Table 1 A | reading at 1998-12 |
+**To reproduce** (from `.review/wt/r7-A`, about four minutes at six workers plus two aggregate-only
+passes):
+
+    Q=$(git rev-parse --show-toplevel)
+    A=$Q/.review/r7/A
+    $Q/.venv/bin/python scripts/experiments/share_class_map.py --classes all --out $A/maps/shareclass_all.parquet
+    sh $A/scripts/stage.sh main; sh $A/scripts/stage.sh t9a; sh $A/scripts/stage.sh delist
+    $Q/.venv/bin/python scripts/claims/table9b_recalls.py run --workers 6 --reading R1 \
+      --cache-root $A/wide_main --out-root $A/wide_recalls_r1
+    $Q/.venv/bin/python scripts/claims/table6_random_pairs.py --mode run --reps 200 \
+      --committed-capital book-share --workers 6 --cache-root $A/wide_main \
+      --out-root $A/wide_t6_book --share-classes-file $A/maps/shareclass_all.parquet
+    sh $A/scripts/stage.sh check-wide; sh $A/scripts/stage.sh check-mixed
+
+The checks are `.private/check_wide` (411.0) and `.private/check_mixed` (412.0); the R6-A
+re-aggregations are `.private/r6_s7` (411.0), `.private/r6_s7all` (415.0), `.private/r6_s7sb`
+(407.5) and `.private/r6_s7ad` (415.0). Mark-by-mark diffs come from
+`.review/r7/A/verify/diff_marks.py`, which reproduces each page's own score line before it diffs.
+
+## 88. The near-miss census and three reading combinations, all measured, none shipped (2026-11-17): 411.0 -> 411.0 (investigation)
+
+Contract R8-A asked two questions the campaign had never put to the whole check: which of the missed
+cells are near their band edges, and whether any *combination* of already-measured readings stacks on
+them. The page is `claims/NEAR_MISS_CENSUS.md`; its section 1 is the census, section 2 the library of
+31 full-check readings, section 3 the pre-registration (written before anything was scored), section 4
+the measurements and section 5 the verdict. Nothing ships; the 411.0 of 865 is unchanged, as are
+`tests/replication_conformance.json`, `SCORE_LOG.md`, the manifest and the shared caches.
+
+**The census.** Excluding the SIC-dependent surface (every Table 3 block and Table 2 Panel B's four
+sector-weight rows: 155 cells), 710 cells worth 320.0 remain, of which 457 are tilde or cross. For
+each, the distance to the band edge it has to cross, in the driver's own units
+(`gap = |ours/paper - 1|`, band at 0.25 and 0.10): 456 measured, **427 ranked**, 29 inside the page's
+own printing precision (listed, never ranked) and 1 scored against a printed zero. The distribution is
+a thin tail on a long body: 5 cells within 0.5 pp of an edge, 4 within 0.5-1 pp, 18 within 1-2 pp, 39
+within 2-5 pp, and **361 beyond 5 pp** - so the whole cheap tail is worth at most about 30 points, and
+the top ten are Table 8's post-1988 dispersion and reversal, Table 5 Panel B's daily minimum,
+Table 6's fully-invested standard deviation, Table 7's long-book SD and the Table 4 momentum
+t-statistic. The clusters (66 cells within 5 pp) sit in Table 8 (19), Table 7's short book (8),
+Table 6 (7), Table 4's Ibbotson block (7), and the dispersion rows of Tables 1, 2 A, 5 A, 5 B and 9.
+
+**The library.** 31 readings already carry a full-check score; five sit above 411.0 and every one of
+them was rejected in an earlier round for a stated reason (the two share-class variants with no
+textual support for the class list, `formstart` on one cell, `last_px` as the paper's robustness
+variant, `selected` by half a point as a tie-break inside the mark bands). The rest lose, most by more
+than five points.
+
+**The combinations.** Three were pre-registered with the ship rule fixed first (beat 411.0, textual
+support for every component, one global reading set, no per-table mixing): C1
+`--cohort-weights positions --panel-a-cohorts all`, C2 `--cohort-weights selected --panel-a-cohorts
+all`, C3 `--cohort-weights positions --capital-base count`. All three are aggregation-time readings, so
+each is one `--aggregate-only` run over the shipped caches at one worker, and all three print the
+2005-archives paragraph and 865 cells:
+
+| id | combination | score | delta | marks moved |
 |---|---|---|---|---|
-| mean | 1.04% | 1.08% | 1.104% | -2.2% |
-| median | 0.73% | 0.76% | 0.728% | +4.4% |
-| standard deviation | 2.00% | 1.62% | 1.670% | -3.0% |
-| skewness | 1.30 | 2.18 | 3.42 | -36% |
-| kurtosis | 15.9 | 11.9 | 25.25 | -53% |
-| minimum | -12.59% | -2.70% | -2.72% | -0.7% |
-| maximum | 14.12% | 11.50% | 17.18% | -33% |
+| C1 | `positions` + `panel-a-cohorts all` | 401.5 | -9.5 | 70 |
+| C2 | `selected` + `panel-a-cohorts all` | 410.0 | -1.0 | 8 |
+| C3 | `positions` + `capital-base count` | 398.5 | -12.5 | 147 |
 
-One month does the damage: February 2000, -12.59%. Without 1999-2002 the same series has a
-minimum of -2.70% against the paper's -2.72% and a standard deviation of 1.62% against 1.67%.
-Our own table says that month is the outlier rather than a rule: the paper's text reports that
-the minimum "increases" as the number of pairs rises, and its four minima are
--10.57 / -6.63 / -3.86 / -2.72% for 5 / 20 / 101-120 / all pairs. Ours are
--14.82 / -7.89 / -3.92 / **-12.59**: the first three behave, the "all" column does not, and one
-month is the whole difference.
+The pre-registered prediction (all three lose, C2 by least) held exactly. Two things the prediction did
+not size: **C3's damage is one block** - 10.0 of its 12.5 points are Table 4, because the payoff-count
+base rescales the fully-invested series every regression in that block is fitted to - and **the
+near-miss clusters are not where the combinations bite**: C1 and C3 both move Table 8 the right way
+(+0.5, +1.0) and lose far more in Table 4 and the sector blocks, which are not near-miss territory. The
+combination that comes closest to the baseline, C2, cancels itself: `selected` buys back its half point
+in Table 2 Panel A precisely when Panel A is read over every cohort, which is what the other half of
+the pair does.
 
-The same cut on the other portfolios (no wait): top20 mean 1.45% -> 1.54% (paper 1.436%),
-sd 1.74% -> 1.76% (1.688%), min -7.89% (paper -6.63%), max 10.51% (13.30%);
-101-120 mean 1.01% -> 0.99% (1.081%), sd 1.59% -> 1.54% (1.540%), min -3.92% -> -3.54%
-(-3.857%). Their means and spreads match on either window; their maxima are 21% and 21% low
-on both.
+**What this closes.** The "combinations were never scored" question is now answered negatively on the
+whole paper: no admissible pairing of readings in the library beats the baseline, because their
+signatures overlap where the check is weakest (Table 4 and Table 8, both dominated by the factor frame)
+and the near-miss tail is a property of the paper's estimates, not of the levers. The next real move is
+the one REVIEW_NOTES 61 and 73 name - a factor frame that reproduces the paper's implied reversal
+factor in both subperiods - or a book definition that fixes Tables 5 and 7's tails without breaking
+Tables 1 and 4, and the second is the interaction C3 measured at -12.5 points.
 
-### 2. On the draft's window the two extremes match, the level and spread do not
+**One operational trap, recorded.** A fresh worktree ships `data/raw/french` and `data/raw/goyal_welch`
+as LFS pointers. The driver treats that as "factor files unavailable", prints a warning, and still
+writes a check - a **544-cell** one that scores 331.5, with Table 4 down to 4 marks, Table 8 to 16 and
+Table 7's regression block gone. It is not an error exit, and a script that only reads the score line
+will believe it. Every number in this section was taken after copying the real factor files into the
+worktree (`data/raw`, never staged); a run is only valid if its page prints 865 cells and the
+"2005 archives" paragraph.
 
-The 1999 draft reports six-month returns on committed capital over 408 cohorts. Ours on the
-same 408 cohorts, "all":
+## 90. Code dedup: one home each for the overlap average and the monthly autocorrelation (2026-11-17): 411.0 -> 411.0 (refactor)
 
-| | mean | median | sd | excess kurtosis | skewness | minimum | maximum |
-|---|---|---|---|---|---|---|---|
-| ours, no wait | 3.56% | 2.76% | 3.17% | 2.43 | 1.35 | -2.28% | **17.59%** |
-| draft, no wait | 4.10% | 3.25% | 3.54% | 1.51 | 1.17 | **-2.48%** | **17.56%** |
-| ours, one-day wait | 2.73% | 2.17% | 3.03% | 1.88 | 1.19 | -2.86% | **15.13%** |
-| draft, one-day wait | 2.88% | 2.31% | 3.12% | 0.95 | 0.93 | -3.35% | **14.79%** |
+Round 9 is the negative-space round: shrink the repository without moving a result. This section
+covers the code half - `src/project/` and the five core scripts - and the audit behind it is
+`claims/CODE_AUDIT_R9.md`, which classifies all 120 top-level symbols in those 18 modules with a
+call site and a document reference each, and audits all 39 driver flags.
 
-What matches is the two extremes: the maximum to 0.2% and 2.3%, the minimum to 8% and 15%.
-What does not is the level and the spread - the mean is 13.2% low and 5.2% low, the standard
-deviation 10.4% low and 2.9% low, and the excess kurtosis is 61% high on no wait. Scored with
-`scripts/edition_1999.py` the "all" column of the draft's Table I comes out **3 ✓ / 5 ~ / 1 ✗**
-on no wait and **5 ✓ / 2 ~ / 2 ✗** on one-day wait, so this is the closest agreement in the
-replication rather than an exact one, and it is closest precisely where the RFS check also
-fails: at the tails.
+**What was removed.** Two private copies in `scripts/03_replicate.py` of computations
+`project.table7` already performs, both on the shipped path:
 
-It also means the "all" column's missing 49% on the *monthly* maximum (11.50% against 17.18%)
-is not obviously a missing trading rule: the same window, measured over six months, contains a
-17.59% period against the draft's 17.56%. The RFS's 17.18% is a single month; a six-month period
-containing it must be at least that large, and our largest six-month period is exactly the
-size of the paper's. Either the paper's largest month is a month we have at 11.5%, or their
-monthly and six-month maxima are not independent numbers.
+- `_monthly_autocorr` (11 lines) was line-for-line `project.table7.monthly_autocorr`: same
+  `dropna`, same `len <= 2 -> nan`, same reindex to `date_range(..., freq="ME")`, same
+  `autocorr(lag=1)`. It had four call sites in the driver (Table 4's equity-premium serial
+  correlation, Table 1 Panel A's monthly serial correlation, and twice in the Table 8 VaR block),
+  all repointed; the surviving name is the one the Table 7 page already calls through
+  `performance_rows`. `weighted_overlap_average` left the driver's import list with the other
+  body, being its only use.
+- `_strategy_series`'s body (17 lines) was `project.table7.strategy_series` plus one branch:
+  which per-cohort weights to use. The function now lives once, in `table7`, with
+  `weights: dict | None = None` carrying the `--cohort-weights` reading; the driver keeps a
+  five-line wrapper that picks the weights and delegates, because
+  `scripts/experiments/{table3_sectors,claim_sensitivity}.py` call it as `rep._strategy_series`
+  and are outside this contract's scope. The wrapper's seven internal call sites are untouched.
 
-### 3. The largest losses are real prices, not bad ones
+Net 24 lines added, 35 deleted, **-11 lines**, and one fewer place to change the overlap average.
 
-February 2000 is the whole of the "all" left tail, so it was traced to positions. Every cohort
-trading that month loses, not one:
+**Byte identity, on the same out-root.** The pristine tree and the edited tree were each run with
+`--aggregate-only --workers 1 --steps tables,table3,figure1,check` against the shared cohort
+cache, writing to the *same* `--out-root`, so no path normalisation enters the comparison:
 
-| cohort | Feb 2000 return, "all" | pairs open that month |
+```
+diff -r .private/snapshot_base .private/r9_base_fresh    # base output vs edited output
+# -> no output; both replication_check.md files print "Score: 411.0 of 865 compared cells"
+```
+
+`figure1.png` and `figure1.json` are in that tree and are identical too. The check also still
+matches the committed `REPLICATION_CHECK.md` after normalising the out-root string, as it did at
+base.
+
+**The weighted branch is not covered by that run** - the shipped reading is `equal`, so the gate
+never enters `weighted_overlap_average`. It was checked directly instead: the base body, copied
+verbatim from `personal/main`, and `project.table7.strategy_series` were compared on a two-cohort
+frame with an overlapping month, at equal, 0.3/0.7 and 0.9/0.1 weightings; equal in all three, and
+the weightings demonstrably change the answer (0.0175 equal against 0.0193 and 0.0139), so the
+equality is not the equality of an ignored argument. `monthly_autocorr` reproduces the deleted
+private copy's value on a gapped monthly series exactly.
+
+**What was audited and kept.** No dead code: 30 of the 120 symbols execute on the 411.0 path
+itself (traced with `sys.setprofile`, not inferred), 88 are reachable from the build or CLI path
+that produces the cache the check reads, and 2 only from tests. Those two stay.
+`evaluation.trading_stats` is the documented specification of Table 2 Panel A's six rows and
+`features.ssd_matrix` is the reference implementation the blocked fast path is checked against,
+with a logged bug fix riding on its tests; `features._nearest_neighbours` keeps its own copy of
+the SSD arithmetic on purpose, for memory, and says so. No flag is removable either: each of the
+39 is named by a report page that uses it to reproduce a recorded reading, or by a call site in
+another script, or both - `--cohort-weights` included, which `claims/FULLSET_RESCORE.md` (row S4b)
+and `claims/NEAR_MISS_CENSUS.md` (C1-C3) name as their reproducing path, which is why
+`weighted_overlap_average` and `_cohort_weights_for` are kept.
+
+**The cache pin is left stale on purpose.** `scripts/rebuild_manifest.json` and its copy in
+`scripts/score_wrapper.py` already disagreed with five pinned files at `personal/main`
+(`03_replicate.py`, `data.py`, `evaluation.py`, `features.py`, `models.py`); this change adds
+`src/project/table7.py` and moves nothing else. Re-pinning is exactly what
+`formation_changed`'s docstring forbids before the cache is rebuilt, and the operational cost is
+nil because the pin was already stale, so `tests/test_score_wrapper.py` skips now as it skipped
+before. `pytest -q`: 368 passed, 8 skipped, 0 failed, the same 8 skips as at base.
+
+**One stale spelling, left alone.** Section 62's prose still calls the daily autocorrelation "the
+daily counterpart of `_monthly_autocorr`". The symbol is now `project.table7.monthly_autocorr`;
+the historical note is not rewritten, by the round's rule that note numbers and their text are
+append-only.
+
+## 91. The one-off scripts, inventoried and trimmed (2026-11-17): 411.0 -> 411.0 (docs)
+
+Round 9's brief is a smaller repository that scores the same. This contract took the 48 files under
+`scripts/` that the driver does not own - 19 in `claims/`, 12 in `experiments/`, 17 elsewhere - and
+recorded each one's purpose, first commit and today's references in `claims/SCRIPT_LEDGER_R9.md`.
+Five files and 167 lines are gone and 43 stay, and the one `src/project` module left without a caller
+went with them on review (below); nothing removed is on the scoring path, and the check
+prints what it printed before.
+
+**The five.** Four are `argparse` front doors over one `src/project` function apiece:
+`audit_data_vintages.py` (5 lines, `vintage_audit`), `build_issuer_header.py` (13, `issuer_header`),
+`import_legacy_wrds.py` (24, `legacy_import`) and `import_wrds_ui.py` (41, `import_ui`). No page, no
+Makefile target, no workflow and no test names any of them, and the modules behind them keep their
+tests (`test_issuer_header`, `test_legacy_import`, `test_import_ui`); `vintage_audit` had no test and
+lost its last caller, so on the coordinator's review of PR #91 `src/project/vintage_audit.py`
+(48 lines) is deleted as well (recoverable from `2f92de8`; the ledger's "sixth retirement"). The fifth,
+`claims/table6_draws.py` (84 lines), was a second implementation of a rule the driver already owns: it
+read the same per-cohort `.npz` outputs through `table6_report.collect` and marked them with `_mark`.
+Its one reference was the section-75 line that introduced it, so that line now names
+`03_replicate.py::table6_from_cache` and points at commit `2f92de8`; the four draw readings keep a
+reproducing path with one implementation instead of two.
+
+**What the rule kept, and why.** Everything a live page, test or Makefile names; three modules that
+only their importer names (`t6_md`, `t6_draws`, `table7_report`), because they are the parts of the
+Table 6 and Table 7 pipelines rather than copies of them; and six scripts cited today only by
+`REVIEW_NOTES` plus a page or `archive/` (the four round-4 experiments, `s7_support`,
+`table7_rerank`), because those lines are the published record of how a number was produced. The
+ledger writes down the route for retiring that last group - rewrite the note line to a git pointer,
+as section 75 now does - and leaves the call to the next round.
+
+**Verification.** `pytest -q` 368 passed, 8 skipped. The check re-run from the shipped caches at one
+worker prints `Score: 411.0 of 865`, prints the 2005-archives paragraph rather than the 544-cell
+degraded page, and its `replication_check.md` diffs clean against this round's base run. `SCORE_LOG.md`
+gains no row; `tests/replication_conformance.json`, the manifest and the caches are untouched. Net: 5
+files and 167 lines out of `scripts/`, one module and 48 lines out of `src/project/`, one ledger in.
+
+## 92. Report consolidation: REVIEW_NOTES split into live + archive, `data_review` archived (2026-11-17): 411.0 -> 411.0 (docs)
+
+Contract R9-C. Nothing measured here. The round opened with the shipped check run before any edit
+(`.private/r9_base`) and closed with the same command, the same caches and one worker after them
+(`.private/r9_check`). The two pages differ on one line, the out-root path each records for
+Figure 1; normalize that line and both hash to
+`ce9c5c586fe67387602d4eeecfa73d481ecb206cd28af13199743ee252d05292`, and the base page unmodified is
+`22ef84ef21ae75d32b007be36ce8fa10ac2f8edd127e7a96a9e8fde2bafcf0f8`. Both print `Score: 411.0 of 865`
+(322 / 178 / 365) and the "2005 archives" paragraph once, so the score and every cell are unchanged.
+
+**What moved.**
+
+| from | to | how |
 |---|---|---|
-| 1999-09 | -15.8% | 2,979 |
-| 1999-10 | -14.2% | 3,041 |
-| 1999-11 | -14.6% | 3,149 |
-| 1999-12 | -13.8% | 3,262 |
-| 2000-01 | -12.0% | 3,111 |
-| 2000-02 | -5.2% | 2,736 |
+| `REVIEW_NOTES.md` lines 1-4322, notes 1-77 | `REVIEW_NOTES_ARCHIVE.md` | one straight cut, byte for byte; `diff` of the cut against the original is empty |
+| the rest of `REVIEW_NOTES.md`, notes 78-88 | `REVIEW_NOTES.md`, under a new 30-line header | verbatim; this note 92 follows them, then the index |
+| `report/data_review/`, 78 files | `report/archive/data_review/` | moved with `mv`, staged as a rename, contents untouched, plus a 10-line `README.md` |
+| GAPS section 2's six superseded base-note paragraphs | one table, one row per base | every cell count, mark tally and class total kept (the check below proves it) |
+| the historical narration in `CLAIMS.md` | one line and a pointer | the claim count it replaced is kept in the sentence |
+| `METHOD.md` row 16's `REVIEW3_NOTES` | `REVIEW_NOTES` | a typo that made two citations unresolvable |
+| GAPS's three S7 status rows | withdrawn in round 7 (`REVIEW_NOTES` 87), with the 417.5 tied to today's factor files and `NS` side caches and the re-measured 411.0 | the rows still said "prepared, not landed"; the round of each closure (R3 round 4, S4b round 6, S7 round 7) was corrected on the coordinator's review of PR #92 |
+| `scripts/01_get_data.py`'s docstring pointer to `report/data_review/` | `report/archive/data_review/` | the one code-side reference to the moved folder (coordinator review) |
 
-The losses are unrealized: the cohorts formed in 1999-10 to 2000-02 took *positive* payoffs
-(+138 to +172 on $1 per pair) from the trades that closed that month, and still lost 12-14% on
-the book. The five worst positions in cohort 1999-09 all close at the end of the trading
-window (reason `end`) with payoffs of -26.4, -22.2, -21.9, -21.8 and -20.4 dollars per dollar
-committed. Their short legs are real dot-com climbs, not adjustment errors: over its own
-trading window each rises 22 to 29 times, and the largest single day in that window is +135%
-(permno 79006, SIC 3670), +62% (84329, SIC 7370), +60%, +57% and +42% — thirty to sixty
-moderate days each, not one split or delisting jump. So there is no bad price to screen out: a
-book that is short those names loses whatever the construction.
+**Size.**
 
-### 4. The book is never sparse, so the missing right tail is not a concentration effect
-
-A large positive outlier in a two-thousand-pair book would need the book to be nearly empty in
-that month. It is not: cohort-months hold a median of 1,598 open pairs, a 10th percentile of
-649 and a minimum of 297 across all 474 cohorts and both waits, and the correlation between the
-absolute monthly return and 1/(1 + open pairs) is 0.012. Every cohort-month above 10% in absolute value
-holds between 2,300 and 3,300 open pairs. So the paper's larger right tail cannot be a month in
-which a handful of pairs carried the portfolio, and the "all" columns of Tables 1 and 3 cannot
-be fixed by changing how many pairs are traded.
-
-### 5. Even a perfect tail correction does not reproduce the paper's shape
-
-Take our shipped "all" series and replace its three worst months with the paper's minimum
-(-2.72%) and its best month with the paper's maximum (17.18%) — an oracle no rule can achieve.
-That gives mean 1.08% (paper 1.10%), median 0.73% (0.728%), minimum -2.74% (✓), maximum
-17.18% (✓), but standard deviation 1.93% (paper 1.67%, 15% off), skewness 2.79 (3.42, 18% off,
-still ~) and kurtosis 18.4 (25.25, 27% off, still ✗). The shape gap is distributed over the
-whole series, not concentrated in the months we know are wrong, so no correction of known
-months can close the skewness and kurtosis rows of the "all" columns.
-
-### 6. Census: where the last 16.5 points of the 183.5 check would have to come from
-
-Marks against the distance from the paper, from the check as it stood at 183.5
-(SCORE_LOG row 12). The shipped 187.0 moves three cells to ✓, so the bands below are that
-census, not the current one; the argument they support is unchanged.
-
-| band | ✓ | ~ | ✗ |
-|---|---|---|---|
-| within 10% | 149 | | |
-| 10-15% | | 27 | |
-| 15-25% | | 42 | |
-| 25-40% | | | 25 |
-| beyond 40% | | | 48 |
-
-Across all 69 ~ cells the signed gap averages +2.9% (40 high, 29 low), so no single
-nudge moves them as a block; 13 of the 69 are in the Utilities sector, which is also 12%
-short of the paper's stock count. Reaching 200 needs 33 cells to move a full grade, and 48
-of the 73 ✗ cells are more than 40% off, in statistics (skewness, kurtosis, median, extremes)
-that the shape analysis above shows would have to move together.
-
-### 7. Transportation is a level gap across the whole sample, not a tail gap (Q6)
-
-The sector's standard deviations match the paper's (3.93 / 2.93 / 2.96% against 3.89 / 2.94 /
-2.87% for top 5, top 20 and all), so the pairs being traded are comparable. The means are
-2x the paper's, and the excess is spread out rather than carried by a few months: top-5 mean
-1.22% before 1989 and 0.48% after, against the paper's 0.497% over the whole sample; the ten
-largest months are 24% of the total return. With 61 stocks and about 54 within-sector pairs per
-cohort, this is a selection difference of roughly two pairs per cohort, not a rule.
-
-### 8. Our largest months are one-day crash bounces; the paper's are sustained
-
-Comparing the two panels' extremes separates a single-day event from a month of steady gains,
-because the one-day wait gives up one day of the move. The paper's maxima agree across the two
-panels for top 5 (14.72% / 14.35%, 2.5% apart), top 20 (13.30% / 13.49%, 1.4%) and "all"
-(17.18% / 16.32%, 5.0%), with 101-120 the exception (12.68% / 10.46%, 17.5% apart); three of
-ours are not the same month at all:
-
-| portfolio | paper max, no wait / one-day wait | ours, no wait / one-day wait | ours' largest month |
-|---|---|---|---|
-| top 5 | 14.72% / 14.35% | 12.84% / 9.62% | October 1987 (no wait), a different month with the wait |
-| top 20 | 13.30% / 13.49% | 10.51% / 7.67% | October 1987 |
-| 101-120 | 12.68% / 10.46% | 10.04% / 6.35% | October 1987 |
-| all | 17.18% / 16.32% | 14.12% / 12.55% | January 2001 in both |
-
-Three of our four maxima are the pairs that open at the close of 19 October 1987 and earn
-10-20% each as the crash reverses: a one-day bounce that the no-wait rule keeps and the wait
-rule gives up, which is why our two panels disagree by 25-37% where the paper's agree to
-1.4-5.0% (101-120 excepted).
-The paper's maxima are sustained months. So the small portfolios' upper tails are not merely
-too small, they are the wrong events, and that is Q2 again: which pairs hold the top ranks in
-the months that matter. January 1975 is the one sustained month we can name on both sides, and
-there the paper's top 20 earns 13.6% (its Figure 2) against our 3.6%, while its "all" column is
-17.18% against our 11.50% - a factor of 1.5 in both.
-
-### 9. The extra volatility of the "all" column sits in the ranks beyond 120
-
-The paper's own table says where to look. Its standard deviations fall from top 5 to top 20 to
-101-120 and then rise slightly for "all" (2.28 / 1.69 / 1.54 / 1.67, so the ranks past 120 add
-0.13 points). Ours fall the same way and then jump (2.41 / 1.74 / 1.59 / 2.00, adding 0.41). The
-steps are right; the last step is three times too big:
-
-| | top 5 | top 20 | 101-120 | all | 120 -> all |
-|---|---|---|---|---|---|
-| paper, no wait | 2.28% | 1.69% | 1.54% | 1.67% | +0.13 |
-| ours, no wait | 2.41% | 1.74% | 1.59% | 2.00% | +0.41 |
-
-So the whole monthly shape gap is carried by the pairs ranked past 120, and not because they are
-further apart on entry - our "all" trigger matches the paper's (0.173 against 0.169). It is the
-same population Q1 located: ranks 501+ have a monthly standard deviation of 2.5% and ranks 2,001+
-of 5.3% in 1999-2002, and ranks 1-500 have 1.2-1.6%, which is the paper's level. Everything that
-would fix the shape therefore has to change *which* loose pairs trade after 1988, and every
-screen that does it (stale limits, exchange filters, share types, price and volume rules,
-sections 26 and the rounds in `OPEN_QUESTIONS.md`) costs more cells elsewhere than it recovers.
-
-**What would move the score.** Nothing found in this round, and the analysis says what is
-missing rather than where a convention might be wrong: the paper's *monthly* top-tail is larger
-than ours in every portfolio and sector by 20-50%, while its six-month distribution on the
-draft's window is ours to within 3%. The next test that follows is not another convention
-switch; it is to establish which month produces the paper's 17.18% and what its top-ranked
-pairs were that month, which needs CRSP as it stood in 2002 rather than as we hold it.
-
-## 27. Two ambiguities settled by measurement: the by-sector matching and the cohort weights (2026-10-24)
-
-Both were open readings of the paper's own text, both are cheap to rebuild, and both lose. The
-shipped check stays at 183.5. Every number below is a full 474-cohort rebuild; the variants ran
-in an isolated tree with their own cache, so the shipped one is untouched.
-
-**1. Table 3 wants the within-group matching (183.5), not a subset of the unrestricted pairs
-(157.5).** Section 2.1 of the RFS says both "we restrict both stocks to belong to the same broad
-industry categories" and "The minimum-distance criterion is then used to match stocks within each
-of the groups". The first sentence can be read as filtering the unrestricted pairs down to
-same-sector ones - every stock keeps its global nearest partner and only pairs whose two legs
-share a sector enter Table 3 - and the second as doing the matching inside the group, which is
-what `select_pairs_within_groups` does and what every shipped result uses. The second reading had
-never been measured.
-
-| Table 3 sector | within group (shipped) | same-sector subset of the unrestricted pairs |
+| file | before | after |
 |---|---|---|
-| Utilities | 23.5 of 36 | 13.5 of 27 |
-| Transportation | 9.5 of 27 | 5.5 of 18 |
-| Financials | 18.5 of 36 | 10.5 of 36 |
-| Industrials | 20.0 of 36 | 16.0 of 36 |
-| **total** | **183.5** of 291 | **157.5** of 273 |
+| `REVIEW_NOTES.md` | 5,127 | 998 |
+| `REVIEW_NOTES_ARCHIVE.md` | - | 4,336 |
+| `GAPS.md` | 1,158 | 1,149 |
+| `CLAIMS.md` | 149 | 149 |
+| `METHOD.md` | 770 | 770 |
+| `README.md` (root) | 170 | 172 |
+| `report/replication/README.md` | 146 | 147 |
+| `report/archive/data_review/README.md` | - | 10 |
 
-The subset reading also removes two columns the paper prints, because a same-sector subset of
-the ~2,000 unrestricted pairs is far thinner than a within-group pairing of the same stocks: it
-holds fewer than 120 utility pairs in the average cohort (so no Utilities 101-120 column) and
-fewer than 20 transportation pairs (so no Transportation top-20 column). Both columns exist in
-the RFS's Table 3 for groups of 156 and 61 stocks. Table 3 therefore settles the reading on
-structure as well as on score, and the code stays as it is.
+The split is not a net deletion: the notes are the same 5,127 lines, and what is new is 207 lines of
+header, index and this note (14 for the archive's header, 30 for the live file's, 85 for the index,
+the rest for this note). What it buys is a live file small enough to read - 998 lines against 5,127 -
+and the index is what keeps every archived number one lookup away.
 
-What the subset changes is the level, not the shape: Utilities "all" mean 1.19% -> 1.34% (paper
-1.04%) and its share of negative months 16.5% -> 13.3% (18%), because the subset keeps the
-*closest* same-sector pairs, which are the ones that trade hardest.
+**Why the split is safe: every citation still resolves.** The check is a scan of every `.md`, `.py`,
+`.json`, `.yaml`, `.yml`, `.toml`, `.txt` and `.csv` file in the tree for a `REVIEW_NOTES`-style
+token followed by a number, a list ("58, 72-74 and 85") or a subsection ("19.2"), ranges expanded;
+a number resolves if a `## k.` or `### k.` heading carries it in either file. The checker is round-9
+scratch, not committed.
 
-**2. The six overlapping cohorts are weighted equally (59.0 Table-1 points), not by their size.**
-The paper corrects for overlap by "averaging monthly returns across trading strategies that start
-one month apart as in Jegadeesh and Titman (1993)" and describes the result as a proprietary desk
-that "delegates the management of the six portfolios to six different traders" - an equal weight
-per cohort, which is what `overlap_average` does. The two alternatives had never been scored
-against Table 1:
-
-| cohort weight | Table 1 points (of 88) |
-|---|---|
-| equal (shipped) | 59.0 |
-| number of pairs holding a position that month (one pooled book) | 57.5 |
-| number of pairs the cohort selected | 59.5 |
-
-All three sit within 1.5 points of each other, so this dimension cannot explain the shape gap
-either, and the paper's own sentence picks the equal weight. No change. With this the aggregation
-of the monthly series has no untested degree of freedom left: cohort weights, the capital
-definition (section 25), the buy-and-hold reading of eq. (2)-(3) and the calendar-month
-compounding have all been measured.
-
-## 28. Every typed paper target is verified against the PDF (2026-10-24)
-
-The check compares our engine with numbers that were typed out of the article by hand, and a
-mis-typed target is a cell that can never be reached however good the replication is. Nothing
-had ever tested them. `scripts/verify_paper_targets.py` (and `make verify-targets`) now re-reads
-the article's text layer, parses Tables 1-3 positionally and compares every value with the
-constants the check uses; `tests/test_paper_targets.py` runs it when `pdftotext` and the PDF are
-present.
-
-Result: **287 of 287 values agree** - Table 1 88 (11 rows x 4 portfolios x 2 panels), Table 2 64
-(A 24, B 40), Table 3 135 (four sectors, 9 rows, 4 columns less Transportation's 101-120) - plus
-the four sector stock counts in the Table 3 caption (156 / 61 / 371 / 1,729).
-
-Two of the article's own encodings had to be handled, and both are why this was worth doing by
-script rather than by eye: Table 1 renders minus signs as an en dash and Table 3 as the glyph
-"7" in front of the digits, so the Utilities top-5 minimum prints as `70.12347` for -0.12347.
-A careless transcription of either would have produced a positive target.
-
-Two derived numbers are not printed in the article and are marked as derived where they are
-used: the 2,317-stock universe is the sum of the four caption counts (156 + 61 + 371 + 1,729,
-recorded at `PAIR_FORMATION.md` line 57), and the draft's mixed-pair counts are divided by its
-pairs traded to give shares (its Table II B prints 3.7 / 15.4 / 15.8 / 1494.9 and
-0.8 / 3.4 / 8.6 / 549.2 as counts).
-
-**What this closes.** The remaining 107.5 points are not a transcription artefact. The targets
-themselves are the published article's, digit for digit, so every unexplained cell is a
-difference between our engine and the paper's data - which is the claim sections 26 and 27
-support from the other side.
-
-## 29. Capital readings re-measured, and eq. (3) read on the short position's own return (2026-10-24)
-
-Two rounds after the payoff-count hybrid (closed PR #36, 185.0) was withdrawn. Every number
-is a full 474-cohort rebuild in an isolated cache; the shipped check stays at 183.5 in this
-section, and the change it leads to is shipped separately (`--short-weights`, SCORE_LOG).
-
-### 1. Readings that "gain" the "all" kurtosis by deepening February 2000
-
-Payoff counts (`employed_count`, section 25: 184.5) lift the Table 1 "all" kurtosis cells
-toward the paper, but only because the February 2000 loss gets worse:
-
-| "all", no wait | value-weighted books (shipped) | payoff count | paper |
-|---|---|---|---|
-| minimum | -12.6% | -17.4% | -2.72% |
-| skewness | 1.30 | 0.31 | 3.42 |
-| kurtosis | 15.9 | 22.9 | 25.25 |
-| kurtosis, 1963-07 to 1998-12 | 11.9 | 11.2 | |
-
-The one-day wait does the same (minimum -12.4% -> -17.0%, skewness 1.03 -> 0.03, kurtosis
-15.5 -> 23.5). The paper's kurtosis comes from a large right tail; the count's from a deeper
-left one, and its skewness collapses, a move the check cannot see because those cells are
-already ✗. Two further capital bases measured the same way, applied to Tables 1 and 3 alike:
-
-| reading | score | why |
+| | before the split | after the split |
 |---|---|---|
-| gross book, `2 (ΣdL - ΣdS) / (ΣL + ΣS)` | 184.5 | "all" minimum -15.3%, skewness 0.71: the same artefact |
-| long-book base, `(ΣdL - ΣdS) / ΣL` | 181.5 | |
-| excess instead of raw kurtosis | 177.0 | the Table 1 caption says "Absolute kurtosis is reported" |
+| files citing a note | 52 | 53 (the new archive file cites notes too) |
+| citations | 405 | 418 (the headers, this note and the GAPS pointers) |
+| distinct note numbers | 60 | 61 (this note's 92) |
+| numbers that resolve | 59 of 60, in one file | 61 of 61: 54 in the archive, 7 live (81-85, 87, 92) |
+| numbers that dangle | 1 | 0 |
 
-None is adopted. **Correction to section 25:** the shipped "all" fully-invested/committed
-ratios are 1.875 (no wait) and 1.904 (one-day wait), not 1.86 and 1.90; the full set is
-1.68 / 1.71 / 1.60 / 1.88 and 1.64 / 1.69 / 1.61 / 1.90 against the paper's 1.67 / 1.78 /
-1.59 / 1.80 and 1.61 / 1.72 / 1.58 / 1.81. Section 27's closing claim that the aggregation has
-"no untested degree of freedom left" was also wrong; part 3 is one.
+The one dangling number was already dangling before the split, and this round fixed it: `GAPS.md`
+cited a fifth subsection of note 26 by writing the number as "26.5", where note 26's own subsections
+are numbered 1-9 inside note 26, so no heading ever carried it; the citation now reads
+`REVIEW_NOTES` 26 (subsection 5). Subsection citations that do resolve keep resolving:
+`REVIEW_NOTES` 19.2 is a `###` heading in the archive, because the cut is byte-exact. `SCORE_LOG.md` was not touched: it is append-only and round
+9 adds no score row.
 
-### 2. The editions do not differ only after 1997
+**How the live file is laid out.** Notes 81-88 in full, the 78-80 block, this note, then the index
+to 1-77. The 78-80 block stays live although it is not a note: round 5 reserved those three numbers
+for contracts T, C and G and none of them landed under its number, so the stub is the only place
+that explains the gap, and a citation of 78, 79 or 80 has to land on something. The index maps every
+archived number to its topic and, where the note moved the score, to the before and after.
 
-Our first 408 cohorts reproduce the 1999 draft's top-5 trigger (0.0399 against 0.0399), so if
-the RFS added only the 1997-2002 cohorts, its 474-cohort averages would pin down those 66. The
-trigger rows would need late-sample top-5 triggers of 0.095 (ours 0.048), and the sector
-weights decompose plausibly (Utilities 16%, Financials 54% of the late top 5), but the round
-trips cannot: (474 x 2.02 - 408 x 2.4) / 66 = -0.33. The RFS's round trips are lower than the
-draft's throughout, so the two editions differ across the whole sample and the RFS-only gap
-(Q7) is not a late-sample effect.
+**What was kept rather than trimmed.** Note text: not one character of any note changed, which is
+what makes the numbers stable identifiers. `REVIEW_NOTES` citations in code comments, tests,
+`GAPS.md`, `CLAIMS.md`, `METHOD.md`, `COVERAGE.md` and the `claims/` pages: left as they are, because
+a pointer is what they hold. The `claims/` pages were read for freshness and edited only where a
+status was stale (the S7 rows above); no page was deleted. `TBD.md` is contract R9-D's, in this same
+round, and nothing here anticipates it: the root README's forward reference to it was dropped on review, so that page states only what is on `main`.
 
-### 3. Eq. (3) applied to the short position's own return: 187.0
+## 93. The TBD ledger: every undecided and unreproducible condition in one place (2026-11-17): 411.0 -> 411.0 (docs)
 
-Eq. (2) is applied to "the daily returns on the long and short positions", with eq. (3)'s
-weight `w_i,t = (1 + r_i,1) ... (1 + r_i,t-1)`. The shipped code takes r_i of a short position
-to be the shorted stock's return, so its weight is the stock's value and a short leg that runs
-up 25x carries 25 times the weight of a fresh one. Read as the return *on the position*, -r,
-the weight is `prod (1 - r)`: it shrinks as the shorted stock rises (floored at zero, a
-position that has lost everything). Long positions are the same under both readings. The
-paper's "simple interpretation of a buy-and-hold strategy" fits the shipped reading for shorts;
-the formula fits either.
+Contract R9-D. No cell moves: the work is `report/replication/TBD.md` (new), its links from
+`README.md` and `CLAIMS.md`, and this section.
+**What the page is.** One section per condition, in the five fields the contract fixes: the paper
+locus and the current mark, what can still be tried, what has been tried with its dated receipts,
+why it is unsure, and why it cannot be reproduced.
 
-Score 183.5 -> **187.0**: Table 1 59.0 -> 54.0 (✓ 52 -> 43), Table 3 75.0 -> 83.5 (✓ 52 ->
-64, ✗ 41 -> 36), Table 2 unchanged; Figure 1 unchanged. The 20-cohort smoke sample moves
-93.0 -> 98.5.
+IDs: T01-T05 the claims, T06-T15 the questions, T16-T23 the levers, T24-T28 the data conditions, T29-T32 the paper-side impossibilities.
 
-**Diagnostics that did not choose it** (unscored tables; one-day wait unless stated):
+**Every pointer is a document or an artifact:** the audit trail cites REVIEW_NOTES sections, SCORE_LOG rows and the claims pages, and the base is this worktree run into .private/r9_base (411.0 of 865, the 2005-archives paragraph present).
 
-| check | value weights (shipped) | position weights | paper |
+**The draft it replaces.** The worktree carried an uncommitted four-line draft ending in a garbled token; its four verifiable facts (the paper citation, the 411.0 of 865 score, the SCORE_LOG row 29 reference, and the .private/r9_base run with its score line and 2005-archives paragraph) were audited and correct, the page around them was incomplete, and it was rewritten. 32 conditions.
+
+## 94. T10's Transportation attribution and T09's merger delisting reading (2026-11-18): 411.0 -> 411.5 (levers closed, nothing shipped)
+
+Contract R10-A, branch `replication/r10-named-levers`. Two levers `TBD.md` listed as never run:
+T10's "pairs and SIC 47xx in the Transportation band" and T09's "delisting and merger handling
+after 1983". Both are closed here and nothing ships. The pre-registration (the paper sentences, what
+I would measure, what would make me ship it) is `.review/r10/A/PREREG.md`, written before either
+measurement; the base is this worktree run into `.private/base` (411.0 of 865, the 2005-archives
+paragraph present once) before any lever was touched.
+
+**What the 93 notes already held** (`grep -n -i` over `REVIEW_NOTES.md`,
+`REVIEW_NOTES_ARCHIVE.md`, `GAPS.md`, `TBD.md`, `claims/*.md`). T10: REVIEW_NOTES 24 (46xx pipelines
+out neutral; 41xx transit out and 47xx services out each lift Transportation by half a cell and cost
+Industrials a full one), GAPS section 10 Q6 (the count and the sector map already match; a
+five-source SIC sweep moves Table 3 by at most 6 of 135 points). T09: `last_px` scores 412.5 on 865
+(REVIEW_NOTES 83, TBD T19), and `--long-delisting-loss` ships as the `vol_common_delist100` cache
+for footnote 4's own cells. Neither a Transportation pair attribution nor a delisting-code-class
+reading had ever been run.
+
+### T10: the attribution (no rebuild)
+
+`scripts/experiments/table3_transport_47xx.py build` rebuilds only the Transportation book from the
+shipped panel under the build's own conventions (the same group labels, `select_pairs` on the
+group's own columns, wait=1, continued normalization, the same-issuer exclusion, `start_levels`
+from the last formation day), and `report` reads it beside the shipped cache. **The reconstruction
+is exact**: the employed monthly return matches the shipped cache's Table 3 rows on 2,806 top-5,
+2,829 top-20 and 2,829 all-pairs cohort-months with a maximum absolute difference of 0.000e+00
+(`.review/r10/A/t10/report/table3_transport_47xx.md`), so the attribution describes the book the
+check scores.
+
+**The level, on the paper's monthly series** (Table 3 B, p. 812, prints the full sample only):
+
+| era | top-5 | top-20 | all |
 |---|---|---|---|
-| Table 7 short book mean, top 5 / top 20 / 101-120 / all | 0.47 / 0.40 / 0.65 / **0.71%** | 0.52 / 0.47 / 0.72 / **0.88%** | 0.50 / 0.44 / 0.66 / 0.91% |
-| Table 7 short book sd, all | 5.13% | 4.98% | 4.60% |
-| Table 5 B daily "all" sd / 1% / minimum | 0.245 / -0.518 / -2.07% | **0.191 / -0.397 / -1.47%** | 0.169 / -0.327 / -1.07% |
-| same, 1963-07 to 1998-12 only, sd | 0.214% | 0.180% | |
-| Table 5 B daily sd, top 20 / 101-120 | 0.306 / 0.294% | 0.302 / 0.288% | 0.296 / 0.277% |
-| Table 8 post-1988 mean / sd, 101-120 | 0.61 / 1.42% | 0.51 / 1.36% | 0.33 / 1.12% |
-| Table 8 post-1988 sd, all | 2.34% | 1.57% | 1.30% |
-| Table 1 A "all" minimum / sd | -12.6 / 2.00% | -3.6 / 1.55% | -2.72 / 1.67% |
+| 1963-72 | 0.01147 | 0.00802 | 0.00414 |
+| 1973-82 | 0.00973 | 0.00590 | 0.00883 |
+| 1983-88 | 0.01584 | 0.01011 | 0.00708 |
+| 1989-98 | 0.00699 | 0.00538 | 0.00176 |
+| 1999-2002 | -0.00483 | -0.00453 | 0.00116 |
+| full, 474 months | 0.00891 | 0.00586 | 0.00487 |
+| paper, p. 812 | 0.00497 | 0.00577 | 0.00440 |
 
-The short-book mean errors fall from 39% to 23% summed over the four portfolios (101-120 is
-the one that rises, 2% -> 8%), and the daily "all" column that Q12 parked as "about 0.7x ours in every quantile" closes about
-two-thirds of the way, before 1999 as well as after. The same table shows that the shipped
-"all" mean matched for the wrong reason: our "all" long book is 7% low (1.51% against
-1.62%, sd 5.66% against 5.16%) and the shipped short book was 22% low, so the two errors
-cancelled in the excess return.
+The gap is a top-5 gap: ours is 79% high, the top-20 mean is 1.5% high, and all three standard
+deviations match (0.0387 / 0.0279 / 0.0278 against 0.0389 / 0.0294 / 0.0287).
 
-**Against:**
+**What SIC 47xx carries.** Pairs with a 47xx leg are 6.2% of all top-5 slots (146 of 2,370 over 474
+cohorts) and 6.6% of the top-5 book's summed payoff; on the daily-contribution decomposition they
+carry 12.7% of the top-5 level (21.5 bp of 104.8 bp per month) and 15.0% of the top-20 level. No
+top-5 pair in any era has both legs in 47xx. By era their payoff share is +4.1% (1963-72), -4.5%
+(1973-82), +27.3% (1983-88), +5.2% (1989-98) and -32.3% (1999-2002): a small positive contributor in
+three eras, and the only era where it is negative is the one where our top-5 is flat (-0.48% for
+1999-2002).
 
-| check | value weights (shipped) | position weights | paper |
-|---|---|---|---|
-| Table 8 pre-1989 mean / sd, top 5 | 0.99 / 2.31% | 0.93 / 2.25% | 1.03 / 2.26% |
-| Table 8 pre-1989 mean / sd, 101-120 | 0.94 / 1.54% | 0.88 / 1.47% | 1.05 / 1.53% |
-| Table 8 pre-1989 mean / sd, all | 1.00 / 1.54% | 0.87 / 1.37% | 0.99 / 1.65% |
-| fully-invested/committed, "all" (no wait / one-day wait) | 1.875 / 1.904 | 1.935 / 2.024 | 1.80 / 1.81 |
-| Table 1 "all" mean (no wait / one-day wait) | 1.04 / 0.78% | 0.89 / 0.60% | 1.10 / 0.71% |
-| 1999 draft scorer (EDITION_1999.md) | 86.5 | 77.0 (Table I 41.5 -> 32.0) | |
+**What does carry the level.** The top-5 book is railroad and airline pairs: 4011/4011 takes 648 of
+2,370 slots (27%) and the largest summed payoff (19.17 of 76.69 in 1963-72), 4511/4511 326 slots and
+11.06, 4213/4213 90 slots and 5.71. By 2-digit class the largest share of the level is 16.1% (44xx
+water transport with 45xx air), then 14.4% (40xx with itself), 14.2% (42xx with 45xx) and 11.0%
+(45xx with itself); no class exceeds a sixth. Mean payoff by rank is flat (ranks 1-5 in 1963-72:
+0.052 / 0.038 / 0.050 / 0.049 / 0.050), so this is not a rank-1 selection effect, but a single pair
+holds a median 62-84% of its cohort's top-5 payoff: the five-pair mean is dominated by its best pair
+in every cohort.
 
-The mechanism is the reason for all of them. A short that has diverged is the position with
-the most convergence still to come, and the position weight gives it less capital, so means
-fall in every era, including before 1989 where the shipped weights match. The draft scorer's
-fall is the largest objection. It is an objection rather than a veto for the same reason as
-section 21's: the draft describes its own returns as "the sum of the payoffs over all pairs
-... divided by the number of pairs", with no value weighting at all, so it cannot measure how
-eq. (3) weights a short. Scoring the draft by that stated count measure gives 82.0 (summed) to
-84.0 (compounded) under either short weight, against 86.5 for the value-weighted series it is
-scored on; its numbers fit value weighting a little better than its own description, which is
-why the fall is recorded rather than dismissed.
+**T10 closed.** The one paper-supported lever is the S&P group definition (p. 803: "Each [stock] is
+assigned to one of these four groups, based on the stock's SIC code"); the paper gives no SIC range,
+no field and no day, and its printed count (61 stocks, p. 812) already matches. 47xx is the SIC's own
+transportation-services class and lies inside our 40xx-47xx band; holding it out would remove 6.6% of
+the top-5 payoff rather than add to it, and that membership move was measured in REVIEW_NOTES 24
+(half a cell up, a full cell down in Industrials). Nothing here has a quote behind it, so nothing was
+scored: the lever is closed as an attribution, and what remains of Q6 is the paper's own pair list.
 
-Drivers for every number here: the option is `--short-weights position`; the Table 5, 7 and 8
-measurements compound the engine's per-leg values outside the cache.
+### T09: the delisting-code-class reading (one full build)
 
-**Shipped (SCORE_LOG row 13, 183.5 -> 187.0).** The support is independent of the scored cells
-(Tables 5 and 7, the February 2000 tail) and the reading is one of the two the formula allows, so
-it meets the bar of section 18. The objections above stand and are disclosed in the check header;
-`--short-weights value` restores 183.5, and the check header then describes that reading. The
-per-question ✗ counts in `OPEN_QUESTIONS.md` predate it (Table 1 now 23 ✗, Table 3 36 ✗).
+The sentence (p. 804): "If a stock in a pair is delisted from CRSP, we close the position in that
+pair, using the delisting return, or the last available price." The shipped engine already
+implements both clauses per row: the terminal row's `ret` is CRSP's delisting return where one exists
+(14,596 of the 17,358 terminal rows 1963-2002) and 0.0, the last available price, where none does
+(METHOD.md's daily-total-return row). The sentence does not separate a merger from a for-cause
+delisting, and footnote 4's robustness check covers mergers, which is why the reading below is a
+sensitivity by construction.
 
-Two corrections to the section above, from review. The zero floor is not only an edge case: it
-wipes 780 of the 2,968,816 Table 1 positions (both waits; 0.026%) on a day the shorted stock
-doubles, and from then on the leg carries no weight while it still counts in `n_t`. None of
-them is in the top 5, top 20 or 101-120 portfolios, so the floor acts only on the "all"
-columns, the ones that gained most; in the Table 3 runs it wipes 354 of 1,410,477, three of
-them in a sector portfolio. And the draft scorer's fall is not "the means": by statistic the
-9.5 points are medians -3.0, means -2.5, share negative -2.5, maxima -2.0, minima -0.5 and
-skewness +1.0, a downward shift of the whole Table I distribution.
+**The class inventory behind the lever.** The contract names the classic CRSP classes (2xx mergers,
+3xx exchanges, 5xx drops); our panel's terminal rows carry CIZ's `delactiontype`, where `MER` is the
+2xx merger, `GEX` the 3xx exchange, `GDR` the 5xx drop for cause and `GLI` a liquidation. All 17,358
+terminal rows in 1963-2002 match the `delisting` table, and the panel's terminal-row return equals
+`delret` wherever CRSP supplies one (14,596 rows; the match is exact on every matched row):
 
-## 30. Table 5 Panel A and Table 8 are printed as diagnostics, not scored (2026-10-24)
-
-*Superseded: both are scored since section 49 (SCORE_LOG row 15), with the rows that repeat a scored
-row left out.*
-
-The check replicated two more of the paper's tables without showing them: Table 5 Panel A
-(the one-day-wait monthly series' serial correlation and its 1/5/10/25 percentiles; its mean
-and standard deviation rows repeat Table 1 Panel B) and Table 8 (the same series' mean and
-standard deviation before and after 1988-12). Both are properties of the series Table 1 Panel
-B already reports, so neither needs a rebuild. They are printed after Table 3 under
-"Diagnostics (not scored)", without marks, and the score stays the 291 Table 1-3 cells: the
-goal is Tables 1-3, and these tables earn their place only where they explain one of those
-cells. Every typed target in both is verified against the article by
-`scripts/verify_paper_targets.py`, which now also asserts the file is the published RFS 19(3)
-2006 article (running head and DOI) before parsing it.
-
-Of the 36 comparisons, 13 are within 10% and 13 within 25%. What they say about Tables 1-3:
-
-- **Q9 (101-120 after 1988).** Table 8 isolates it: the pre-1989 standard deviations match to
-  1-4% in every portfolio, and the post-1988 101-120 mean is 0.51% against 0.33% (sd 1.36%
-  against 1.12%). The 101-120 serial correlation is 0.072 against 0.19.
-- **Q12 (the "all" tail).** The "all" column's left tail is still fatter than the paper's
-  (5th percentile -1.27% against -0.88%, post-1988 sd 1.57% against 1.29%), the same gap
-  section 29 narrowed.
-- The tight portfolios' percentiles match (top 5: 5th -2.21% against -2.14%, 10th -1.50%
-  against -1.52%, 25th -0.43% against -0.46%).
-
-Two estimators are our reading and are stated in the check: percentiles are linearly
-interpolated, and serial correlation is the lag-1 correlation of calendar-adjacent months
-(in the strided smoke sample, months that are not adjacent do not pair).
-
-## 31. Documentation cleanup (2026-10-24)
-
-No measurement changed and no code changed. Nine places said something that was true when it was
-written and is not true of the shipped check now; each is corrected in place, and the two paragraphs
-that existed twice are now one.
-
-- **`PAIR_FORMATION.md`'s sector map** listed Utilities as "4900–4999 and telephone 4811". Waste
-  management (4950–4959) has been Industrials since SCORE_LOG row 12, so the row now says so.
-- **§8** ended "`portfolio_daily` now uses counts". §15 replaced the counts with the value-weighted
-  books three days later and that is what ships, so §8 now records the supersession.
-- **§25** quoted the shipped fully-invested/committed ratios as 1.69 / 1.71 / 1.60 / 1.86 and
-  1.64 / 1.70 / 1.61 / 1.90. §29 re-measured all sixteen ratios; §25 now carries those values
-  (1.68 / 1.71 / 1.60 / 1.88 and 1.64 / 1.69 / 1.61 / 1.90), its gap percentages move with them
-  (4.2% / 5.2% and 6.7% / 8.3%, not 3.5% / 5.0% and 6.7% / 8.8% — the last divided by the no-wait
-  paper value in both panels), and the paragraph says what it first read.
-- **§15** called the 164.0 pair "shipped"; it says "shipped then", since 183.5 and 187.0 came later.
-- **§26.6's census** is the 183.5 check. It says so, and the "16.5 points" framing is scoped to that
-  check everywhere it appears; at the shipped 187.0 the gap to 200 is 13.0.
-- **`OPEN_QUESTIONS.md`'s four-map table** labelled the 481x + 49xx map "shipped". It is "as shipped
-  then", the paragraph after it says which two sector rulings moved it, and the shipped counts are
-  now stated (Utilities 137 / Transportation 61 / Financials 347 / Industrials 1,750 against
-  156 / 61 / 371 / 1,729, so Utilities is 12% below the paper rather than 3% above).
-- **Three dated sections** in `OPEN_QUESTIONS.md` ("Attempt at 180", "Cross-checks round two",
-  "Cross-checks round five") read "the shipped check scores 169.5" in the present tense. They are
-  past tense now; the ledger is the only place that says what the shipped score is.
-- **One paragraph was duplicated** between `OPEN_QUESTIONS.md`'s attainability section and §26.6
-  (the signed-gap average and the Utilities concentration). `OPEN_QUESTIONS.md` now points at §26.6.
-- **`PAIR_FORMATION.md`'s audit block** still said the one-day wait and delisting fixes were "to come
-  in a separate PR". Both shipped, with tests; the block names the file, the test and, for delisting,
-  the 61,540 trades that now close on one.
-
-What was checked and left alone: every "section N" reference resolves (sections 1-31, no gaps); no
-document quotes a shipped score other than `SCORE_LOG.md` except in a dated section; the score,
-mark counts and cell set in `SCORE_LOG.md` still equal `REPLICATION_CHECK.md` and
-`tests/replication_conformance.json` (`test_score_log.py`); and no other numeric table is duplicated
-across documents (checked line by line: two shared prose lines, both from the paragraph above).
-
-**One staleness was operational rather than editorial, and is closed here.** The shared cohort cache
-predated rows 12 and 13 — no `short_weights` stamp, so `--aggregate-only` (and with it
-`make benchmark`) refused it by name — and `scripts/rebuild_manifest.json` plus the pinned copy in
-`scripts/score_wrapper.py` still carried the pre-row-12 hashes of `models.py`, `sectors.py` and
-`03_replicate.py`. The cache was rebuilt with `--force`, the rebuilt check came out byte-identical to
-the committed one (187.0 of 291), `--aggregate-only` accepts it again, and both copies of the hashes
-were re-pinned to the code that built it, so `formation_changed()` now reports no change. The order
-matters and is recorded under "Where the number is enforced" in `SCORE_LOG.md`: re-pin after the
-rebuild, never before.
-
-## 32. Tables 4 and 7 and Figure 4, read in the paper's own terms (2026-10-25)
-
-The check prints Tables 1-3 and, as diagnostics, Table 5 Panel A and Table 8. Three further pieces
-of the paper speak directly to the open questions and were not in it: the risk block of Table 4,
-the long/short decomposition of Table 7, and the correlations the paper prints in the Figure 4 text
-(0.48 full sample, 0.51 before 1989, 0.18 after; 0.41 / 0.42 / 0.20 on five-factor residuals).
-All three are computable from the shipped engine and the public Fama-French files, so they were
-measured on full 474-cohort runs. The numbers live in `OPEN_QUESTIONS.md` under "Cross-checks,
-round nine"; this section records what was measured and what it settles.
-
-**How it was measured.** The cohort loop of `03_replicate.py` was re-run outside the cache (same
-`vol_common` universe, RMS trigger, `--short-weights position`, wait 1) keeping, per cohort, the
-value-weighted *long* and *short* legs of each portfolio as well as their difference, then
-overlapped with the same Jegadeesh-Titman average the driver uses. Table 4's regressions use
-Fama-French Mkt-RF, SMB and HML, Carhart momentum, and the paper's reversal factor built from the
-Fama-French 10 prior-return deciles (top three minus bottom three), with Newey-West errors at six
-lags. The factor files are the locally pinned Fama-French downloads; the paper's values are the
-RFS text layer, which `scripts/verify_paper_targets.py` already parses for Tables 1-3, 5 and 8.
-
-**What Table 7 settles.** Both books replicate in three of the four portfolios. The long book earns
-1.245 / 1.359 / 1.482 per cent a month against the paper's 1.245 / 1.330 / 1.458 and 1.507 against
-1.623; the short book earns 0.522 / 0.467 / 0.717 / 0.878 against 0.501 / 0.435 / 0.663 / 0.908,
-within 9% in every column, and their standard deviations are 8-11% too wide in the loose bands.
-Section 29's "short book 22% low" (0.708 for "all") is the quantity weighted by the shorted
-*stock's* own value, which this build no longer ships. So the remaining Table 7 gap is the "all"
-portfolio's long book (-7%) plus the dispersion of both books, not a leg-wide bias: a leg-wide bias
-would have shown in the top 5 too, and does not.
-
-**What Table 4 settles.** The risk profile replicates (Sharpe 0.34 / 0.59 / 0.52 / 0.41 against
-0.35 / 0.59 / 0.55 / 0.45; standard deviations within 6%), so the pairs' *shape* of risk is right.
-Two rows do not. Persistence: the 101-120 band's monthly autocorrelation is 0.07 against the
-paper's 0.19, and the "all" portfolio's is 0.18 against 0.12 (+50%); the top 5 and top 20 match
-(0.11 / 0.14 and 0.24 / 0.24). Factor exposure: the "all" portfolio's market beta is
-+0.059 (t = 4.06) where the paper reports -0.145 (t = -3.10), and its reversal loading is -0.106
-against +0.201 - the same sign once the paper's own sign convention is applied (they call a pairs
-portfolio's reversal exposure positive), but about half the size. Our broad portfolio is net long
-the market and the paper's is net short.
-
-**What Figure 4 settles.** Two portfolios with no positions in common are correlated 0.32 in our
-build against 0.48 in the paper (0.39 against 0.51 before 1989, 0.04 against 0.18 after), and
-0.28 against 0.41 on five-factor residuals. The paper's reading - a latent common factor that goes
-quiet after 1988 - is visible in ours in the same shape but at about two thirds the level, and
-factor adjustment removes a similarly small share of it in both. Our disjoint bands behave more
-independently than the paper's, which is what a more idiosyncratic pool of matches looks like.
-
-**Two cross-checks that close routes rather than open them.** First, the paper's own equity-premium
-column (S&P 500 in excess of bills, 0.410% a month with a 4.509% standard deviation) against our
-panel's value-weighted market over the same 474 months (4.564% standard deviation): the dated data
-is not noisier than the paper's at the market level, so the "all" bucket's excess dispersion is a
-property of the pairs, not of the panel. Second, the stale screen: `--max-stale-share` 0.99 / 0.95
-/ 0.90 / 0.85 scores 173.0 / 187.0 / 182.0 / 180.5, so both directions lose and the shipped 0.95 is
-a maximum of the scan. Tightening does buy the exact tail cells Q2 predicts (Table 1 Panel B
-101-120 maximum 5.85% -> 8.86%) and pays for them with level cells (top 5 t-statistic 6.22 -> 7.29
-against 6.26). That is the same trade section 19.5 measured at 0.50 and 0.75, now with the curve
-either side of the shipped value.
-
-**Not shipped.** These are measurements, not a new setting: nothing in the engine, the cache or the
-score changed, and the check still reads 187.0 of 291. Table 7 and Table 4 are candidates for the
-diagnostic block that already holds Tables 5 Panel A and 8; that needs the long and short monthly
-series in the cohort cache (a format bump and a rebuild), so it is left as a separate change.
-
-## 33. The paper's Table 1 = Table 7 identity, and the convention that breaks it (2026-10-25)
-
-Table 7 prints the long and the short book of each portfolio, and Table 1 prints the portfolio.
-In the RFS text layer the two agree to the last digit in three of four columns and to 1 bp in the
-fourth:
-
-| | top 5 | top 20 | 101-120 | all |
+| class | terminal rows 1963-83 | 1984-2002 | rows with a delisting return | mean terminal return 1984-2002 |
 |---|---|---|---|---|
-| Table 7 long - short | 0.01245 - 0.00501 = 0.00744 | 0.01330 - 0.00435 = 0.00895 | 0.01458 - 0.00663 = 0.00795 | 0.01623 - 0.00908 = 0.00715 |
-| Table 1 Panel B | 0.00745 | 0.00895 | 0.00795 | 0.00715 |
+| `MER` (2xx merger) | 2,208 | 6,409 | 8,613 of 8,617 | +1.36% |
+| `GDR` (5xx for cause) | 1,591 | 5,963 | 4,816 of 7,554 | -9.06% (median 0) |
+| `GEX` (3xx exchange) | 231 | 536 | 767 of 767 | -0.36% |
+| `GLI` (liquidation) | 208 | 209 | 400 of 417 | -1.28% |
+| `LOS` | 0 | 3 | 0 of 3 | 0.00% |
 
-That identity is not a coincidence of rounding, and it pins down an implementation detail the text
-leaves implicit. A net return built by compounding the *difference* of the two daily leg returns
-cannot differ from the difference of the two compounded books by less than the legs' covariance
-term. Ours is worth four to five basis points a month: the shipped build reports 0.69% for the
-top 5 where its own two books differ by 0.73%, and 0.60% for "all" where they differ by 0.63%. For
-the identity to hold at 1 bp, the paper must compound each leg to a monthly return first (eq. 2 on
-the long book, eq. 2 on the short book, "the daily returns are compounded to obtain monthly
-returns") and subtract the two monthly returns.
+That inventory is why the reading below is the merger one: post-1983 the mergers are the largest
+class (6,409 rows), they always carry a delisting return, and that return is the only place where
+"the delisting return" and "the last available price" can differ for a class the paper never names.
 
-**What that costs.** The engine compounds the daily difference (`portfolio_daily` returns one
-series, `cohort_monthly` compounds it). Reading the paper's way - compound the long book and the
-short book separately, then subtract - was implemented behind a temporary switch and measured on a
-full 474-cohort rebuild: **184.0 of 291, three points below the shipped 187.0**.
+**A structural fact, checked before the build.** The seven Table 2 Panel B cells T09 was meant to
+reach are `composition_stats`: they are read from the pairs list and the label-day SIC and caps
+before any trading. On a 20-cohort stride sample the reading's `table2_panelB.csv` is byte-identical
+to the default's, and on the full 474-cohort run **both Table 2 panels are byte-identical**. No
+delisting payoff rule can move those cells.
 
-| | shipped (daily difference) | paper's way (monthly legs) | paper |
+**The reading (M1, new option `--delist-last-px merge`, default `off`).** A leg whose CRSP
+`delactiontype` is `MER` books a zero return on its terminal row, the last available price, instead
+of its delisting return; `GDR` (for cause), `GEX` and `GLI` keep the shipped treatment. Full
+474-cohort build into `.review/r10/A/m1/cache` (stamped `delist_last_px: merge`), scored
+`--aggregate-only` with the four side caches at their shipped versions and the 2005 factor vintage
+(`.private/m1/tables/replication_check.md`, the 2005-archives paragraph present once).
+
+**What it moves.** M1 reads **411.5 of 865** (+0.5: Table 1 50 / 14 / 24, Table 3 57 / 46 / 36,
+Table 7 33 / 21 / 82, Table 8 27 / 20 / 83), and every mark it moves is a marginal miss tipping over
+a 10% or 25% band: Table 1 Panel A's all-pairs median 0.65% -> 0.66% against the printed 0.73%
+(~ -> ✓, +0.5); Table 3 Financials' all-pairs median 0.64% -> 0.63% against 0.51%
+(✗ -> ~, +0.5); Table 3 Transportation's share of negative months 0.397 -> 0.395 against 0.44,
+a check tipping out (✓ -> ~, -0.5); Table 7's t of the long book on momentum (-1.63 against -1.48,
+✓ -> ~, -0.5); Table 8's post-1988 reversal mean -0.0789 -> -0.0781 against -0.0626 (✗ -> ~, +0.5).
+**Transportation's four level cells do not move** (top-5 mean 0.891%, t 5.27, median 0.93%; "all"
+t 3.99 -> 4.00), which is the point: the lever cannot reach the cells it was named for.
+
+**The whole class family, and a cross-check against the recorded `last_px` figure.**
+All three settings are built and scored, so the lever is closed at every point of it, not sampled:
+`merge` **411.5**, `nondistress` (mergers, exchange moves, liquidations) **412.0**
+(`.review/r10/A/nd/cache`, `.private/nd/tables/replication_check.md`) and `all` **412.0**
+(`.review/r10/A/allpx/cache`), against 411.0 for the shipped rule. The family therefore spans +0.5 to
++1.0 of 865: the for-cause (`GDR`) class is worth 0.0 net on the check (nondistress and all land on
+the same score), and the exchange/liquidation classes supply the other half point. Nothing in the
+family comes near a shippable move.
+The `all` build is also the rule TBD T19 recorded as `last_px`, and on a full build it reads
+**412.0** (`.private/allpx/tables/replication_check.md`, 2005-archives paragraph once), not the
+**412.5** that REVIEW_NOTES 83, `claims/CLAIM9_PRE1989.md` and `claims/NEAR_MISS_CENSUS.md` row 28
+carry. The difference is the measurement path, not the rule: the recorded figure came from
+`scripts/experiments/table3_sectors.py`'s assembled cache, whose `assemble_c9` docstring is exactly
+"A complete cohort cache with Table 1's and Table 3's employed rows replaced", so every other block
+stays the shipped one's, where a full build moves all of them. By block, the full build reads
+Table 1 50 / 14 / 24 (+0.5, exactly the recorded block), Table 3 58 / 45 / 36 (+0.5), Table 7
+33 / 21 / 82 (-0.5), Table 4 28 / 21 / 55 (-0.5), Table 5 Panel A 8 / 6 / 6 (+1.0) and Table 8
+unchanged: +1.0 net. The blocks the partial assembly left alone net 0.0, so they do not explain the
+residual half point; that one has to sit in the assembly's Table 3, whose sector books came from the
+claim-9 experiment's own ranking rather than the build's, and those fragments are not in this
+worktree. What can be stated is what was measured: `last_px` is +1.0 on an exact full build, and the
+412.5 is not reproducible here. The verdict is unchanged either way (above the baseline, far below
+anything shippable), but 412.5 should not be quoted as a full-build number. TBD T19, `CLAIM9_PRE1989.md` and `NEAR_MISS_CENSUS.md` row 28 are
+outside this contract's ownership and are left for the coordinator.
+
+**T09 closed as a measured negative.** M1 is +0.5 on 865, no printed sentence distinguishes a merger
+delisting from any other, and it cannot touch the seven cells it was named for: the paper's first
+clause, the delisting return, is confirmed against a measured alternative. Candidates closed without
+a build, with the reason: a pair held to the end of the window (contradicted by "we close the
+position in that pair"); a merged leg at the acquirer's terms (no such clause, and the data we hold
+carries `delret`, `deldtprc` and the payment type but no exchange ratio); the -100% long-leg extreme
+as a scored reading (it is footnote 4's robustness variant, already a shipped cache).
+
+**The option.** `--delist-last-px {off,merge,nondistress,all}` on `scripts/03_replicate.py`, default
+`off`, stamped into `cache_meta.json` only when set. The default path is unchanged: the baseline
+command re-run into `.private/base2` after the edit prints 411.0 with the 2005-archives paragraph
+once, its four tables are byte-identical to `.private/base`'s (`cmp`), and the check differs in one
+line only, the figure path it prints for its own out-root. No typed paper value, no mark rule, no
+threshold and no ceiling is touched.
+
+## 95. A definition audit of the 165 crosses outside the reversal and paper-side classes (2026-11-18): 411.0 -> 411.0 (investigation)
+
+Contract R10-B. The page is `claims/DEFINITION_AUDIT.md`; the pre-registration is
+`.review/r10/B/PREREG.md`, written before anything was scored. Nothing ships as a scored
+change: the score, the 865 ceiling, the mark rule, every typed paper value, the manifest and
+the shared caches are untouched, and the branch's default run is byte-identical to the base.
+
+**The question.** 365 cells are cross. Class C (the reversal factor, 145 crosses) and A (the
+paper's own arithmetic, 55) have their own arguments (section 11 of GAPS), and Table 6's draw
+construction is R10-D's. This contract asked whether the rest - F, D, G, B, E, H, 165 crosses
+- are misses of the *statistic*: do we compute what the caption names?
+
+**The answer: no. Every family's estimator is the paper's, and every definitional variant
+that could be argued is measured and loses or ties.** The misses are populations.
+
+**What was audited.** The check has 233 row families; **77 carry a cross outside A and C: 295
+cells worth 94.0 points** (all 165 such crosses). The page lists all 77, one row each, with
+(a) the caption or text that defines the row, quoted with its page, (b) the function and file
+that computes ours, (c) the choices the quote leaves open or fixes, and (d) the verdict. Ten
+groups share an estimator. Nothing was measured before `PREREG.md` was written; the `grep`s it
+records found the campaign had measured one of these questions on the 291-cell set (excess
+instead of absolute kurtosis, archive section 29, 177.0) and disclosed two more as readings
+(the percentile interpolation and the serial-correlation lag, archive section 30) without
+measuring them.
+
+**The measurements.** Five conventions, seven aggregate-only runs over the shipped caches
+(`.review/r10/B/run_variants.sh`), each scored by the check itself:
+
+| reading | option | score | cells that move |
 |---|---|---|---|
-| Table 1 Panel B mean, top 5 | 0.69% | 0.73% | 0.74% |
-| Table 1 Panel B mean, all | 0.60% | 0.63% | 0.71% |
-| Table 1 cells | ✓ 43 / ~ 22 / ✗ 23 = 54.0 | ✓ 46 / ~ 17 / ✗ 25 = 54.5 | |
-| Table 3 cells | ✓ 64 / ~ 39 / ✗ 36 = 83.5 | ✓ 58 / ~ 44 / ✗ 37 = 80.0 | |
+| base | none | 411.0 (322 / 178 / 365) | - |
+| percentile method: nearest rank (`lower`) | `--quantile-method lower` | 409.5 (320 / 179 / 366) | 3 |
+| percentile method: `midpoint` | `--quantile-method midpoint` | 410.0 (321 / 178 / 366) | 2 |
+| bias-corrected moments (spreadsheet SKEW/KURT) | `--moments sample` | 410.5 (321 / 179 / 365) | 1 |
+| "<= 0" instead of "< 0" | `--sign-zero nonpositive` | 411.0 | 0 |
+| arithmetic S&P 500 excess as the Ibbotson market leg | `--ibbotson-market excess` | 411.0 | 0 |
+| Newey-West with statsmodels' n/(n-k) | `--nw-correction df` | 411.0 | 0 |
 
-The faithful reading closes about a third of the mean gap in every Table 1 column and repairs the
-minimum cells it should (top 5 Panel A minimum -14.94% -> -13.11% against the paper's -10.57%,
-Panel B -15.29% -> -13.56% against -12.63%, both now within 25%) and one kurtosis cell (top 5
-Panel A 9.38 -> 7.61 against 7.81, now within 10%). It loses more elsewhere: the maximum cells fall
-further away (top 20 Panel A 10.23% -> 9.34% against 13.30%, 101-120 9.98% -> 8.05% against
-12.68%, two cells from ~ to ✗), two kurtosis cells go from ~ to ✗, and Table 3 as a whole gives up
-3.5 points because the sector portfolios' means are already at or above the paper's (Q6) and the
-faithful reading lifts them again.
+The percentile alternatives lose on the 1% row alone (which carries no cross at the base):
+var_1 at 101-120 goes -2.749% -> -3.067% and its t~ to ✗, "all" goes -2.170% -> -2.386% and
+its ✓ to ~, and `lower` also takes var_5 top 20 from ✓ to ~. The corrected kurtosis moves
+Table 9 B's top-5 cell from 5.90 (9.5% under the printed 5.39, ✓) to 5.936 (10.1% under, ~) -
+one cell, on a band edge. The `<= 0` boundary changes nothing because **no month of any
+portfolio's 474 is exactly zero**. The Newey-West factor moves each `nw_se` by 0.1057% and
+each t by 0.1055%, and no mark.
 
-**Where this leaves the score.** The shipped 187.0 therefore carries about three points of
-convention: it is the higher of the two readings, not the one the paper's own arithmetic implies.
-The deviation is invisible in the check header, which lists the other conventions that are "our
-reading of the paper, not its words" but not this one. Recording it is the point of this section;
-choosing between 187.0 with the convention stated and 184.0 on the paper's arithmetic is a
-decision for the replication's owner, because the two readings differ in which cells they match,
-not in how carefully they were measured. Shipping the faithful reading also means listing the
-convention in the generated header, bumping `CACHE_FORMAT`, re-pinning `rebuild_manifest.json`
-and adding a `SCORE_LOG.md` row, which is why it is not bundled into this documentation change.
+**The one textual finding, measured and immaterial.** Table 4's caption (p. 814) calls the
+three Ibbotson premia "monthly geometric difference" and says of the fourth only that "S&P 500
+returns are calculated in excess of Treasury bill returns"; we compute all four geometrically.
+The arithmetic leg differs from ours by -0.128 bp a month (13.3 bp in its largest month),
+has a standard deviation of 4.3859% against 4.3631%, correlates 0.9999977 with it, and moves
+no regression cell by more than 6.3e-4. It is disclosed here and available as
+`--ibbotson-market excess`; it is not flipped, because the shipped geometric leg is the one
+the other three factors share and no printed value identifies either.
 
-## 34. Table 2's decile-difference row: answered from the paper's prose, and a bug behind it (2026-10-25)
+**Two confirmations worth having.** The paper's "Observations with excess return < 0" row is
+pinned by its own text: "a portfolio of 20 pairs experienced 71 monthly periods with negative
+payoffs, compared to 124 months for a portfolio of 5 pairs" (p. 806), and 124/474 = 26.2% and
+71/474 = 15.0% are the printed 26% and 15% - so the denominator is the 474 months of the
+overlap-averaged series, which is ours. And the serial-correlation estimator is confirmed by a
+row nothing was fitted to: Table 4 prints the equity premium's serial correlation 0.05 beside
+our 0.0476, its Sharpe 0.09 beside 0.0905 and its standard deviation 4.509% beside 4.515%.
 
-Q4 has been parked since section 15 because a mean of integer decile gaps *among mixed pairs*
-cannot be below one, and the paper prints 0.97. The paper's own text settles it without any
-guessing: "About two-thirds of the pairs combine stocks from different size deciles (i.e., 'size
-mixed pairs'), and the stocks in mixed pairs differ on average by a single decile." So the row is
-the mean |decile difference| conditional on the pair being mixed, and 0.97 says that in the paper
-almost every mixed pair is exactly one CRSP size decile apart. The sub-one value is then just the
-handful of pairs their decile assignment put in the same bucket after the fact - not evidence of an
-exotic definition.
+**The code.** Five default-off options on `scripts/03_replicate.py` - `--moments`,
+`--quantile-method`, `--sign-zero`, `--nw-correction` and `--ibbotson-market` - reaching
+`src/project/evaluation.py`'s moment, percentile and sign helpers and `project.factors`'
+Ibbotson loader. With every option at its default the seven table CSVs of a fresh
+aggregate-only run are byte-identical to the pre-change baseline's (`.private/base2` against
+`.private/base`), and the check prints 411.0 with its "2005 archives" paragraph. The check's
+own generated text was deliberately not touched, so no other round-10 branch inherits a
+rebased `REPLICATION_CHECK.md`; this section and the claims page are the disclosure.
 
-Measured on our pairs, with the same CRSP breakpoints and the same deciles the neighbouring rows
-already match on (`avg_size_decile`, `weight_top3_deciles` and `weight_top5_deciles` are all within
-6%, so the decile variable itself is not in question):
+## 96. Table 7's market-beta gap is mostly the reversal factor's: the paper's own factor fits the four smallest books and +0.10 to +0.29 survives in the larger ones (2026-11-18): 411.0 -> 411.0 (investigation)
 
-| reading (conditional on mixed pairs) | top 5 | top 20 | 101-120 | all |
+Contract R10-C. The block: Table 7, 136 cells, 34 check / 20 tilde / 82 cross = 44.0 of 136, the
+largest cross block after Table 8. No cell moves. `claims/TABLE7_BETAS.md` carries the tables;
+`scripts/experiments/table7_betas.py` reproduces every number in one run off the shipped cache (474
+cohorts, 474 months 1963-07 to 2002-12, 2005 archives, nothing rebuilt). Baseline from this
+worktree: `.private/base` **411.0 of 865**, one "2005 archives" paragraph.
+
+**Has it been measured?** Searched `REVIEW_NOTES.md`, `REVIEW_NOTES_ARCHIVE.md`, `GAPS.md`,
+`TBD.md` and `claims/*.md` for `capm`, `three-factor`, `ff3`, `market beta`, `beta gap`,
+`without a reversal`, `no reversal`. The gap is stated in section 82 and `GAPS.md` section 11
+finding 5 (market betas 27%-77% above the print), but **no note had ever regressed a book without a
+reversal factor** - sections 51, 61, 73 and 82 all hold the five-factor frame fixed and move only the
+reversal column - so the CAPM / FF3 / FF3+momentum market beta of the eight books was unmeasured.
+New measurement, not re-scoring.
+
+**Pre-registration** (`$Q/.review/r10/C/PREREG.md`, before the first regression): the paper sentences
+quoted (pp. 804-805, 813, 820, 821), the five frames, the `theta` identity, the feasibility bound
+`|theta| <= s_R/s_M`, and the rule that the factor explains the gap iff the eight required `theta`
+agree and are feasible, the books iff they scatter by more than a factor of two or fall outside it.
+
+**What the decomposition says (reading 1).** With no reversal factor in the regression the gap is not
+there for the two smallest portfolios and is there for the larger ones: CAPM market betas 0.355 /
+0.360 / 0.404 / 0.390 / 0.656 / 0.614 / 1.137 / 1.025 (top-5 long and short, top-20 long and short,
+20 after top 100 long and short, all long and short) against printed 0.374 / 0.441 / 0.476 / 0.508 /
+0.485 / 0.562 / 0.586 / 0.731. Section 82's "27% to 77% above" is produced *inside* the five-factor
+frame: the four small-portfolio books carry negative reversal loadings and the scored reversal series
+has a market beta of +1.22, so the frame adds 0.09-0.10 to their market loading; with ST_Rev (market
+beta +0.18) the same four land at 0.514 / 0.533 / 0.565 / 0.558.
+
+**What the paper's own columns imply (reading 2a).** The variance identity
+`R2 sigma_y^2 = b' Sigma b` on Table 7's eight printed columns, four measured factors fixed and the
+reversal factor's five moments free, is 8 equations in 5 unknowns. It solves to `theta` = +0.724
+(implied reversal sd 0.0642, correlation with the market +0.509) with residuals of 2.7e-07, and the
+factor it requires **cannot exist**: the four known factors would have to span 1.595 of its variance
+(under printing rounding, 2000 draws: median 1.62, 2.8% feasible). Controls: our own eight measured
+columns through the same kernel return the losers-only series' moments exactly (`theta` +1.2172, sd
+0.06848, corr +0.8026, feasible), and Table 8's panels with the printed reversal SD fixed return
++1.268 / +0.723 against `paper_consistency.py`'s 0.950 / 0.790. So the paper's tables agree on the
+factor's market beta (about +0.72), and Table 7's columns want a factor their own four factors nearly
+span - `GAPS.md` section 11's dormant-factor finding, extended to Table 7.
+
+**What the gap requires (reading 2b, the contract's test).** The omitted-variable identity for a
+five-factor regression is
+
+    beta_CAPM = b_M + b_SMB beta(SMB|M) + b_HML beta(HML|M) + b_MOM beta(MOM|M) + b_r theta,
+
+so `theta = (beta_CAPM - b_M - sum_k b_k beta(F_k|M)) / b_r`, with the three `beta(F_k|M)` measured
+on the same months: SMB **+0.210**, HML **-0.282**, momentum **-0.047**. The required values are
+**+0.95 / +1.15 / +0.91 / +1.37 / +1.59 / +2.05 / +1.46 / +1.70** for the eight books (+0.83 / +0.76
+/ +1.20 / +1.24 for the four spreads): all positive, a scatter of 2.24, 1.26x to 2.83x the paper's
+own +0.724. **Two exceed the feasibility bound of 1.60** (the 20-after-top-100 short book at +2.05 and
+the all-pairs short book at +1.70); three exceed the 1.52 our own reversal sd implies. The best single
+`theta` is **+1.45**, which leaves 2.5% of the summed squared net gap, a residual sd of 0.042 and a
+worst residual of 0.080 - so one factor of about that strength is what the eight columns ask for, and
+the losers-only series we hold (+1.22) is close but a little weak.
+
+**What is left when the paper's own factor is applied (reading 2c).** At `theta` = +0.724 the residual
+market loading is **+0.035 / +0.024 / +0.018 / +0.015** in the four top-5 and top-20 books - the
+paper's factor reproduces those columns from our books to the edge of the five-decimal print -
+**+0.149 / +0.104** in 20 after top 100, and **+0.290 / +0.186** in the all-pairs book (spreads +0.011
+/ +0.003 / +0.045 / +0.103).
+
+**Verdict, by the pre-registered rule and stated plainly: mixed, and mostly the factor.** The eight
+values do not agree to within a factor of two and two are infeasible, so the books' market exposure is
+not fully explained either; but one factor (+1.45) carries 97.5% of the summed squared net gap, the
+paper's own +0.724 fits the four smallest books to 0.035, and the surviving book-level residual is
+confined to the 20-after-top-100 and all-pairs books (+0.10 to +0.29, `theta` +1.46 to +2.05). Two
+other readings of the same numbers, recorded because they keep the block's two halves together: the
+small books' market-loading gap and section 82's reversal-loading *sign* gap are the same fact seen
+twice (with the printed reversal loading +0.159 and `theta` +1.22, the top-5 long book would print
+0.330 against 0.374; it is our -0.094 loading, not the factor's market beta, that produces 0.619);
+and the residuals at the best single `theta` are all negative on the four small books (-0.080 / -0.017
+/ -0.051 / -0.002) and all positive on the four larger ones (+0.024 / +0.047 / +0.005 / +0.047), a
+systematic split rather than noise.
+
+**The construction catalogue (reading 3).** Five choices, each read against the text: eq. (2)-(3)'s
+value weighting (p. 805, the value-weighted ratio with buy-and-hold weights - shipped; equal-weighting
+across positions contradicts it); the long book as the sum of long legs against a per-pair return
+(p. 804's one dollar per leg and p. 805's two capital bases - **closed by the printed mean row**: the
+employed reading gives a top-5 long mean of 1.245% against the printed 1.245%, and the committed
+reading would print 0.62-0.77% at the measured fully-invested/committed ratios of 1.61-2.02); excess
+over the bill on what capital (**measured**: not subtracting it at all moves every loading by
++0.0052, the upper bound of that family); the empty month (**measured**: five cohort-months inside the
+sample, all in the top-5 books, worth -0.0002 in the loading and 0.2 bp in the mean); and how cohorts
+are combined (the Jegadeesh-Titman equal-weighted average, p. 805 - shipped; the weighted readings are
+section 76's). **No supported choice moves the loading by more than 0.005**, so the residual of reading
+2c is not reachable through any construction the paper leaves open either.
+
+**The defect in the first version of this section, recorded.** Commit `34b4aa6`'s readings 2b and 2c
+used `beta_CAPM = b_M + b_r theta` and dropped the three `b_k beta(F_k|M)` terms, and the first
+version concluded - wrongly - that the gap was book-level and that the required factor beta changed
+sign across the books. The coordinator's review caught it with a control: apply both formulas to **our
+own** eight books regressed on our own scored frame, where one factor produced every column and its
+market beta is therefore known to be +1.2172. The reversal-only formula returns 2.821 / 4.419 / 3.238 /
+2.633 / 2.152 / 1.746 / 1.352 / 2.200 - it rejects "one factor" on data where it is true by
+construction - while the full identity returns 1.2172 eight times. The sign argument was an artefact:
+the raw gaps do alternate in sign, but HML's market beta is -0.28 and Table 7's books load 0.26 to 0.53
+on it, so the missing term (-0.02 to -0.17) is as large as the gaps and flips them. Readings 1, 2a and
+3 never depended on the identity and are unchanged. The control is now
+`tests/test_table7_betas.py::test_the_corrected_identity_recovers_our_own_factor` (1e-6 on all eight
+books), beside a synthetic-world test in which eight columns from one factor must return that
+factor's one beta while the short cut does not.
+
+**What happens to the score and the ledger.** Nothing: 411.0 of 865 before and after, no option, no
+default, no threshold, no typed paper value and no mark rule touched, and the Table 1 = Table 7
+identity of section 33 is untouched because the books' own series are not. `TBD.md` T23 is rewritten:
+the Table 7 market loadings are *mostly* the reversal column's, a construction would have to be
+stronger in market beta than any series we hold, and the two largest books stay out of reach; T03 notes
+that the top-20 long book's market loading is consistent with the paper's factor (residual +0.018), so
+the loadings no longer argue against claim 16, which still fails on the level of the alpha.
+
+## 97. Table 6's random pairs: twelve construction choices, four of them measured, none shipped (2026-11-18): 411.0 -> 411.0 (investigation)
+
+Contract R10-D. Table 6's 48 cells (8 check / 10 tilde / 30 cross = 13.0, `SCORE_LOG.md` row 28)
+compare our own 200-replication random-pair bootstrap with the paper's printed statistics. `TBD.md`
+T21 called the remaining room "+0.5 at most" and said in the same sentence that the number was a
+guess. This section replaces the guess with a measurement and closes the construction space:
+`claims/TABLE6_CONSTRUCTION.md` quotes every sentence the paper gives about the bootstrap - section
+3.6 (p. 818), the Table 6 caption (p. 819), and the further passages elsewhere that fix conventions
+the bootstrap section does not repeat (the sample screen, p. 803; the delisting close, p. 804; the
+capital basis and eqs. (2)-(3), p. 807) - lists the twelve construction choices those words leave
+open, and records for each what `scripts/claims/table6_random_pairs.py` does and whether it had
+already been measured.
+
+**The choice table, closed.** Five choices are fixed by a quoted sentence: the opening trigger is
+the true pair's ("when the stocks in the true pair diverge by two historical standard deviations",
+p. 819); the close is the next crossing (p. 819); a delisted leg closes the position at the
+delisting return or the last available price (p. 804), which is what `--close true` does; the
+committed basis scales the payoffs by the pairs selected (p. 807), which is the book-share reading
+shipped in row 28; and the weighting is eqs. (2)-(3) (p. 807), the engine's books, which `--mode
+control` reproduces exactly. Four had been measured (the decile population, the breakpoints, the
+decile month, the within-decile draw: `REVIEW_NOTES` 69 and 75, `claims/TABLE6_READINGS.md`), one
+is measured and neutral (the replication average), and two are stated in the caption (the columns
+and the two waits). One had never been tried: whether each drawn leg comes from its own true
+stock's decile, as "we replace the actual stocks" says (p. 818), or both from one decile, as the
+caption's singular "within the same last-month performance decile" can be read (p. 819). 72-87% of
+true pairs have their two legs in different deciles, so the two readings are not close.
+
+**The four runs.** All 474 cohorts, seed 20060101, 200 replications, `--committed-capital
+book-share` (the shipped Table 6 basis), scored with the driver's own `_mark` by the revived
+`scripts/claims/t6_score.py` against `PAPER_TABLE6`; on the shipped cache the scorer prints 13.0
+(8 / 10 / 30) and the implied 411.0, which is its control.
+
+| reading | option | block | check / tilde / cross | implied 865 |
 |---|---|---|---|---|
-| ours, mean absolute gap | 1.66 | 1.68 | 2.33 | 2.67 |
-| ours, share of mixed pairs one decile apart | 50% | 53% | 39% | 33% |
-| ours, deciles recomputed inside each sector | 2.43 | 2.44 | 2.58 | 2.58 |
-| paper, mean absolute gap | 0.97 | 0.97 | 0.97 | 0.98 |
+| shipped control | all defaults | 13.0 | 8 / 10 / 30 | 411.0 |
+| the caption's decile month: the 21 trading days before the open | `--prior-month trading` | 13.0 | 6 / 14 / 28 | 411.0 |
+| the panel decile population | `--pool panel` | 14.0 | 13 / 2 / 33 | 412.0 |
+| one decile per pair, the long leg's | `--pair-decile long` | 14.0 | 10 / 8 / 30 | 412.0 |
+| one decile per pair, the short leg's | `--pair-decile short` | 12.0 | 8 / 8 / 32 | 410.0 |
 
-Two conclusions. First, the row is a composition fact about our pair pool, not a formula we failed
-to guess: our mixed pairs are as likely to be two, three or four deciles apart as one, while the
-paper's are almost always neighbours. That is the same population difference Q2 and Q5 keep
-turning up, now measured in a place where the paper prints a single number. Second, the row is
-mislabelled in the build: `composition_stats` sets `avg_decile_diff_mixed_pairs` to
-`diff[ok].mean()` - the mean over *every* pair - exactly like the `avg_decile_diff_all_pairs` key
-beside it, so two differently named statistics carry the same number. SCORE_LOG row 6 shows the
-all-pairs average was a deliberate choice ("Panel B decile-difference row reports the all-pairs
-average", 165.0), taken when the paper's value looked unreachable, so what is wrong is the label
-and the duplicated key, not the arithmetic. The all-pairs mean is 1.12 / 1.22 / 1.61 / 2.15 (what
-the check shows); the quantity the paper labels is 1.66 / 1.68 / 2.33 / 2.67. Reporting the
-paper's quantity instead would move the top 5 cell from ~ to ✗, i.e. cost half a point.
+**What the four say.** The block is won and lost on dispersion and missed on levels: the shipped
+run's 30 crosses are 15 mean cells, 12 median cells and 3 standard-deviation cells. R-A (panel
+population) buys 11 dispersion marks and loses every level cell - all 16 mean cells and all 16
+median cells become crosses, and the fully invested mean doubles (-0.4125% against -0.2033% on the
+top 5, -0.7081% against -0.3397% on all 120, against the paper's -0.137% and -0.113%). R-C (one
+decile per pair) moves four cells inside the tolerance and the level slightly out (-0.2246% and
+-0.3840%). R-B (the caption's own decile month) is the only reading that improves the level
+(-0.1514% and -0.2772%) and it scores exactly nothing, because the tighter 21-day ranking also
+shrinks three committed standard deviations that were checks. R-D is the braces on R-C: the same reading
+from the short leg's decile scores 12.0, two median cells below the shipped run, so the one-decile
+reading moves the block a point either way depending on the decile and leaves the level worse.
 
-The other Panel B rows in the same cohort run: `share_mixed_decile_pairs` 0.714 / 0.696 / 0.746 /
-0.814 against the paper's 0.66 / 0.69 / 0.75 / 0.82 (the top 5 is the one that is off, 8% high),
-consistent with a pool that mixes size more than the paper's.
+**T21's real remaining room.** +1.0 of 48, i.e. 411.0 -> 412.0, and only through readings whose
+central quantity gets worse; 0.0 through readings the text supports, and the same class of
+unsupported convention can lose a point as easily (R-D, 410.0). The "+0.5 at most" was generous
+rather than conservative.
 
-## 35. Table 7 joins the scored set: 187.0 of 291 -> 213.5 of 323 (2026-10-25)
+**The two mechanisms the caption leaves open are both excluded.** The cross-decile tilt (`long
+the laggard decile, short the winner decile`) is not the source of the loss: removing it makes the
+level worse. The drawn-leg exits touch 2.7% of positions (1.68% of random positions close early at
+a delisting or a last available row, 0.99% are dropped for a leg with no price at the open, over
+948 cohort-waits and 200 replications), and D3 (`--complete-legs`) already measured the reading
+that removes them from the draw at 13.0 of 48. What is left is a level difference between our
+uniform draw and the paper's unpublished draw, which is class I in `GAPS.md` section 2.
 
-Section 32 measured Table 7 from outside the driver. This ships it: the cohort cache now stores
-each portfolio's two books (the `long_book` and `short_book` capitals, `CACHE_FORMAT` 5, written
-by `portfolio_legs` in `src/project/evaluation.py`), `table7.csv` summarises them, and the check
-prints them under "Table 7 (long and short books, one-day wait)" as **scored** cells. The rows are
-the four the paper prints for each book: mean monthly return, Newey-West standard error, standard
-deviation and monthly serial correlation, for the four portfolios - 32 cells.
+**What ships.** Nothing. `scripts/claims/table6_random_pairs.py` gains `--pair-decile
+own|long|short` (default `own`, stamped, and `--mode control` with the new option untouched prints
+`max_diff_shipped` 0.0 over 948 cohort-waits and 5,688 cells), `scripts/claims/t6_draws.py` carries the same choice for
+the near/complete draws, and `scripts/claims/t6_score.py` (revived from the retired one-off at
+2f92de8) is committed so that a draw reading can be scored against the 48 cells without writing a
+new harness. The scored default, the typed paper values, the mark rule and the 865 ceiling are
+untouched.
 
-| | top 5 | top 20 | 101-120 | all |
+## 98. The large books' excess market exposure is the loose-pair tail's, and no universe reading the paper's words support removes it (2026-11-18): 411.0 -> 411.0 (investigation)
+
+Contract R11-A. The lead: R10-C (section 96) applied the full omitted-variable identity to
+Table 7 and left a book-level residual the reversal factor cannot carry - +0.10 to +0.15 in
+20-after-top-100, +0.19 to +0.29 in all pairs, against +0.015 to +0.035 in the four smallest
+books - with one hypothesis: the difference is upstream, in which pairs the formation selects.
+`claims/LARGE_BOOK_BETA.md` carries the tables; `scripts/experiments/large_book_beta.py`
+reproduces every number in one run off the shipped cache (474 cohorts, 474 months 1963-07 to
+2002-12, 2005 archives, nothing rebuilt). Baseline from this worktree: `.private/base`
+**411.0 of 865**, one "2005 archives" paragraph.
+
+**Has it been measured?** Searched `REVIEW_NOTES.md`, `REVIEW_NOTES_ARCHIVE.md`, `GAPS.md`,
+`TBD.md` and `claims/*.md` for `all-pairs`, `all pairs`, `market beta`, `share-classes`,
+`universe count`, `2057`, `Nasdaq`, `exchange`. What exists: section 81 and `S7_SUPPORT.md` on
+the share-class universe (score on all 865, Table 7 +4.5); sections 83/85/87 on the universe
+count and the pair count (2,008.9 against 2,057, -2.3%, on 865); `GAPS.md` section 4 on the
+late-sample exchange composition (formation profile and returns, not betas); `TBD.md` T12 (the
+era split, untestable against a print with no era split) and T16 (S7, withdrawn). **No note had
+ever measured a book's market beta by exchange, by size decile or by rank band**: sections 51,
+61, 73, 82 and 96 all hold the portfolio fixed and move the factor or the construction. New
+measurement, not re-scoring.
+
+**Pre-registration** (`$Q/.review/r11/A/PREREG.md`, before the first build): the paper's screen
+sentence (p. 803) quoted, the two quantities to be measured (the printed counts, the 729
+main-cache cells), the four book residuals, and the ship rule - the residual must move toward
+zero **and** the printed counts must be kept or improved - plus the prediction that the literal
+screen cannot touch a residual present in both halves.
+
+**The measurement is exact.** `large_book_beta.py` rebuilds each open position's daily leg
+payoffs and values from the CRSP daily panel with the engine's own conventions (eq. 2's
+`sum dL / sum L`; the shipped `--short-weights position` rule `sum Q_t r_t / sum Q_t`,
+`Q_t = max(Q_{t-1}(1 - r_{t-1}), 0)`) and masks positions into sub-books. `--verify` reproduces
+the cached `monthly.parquet` book rows for 24 cohorts and all six trading months each to
+**6.7e-16**, and the rank slices reproduce every number of section 96's decomposition (0.355 /
+0.404 / 0.656 / 1.137 long, 0.360 / 0.390 / 0.614 / 1.025 short). It also caught its own first
+defect: the window ended at the fifth trading month (`MonthEnd(5)`), which the verify check
+showed as a missing sixth month; the corrected run matches on six. `tests/test_large_book_beta.py` pins the
+three claims - cache equality to 1e-12 on five cohorts (the late ones exercise the short
+weight's zero floor), the rank bands against Table 7's own portfolios, and the contributions
+summing to the book's return - beside the six-month window and the era splits.
+
+**Where the excess sits: the loose-pair tail.** CAPM market loading, in excess of the bill, by
+rank band inside "all" (long book; the short book tracks it): **1-5 0.355, 1-20 0.404, 1-120
+0.534, 21-120 0.558, 101-120 0.656, 121-500 0.863, 501+ 1.276, all 1.137**. Contributions -
+each band's daily payoff per dollar of the whole book, which sum exactly to the book's beta -
+are **0.001 / 0.005 / 0.044 / 0.038 / 0.009 / 0.223 / 0.857** against 2.6% / 1.0% / 6.3% / 5.3%
+/ 1.1% / 20.3% / **73.3%** of the book's value-days and 9,075 / 36,039 / 220,329 / 184,291 /
+37,700 / 717,314 / **2,634,191** position-months. So ranks 501+ are three quarters of the book
+and 76% of its market exposure, while the top 120 pairs carry 4% of the beta and sit below the
+beta the paper's printed loadings imply for the all-pairs book (0.534 against 0.848; the top-20
+book is 0.404 against the 0.385 its own printed loadings imply, so it sits 0.019 above rather
+than below).
+
+**By exchange** (read on the label day; Nasdaq has 348 months because CRSP carries no Nasdaq
+names in the first cohorts): long NYSE **1.049** (54.7% of value, 0.597 of the beta), AMEX
+**1.350** (5.5%, 0.099), Nasdaq **1.199** (39.8%, 0.427); short 0.958 / 1.218 / 1.080. No
+exchange carries the excess - every slice is above 1.0 on its own and every contribution is
+close to its value share.
+
+**By size** (CRSP deciles at formation, 1 = largest): long **0.989 / 1.067 / 1.115 / 1.138 /
+1.204 / 1.232 / 1.265 / 1.279 / 1.308 / 1.261** by decile, contributions 0.144 to 0.056 against
+value shares 13.8% to 5.8%. The gradient is real and small; the level is the problem - the
+largest decile alone is 0.989 against the paper's implied 0.848 for the whole book. Our all-pairs
+book's size mix (37.5% of value in the top three deciles) is also the paper's (0.40, Table 2
+Panel B), so composition is not available as an explanation.
+
+**By era** (Table 8's halves): the all-pairs book is **1.164 before 1989 and 1.089 after 1988**
+(short 1.064 / 0.947), and the tail is 1.308 / 1.218 with 71% / 87% of the book's exposure, so
+the residual is neither a pre-1989 nor a pre-1983-Nasdaq artefact. Through Table 8's own printed
+columns, with the panel's printed factor SDs and the identity, `theta` is +1.227 / +0.819 and
+the **All spread's** residual is **+0.034 / +0.007** (with the measured SDs, +0.082 / +0.047; at
+section 96's full-sample covariance, +1.268 / +0.723). **The spread matches the print; the books
+do not.** The excess is a common long-and-short exposure that cancels in the long-minus-short
+series: it is why Table 8's All column lands within 0.034 / 0.007 of the print while Table 7's
+book rows miss by 0.10 to 0.29, and the spread blocks are not where this defect shows. Table 8 Panel A's
+regressions are class A (`GAPS.md` section 11), so the pre-1989 comparison is weak evidence
+whatever it returns; Panel B is not class A and its All-column residual is +0.007.
+
+**The 101-120 book inside itself** (section 5b): its own exchange slices are NYSE 0.665 on 80.3%
+of the book (contribution 0.506), Nasdaq 0.549 (18.1%, 0.124) and AMEX 0.476 (1.6%, 0.011), and
+its size slices put the *largest* decile at the top (0.692 on 30.6% of the value) rather than the
+smallest - so this book's residual is not a small-cap or a Nasdaq effect either, and the
+contributions close on its own 0.656 (0.641 arithmetic). Short book: NYSE 0.626, Nasdaq 0.500,
+AMEX 0.459.
+
+**The universe variants already built, read without a rebuild.** `table7_betas.py --cache-root`
+on every 474-cohort side cache carrying format-7 book rows. At the paper's `theta` = +0.724, the
+four large-book residuals: shipped **0.656 (+0.149) / 0.614 (+0.104) / 1.137 (+0.289) / 1.025
+(+0.186)**; `wide_main` 0.624 (+0.117) / 0.583 (+0.073) / 1.124 (+0.277) / 1.013 (+0.174);
+`wide_delist100` and `wide_no_leak` the same to 0.005; the three delisting readings (`allpx`,
+`r10/A/nd` non-distress, `r10/A/m1` merged) identical to the shipped; `wide_top3` 0.812 (+0.305)
+/ 0.742 (+0.232) / 1.032 (+0.184) / 0.944 (+0.105); and the paper's own size screen with the
+shipped share classes (`vol_common_top3`, two independent builds agreeing, with the
+`claims-t9a/t9a/ctl` control reading the shipped numbers back exactly) 0.827 (+0.320) / 0.760
+(+0.250) / 1.037 (+0.189) / 0.950 (+0.111) and top-5/top-20 +0.088 / +0.061 against +0.035 /
++0.018. The share-class universe - the widest our data allows - moves the residual by **0.012 to
+0.032**, an order of magnitude short; the size screen cuts the all-pairs pair but makes three of
+the four books worse, and is Table 9 Panel A's robustness universe.
+
+**The pre-registered reading: the no-trade screen, read literally.** The paper's sentence
+(p. 803) is the extreme of our share rule (`--max-stale-share 0.95` drops a stock only when
+**more than 95%** of its formation days are near-frozen), so the reading is `--max-stale-share
+0.0`. Built in scratch (474 cohorts, 124 s at six workers, format 7):
+
+| | shipped | literal screen | printed |
+|---|---|---|---|
+| mean stocks per cohort | 2,293.1 | 1,847.5 (-19.4%) | 2,317 |
+| mean pairs per cohort | 2,008.9 | 1,607.1 (-21.9%) | 2,057 |
+| full check | **411.0 of 865** | **365.0 of 865** | |
+| the 729 main-cache cells | 350.0 | 304.0 (-46.0) | |
+| 101-120 long / short residual | +0.149 / +0.104 | **+0.225 / +0.168** | |
+| all long / short residual | +0.289 / +0.186 | **+0.311 / +0.212** | |
+
+Both runs print the "2005 archives" paragraph. The screen bites only where CRSP carries no
+volume field: measured on four formation windows, the 1974-75 universe falls 2,661 -> 911
+(-66%) at 0.0 while 1984-85, 1994-95 and 2000-01 are unchanged at every setting from 0.95 to
+0.0. **Verdict: closed** - both pre-registered conditions fail, the counts by 19-22% and the
+residuals by 0.02 to 0.08 in the wrong direction, and the reason is structural: a pre-1983-only
+screen cannot touch a residual that is 1.089 in the post-1988 half.
+
+**What happens to the score and the ledger.** Nothing: 411.0 of 865 before and after, no option,
+no default, no threshold, no typed paper value and no mark rule touched, every check printing
+its "2005 archives" paragraph. `TBD.md` T03 and T23 get one line each. The 729-cell comparison is
+the like-for-like one - the 136 side-cache cells were not rebuilt for the strict universe and are
+excluded there; the 365.0 line is reported beside it and mixes those three blocks, which is why
+it is not used for any verdict.
+
+## 99. Class A audited independently: the write-off's reason is retracted by the page that states it (2026-11-18): 411.0 -> 411.0 (audit)
+
+Contract R11-B. No cell moves and no option ships: the work is
+`scripts/experiments/class_a_audit.py`, `claims/CLASS_A_AUDIT.md`, the machine record
+`analysis/class_a_audit.json`, this section, one line in TBD T29, and `tests/test_class_a_audit.py`.
+The baseline was reproduced first from this worktree (411.0 of 865, one "2005 archives" paragraph),
+and the script was written without opening `scripts/paper_consistency.py` or its JSON; those were
+read only after its own numbers were fixed, so the comparison in the claims page is a comparison and
+not a copy.
+
+**What had already been measured.** The arithmetic had been, and this contract's page records it
+rather than repeating it as new: section 52 (archived) records Panel A's required correlations of
+-0.91 to -0.95, the 98.2 % rounding agreement, and the caveat that Panel B's joint demand comes from
+two columns whose reversal loadings are statistically zero; section 61 scored the reversal factor
+the paper's Table 8 implies; section 16 and section 34 measured the decile row twice; GAPS section
+11 findings 1-5 and TBD T29 carry the rest. What none of them recorded is the span of the series the
+check actually scores, or the feasibility as a band of reversal variances.
+
+**The cell list, reproduced.** 69 cells, 5 / 9 / 55 = 9.5: Table 8's pre-1989 block (28 coefficient
+cells), its 24 t-statistics, its post-1988 101-120 column (7) with its 6 t-statistics, and Table 2
+Panel B's decile row (4). The typed paper values were cross-checked against the PDF text layer by
+printing: 130 Table 8 numbers and the Table 2 decile row, **no mismatches**, so there is no
+transcription typo to report. (The layer writes a minus sign as `7`: `70.43395` is `-0.43395`.)
+
+**Finding 1 is not an identity violation, and GAPS section 11 says so.** The four printed
+FF/momentum loadings carry 1.53 / 1.46 / 1.33 / 2.60 times the dependent variable's own variance,
+and the correlation each column needs with the four-factor fit is 0.952 / 0.947 / 0.931 / 0.912 --
+every one inside [-1, 1], so **every column is feasible alone**. The cross term is free to be
+negative; the multiple above one is a diagnostic, not a bound. Section 11 records exactly this
+correction ("the earlier version of this document was wrong to call it one"), yet section 2's
+class-A row and T29 both kept the retracted form of the argument until this round; both now point
+here. That is the finding.
+
+**The joint test, and the band.** One reversal series with a covariance vector `c` and a variance
+`v` must satisfy four variance identities. With `v` at the printed 0.07228 that is a 4x4 linear
+system, exactly identified: least-squares residual 0, rank 4, condition number 103. Feasibility is
+positive semidefiniteness of the 5x5 covariance, and the implied factor's `R2` on the four is
+**0.943** under the measured covariance and 0.943 under the covariance rescaled to the printed
+factor SDs, so neither `Sigma` choice changes the verdict. Leaving `v` free makes `c` affine in `v`,
+so the feasible reversal variances form the interval **[0.0608, 0.0815]**, which contains the
+printed 0.07228: the panel is feasible for a band of factors, not at one knife-edge point.
+Perturbing every input within half a unit of its last printed digit gives 99.6 % of 10000 draws
+feasible (1st / 50th / 99th percentile 0.928 / 0.946 / 0.992).
+
+**The series we hold is the factor the panel implies.** The scored reversal series -- the
+equal-weighted bottom three prior-month deciles, whose standard deviation the check prints as
+0.06852 -- has covariance `|c|` 3.5 % short of the required vector with a **cosine of 0.999**, an
+`s_r` inside the feasible band, and a span of **0.949** against the required 0.943. French's
+`ST_Rev`, which section 11 contrasts the required 95 % with, spans 0.259 -- and `ST_Rev` is not the
+scored series. Re-running the printed loadings' own variance identity with the scored series'
+moments gives `R2` of 0.13 / 0.15 / 0.18 / 0.50 against the printed 0.19 / 0.23 / 0.26 / 0.70: a
+3.5 % shortfall in `|c|` is worth 0.20 of `R2` on the "all" column through the near-cancellation.
+So the cells are a construction target -- a losers-only portfolio about 3.5 % more co-moving with
+the four factors -- not a paper-side wall.
+
+**The other three premises.** Panel B's 101-120 column **fails no identity check**: its four
+loadings carry 0.15 of the variance against the printed `R2` of 0.19, it needs `|rho| = 0.36`, and
+the whole Panel B joint test is feasible (0.806 on our covariance, 0.784 rescaled; condition number
+9.3). The mean identity agrees with it as it does for Panel A (Panel B premium 2.596 / 2.564 / 2.656
+/ 2.602 % a month, spread 0.09 pp; Panel A 2.181 / 2.182 / 2.184 / 2.185 %, spread 0.004 pp).
+Table 2 Panel B's decile row is not portfolio-invariant in the sense of a constraint -- a constant
+row is a description -- and it carries a sharper fact: a mean gap between *mixed* pairs cannot be
+below one, so the printed 0.97 requires same-decile pairs contributing zeros to a mixed average.
+REVIEW_NOTES 34 already established that our 1.67 / 1.74 / 2.17 / 2.64 against 0.97 is a population
+fact about the pair pool (Q2 and Q5), not a formula we failed to guess. Of the 30 t-statistics, the
+standard error each implies (`coef / t`) is matched by our own six-lag Newey-West standard error to
+within a factor of 1.8 in every cell, and **three t-statistics out-mark their own coefficient**
+(`pre_hml` all at 2.8 % against a cross, `pre_smb` top 20 and `pre_market` all at 24 % against
+crosses): a t is reached by a noisier series, not a better one.
+
+**The comparison with `paper_consistency.py`, and what it traced.** Its numbers reproduce except
+for three items, all traced. (1) Its Panel A joint `R2` of **0.950** is computed from
+`scripts/paper_cells.json`'s three-significant-figure loadings (`-0.434` for the printed `-0.43395`);
+feeding those values back reproduces 0.9509 exactly, while the printed five-decimal transcriptions
+give 0.9434 -- so GAPS section 11's headline is 0.007 high for a reason no reader can see, and the
+verdict is unchanged. (2) Its rounding band perturbs each loading within half a unit of its *third
+significant figure*, ~30x wider than the paper's five printed decimals, which is why 98.2 % of its
+draws are feasible with the 99th percentile at 1.006; at the printed precision the per-column test
+survives 100 % and the joint test 99.6 %. (3) It reads factors at the module default vintage
+(`current`), so its implied reversal premiums are 2.188 / 2.187 / 2.185 / 2.189 and 2.693 / 2.654 /
+2.617 / 2.652 against the 2005 archives' 2.181 / 2.182 / 2.184 / 2.185 and 2.596 / 2.564 / 2.656 /
+2.602; the within-panel agreement it claims is unaffected. And it never measures the span of the
+series the check actually scores.
+
+**Verdict per group.** All five groups are **"unreachable, but for a different reason than GAPS
+states"** -- not one of them is paper-side unreachable, which is what this audit set out to test. The
+two coefficient groups, Panel A's 28 and Panel B's 7, are the construction lead: a losers-only series
+about 3.5 % more co-moving with the four factors. The 30 t-statistics follow their coefficients
+rather than adding a constraint of their own: 1 of Panel A's 24 is within 10 % of its printed t and 5
+of 24 within 25 %, and **three out-mark their own coefficient** (`pre_hml` all at 2.8 %, `pre_smb` top
+20 and `pre_market` all at 24 %), which is a fact about the standard errors and not a reading that
+reaches the cells; the six Panel B cells are 0 of 6 within 10 % and 0 of 6 within 25 % today, with
+the same matched precision (our Newey-West SE / the printed implied SE, 0.62 to 1.59). No group is
+called reachable in this section. No cell is re-marked, no class assignment changes, and no option is
+added.
+
+## 100. What each shipped convention is worth on all 865 cells (2026-11-18): 411.0 -> 411.0 (investigation)
+
+Contract R11-C. No default changes, no SCORE_LOG edit, no cell moved: this section, the page
+`report/replication/claims/CONVENTIONS_865.md` and the driver `scripts/experiments/conventions_865.py`.
+The base is the shipped check at `ab5c166`, **411.0 of 865** (322 / 178 / 365), reproduced before any
+build.
+
+**Why it exists.** The check header calls a list of conventions "our reading of the paper, not its
+words" and points the reader to "SCORE_LOG.md [for] the score without them". Most of those numbers were
+taken when the check had 291, 323 or 481 cells; the check has 865. This contract prices every convention
+the header names, on one base, with one build each and the four side caches held at their shipped
+caches, so a reader sees the current cost of each reading.
+
+**What a price cannot do.** Nothing here ships, unships, adds or drops a convention. Ship rule 3
+anchors each one to text or to support that is not the score; a price read off the check cannot make a
+convention, and two of the three readings that gain most on 865 cells (the near-frozen filter and the
+short weight) were shipped while they lost or barely won, on support the score never entered. That is
+the disclosure, not a licence.
+
+| # | shipped setting / alternative | anchor (quote with page, or note) | last recorded "without" (cells) | 865 now | delta | blocks that move |
+|---|---|---|---|---|---|---|
+| 1 | same issuer excluded / `--same-issuer allow` | p. 803 names only "one or more days with no trade"; support 18 | 404.5 (865, 76); 163.0 (291, 18) | 410.0 | -1.0 | 1 -4.0, 2A +0.5, 2B +2.0, 3 -2.5, 4 -5.5, 5A -1.5, 5B -0.5, 7 +6.5, 8 +3.5, text +0.5 |
+| 2 | near-frozen quotes dropped at 95% / `--max-stale-share none` | p. 803's screen; support `GAPS.md` section 9: printed top-20 size decile 2.71 and the 1999 draft's 0.0399 top-5 trigger (the printed pair count does not discriminate, below) | no 865 number for `none`; 396.0 / 389.0 at 0.90 / 0.99 (865, 76); 158.5 (291, 18) | 390.5 | -20.5 | 1 -7.5, 2A +1.0, 2B -2.0, 3 +1.0, 4 -5.0, 5A -5.5, 5B -1.5, 7 +1.0, 8 -2.0 |
+| 3 | telephone SIC 4811 / `--telephone-sic 481x` | paper gives no SIC range (p. 802); support 20 (CRSP's 1972 code) | 401.5 (865, 76); 169.5 (291, 20) | 406.5 | -4.5 | 2B -0.5, 3 -4.0 |
+| 4 | waste management 4950-4959 Industrials / `--waste-sic utilities` | classification only, GICS; 24 | 404.0 (865, 76); 178.5 (291, 24) | 409.0 | -2.0 | 3 -2.0 |
+| 5 | trigger sigma = RMS about zero / `--trigger-sigma std` | p. 804's "two historical standard deviations", direction unstated; support 21 (the draft's 0.0399 trigger) | 405.5 (865, 76); 172.0 (291, 21) | 406.5 | -4.5 | 2A -1.0, 3 -2.0, 4 -3.5, 5A +2.0, 7 -0.5, 8 +0.5 |
+| 6 | trading prices continue the formation index / `--normalization rebased` | Figure 1, p. 804: both paths continue from the formation levels | 342.5 (865, 76); 143.5 (291, 20) | 346.0 | -65.0 | F4 -0.5, 1 -12.5, 2A -2.0, 3 -28.0, 4 -8.0, 5A -2.0, 5B -11.5, 7 +1.5, 8 -2.0 |
+| 7 | a short weights at its own return, eq. (3) / `--short-weights value` | eq. (3), p. 805, "the simple interpretation of a buy-and-hold strategy"; support 29 (Table 5 B daily "all", Table 7 short book) | 389.5 (865, 76); 183.5 (323, 76) | 390.0 | -21.0 | 1 +2.5, 3 -10.0, 4 -6.5, 5A -1.0, 5B -5.0, 7 +0.5, 8 -2.0, text +0.5 |
+| 8 | fully invested on the value-weighted books / `--capital-base count` | p. 805's committed / fully invested sentence; support 25 and 29 (the printed ratios) | 397.5 (865, `NEAR_MISS_CENSUS.md` 2); 184.5 (291, 25) | 395.0 | -16.0 | 1 +3.5, 3 -9.5, 4 -9.0, 5A -1.0, 8 -0.5, text +0.5 |
+| 9 | the same-issuer rule, the near-frozen filter and the RMS sigma, off together | not a convention: the joint price of 1, 2 and 5 (two of the header's three exclusions, plus the sigma) | not measured before | 417.5 | **+6.5** | 1 -1.0, 2A -2.0, 2B -2.0, 3 +1.0, 4 -1.0, 5A -1.0, 7 +5.5, 8 +6.0, text +1.0 |
+
+The blocks are the report's own: 1 = Table 1, 3 = Table 3, 5A = Table 5 Panel A, and so on. Marks that
+move between the two runs, out of 865: 101, 130, 14, 12, 56, 243, 141, 135 and 159. Every check prints
+exactly one "2005 archives" paragraph. `claims/CONVENTIONS_865.md` carries the anchors in full, the code
+reading of which option can reach which block, and the side-cache rule below.
+
+**Where the prior numbers came from.** `SCORE_LOG.md` rows 6-13 hold the 291-cell scores, `REVIEW_NOTES`
+76 the 865-cell re-score of six of the eight (same issuer 404.5, telephone 401.5, waste 404.0, sigma
+405.5, rebased 342.5, short 389.5), and `NEAR_MISS_CENSUS.md` 2 the capital bases (count 397.5). The
+one convention with **no 865-cell price** was the near-frozen filter's disabling value: section 76
+priced 0.90 and 0.99, and the on/off comparison exists only on 291 cells (section 18), which is why
+this row needed a build. `TBD.md` already carries three: T14 (same issuer, "narrowed, kept", last line
+404.5), and its closing paragraph puts the stale-share limit, the fully-invested denominator and the
+alternative eq. (3) weights on `GAPS.md` section 8's closed list.
+
+**One ledger line row 9 contradicts.** T22 records the combination library as measured, "none left ...
+a fourth would have to pair readings whose signatures do not overlap, of which none remain". The three
+readings of row 9 are the *same* signature -- each moves which pairs form -- and pairing them is worth
+32.5 points of interaction against their additive prediction. Proposed T22 status, not applied here:
+"measured; C1-C3 lose and the same-issuer rule, the near-frozen filter and the RMS sigma off together
+gain 6.5 over the shipped check (417.5, from an additive prediction of 385.0), disclosed in section 100
+and not adopted; the overlap between formation-stage readings is the exploitable part." It is recorded
+rather than used because ship rule 3 forbids it.
+
+**Sign change 1: the near-frozen-quote filter now earns its keep.** Sections 18 and `GAPS.md` section 9
+record this filter as a convention that *costs* the check -- the >95% screen alone read 158.5 against a
+164.0 baseline on the 291 cells of Tables 1-3 -- and it was shipped anyway, "because it lowers the RFS
+score", on the printed top-20 size decile and the 1999 draft's top-5 trigger; the pair count it also
+leaned on turns out not to discriminate at all (below). On the whole paper the same comparison is
+**+20.5** (411.0 with it, 390.5 without), the third-largest earner of the eight. The flip is not the
+filter: it is the check growing onto Tables 4, 5, 7 and 8, which did not exist in the scored set at 291
+cells and which the filter helps (Table 1 -7.5, 5A -5.5, 4 -5.0, 8 -2.0, 2B -2.0 without it, against
+gains of 1.0 in Tables 3, 7 and 2A). A reader of the old line would think the opposite.
+
+**Sign change 2: the payoff-count base now loses.** Section 25 measured `sum pi / n_t` at 184.5 against
+183.5 on 291 cells -- a gain of 1.0 -- and rejected it because it earns the Table 1 tail cells only by
+deepening February 2000. On 865 cells it loses 16.0 (395.0): Table 1 still gains 3.5, Table 3 gives back
+9.5 and Table 4 9.0. The objection and the price now agree; `NEAR_MISS_CENSUS.md`'s 397.5 is superseded
+as a current price, not as a record.
+
+**The joint row is not a lever, and it is not "the three exclusions".** Row 9 allows the same-issuer
+rule, drops the near-frozen filter and demeans the sigma. The header's three exclusions are the
+never-moving price (which has no option and is not priced here), the near-frozen quotes and the same
+issuer, so row 9 carries two of the three plus the sigma, which is not an exclusion. With that, the
+check scores **417.5**, 6.5 above the shipped check. The interaction is **+32.5**: alone the three
+alternatives read 410.0, 390.5 and 406.5, so their deltas are -1.0, -20.5 and -4.5 and the additive
+prediction is 411.0 - 26.0 = 385.0, which the joint run beats by 32.5. It is not a ship candidate: each
+of the three is anchored separately (the 1999 draft's Table I and the draft's trigger and round-trip rows
+for the two rules, `REVIEW_NOTES` 18; the draft's printed 0.399% top-5 trigger for the sigma, section
+21), the joint gains sit in Tables 7 (+5.5) and 8 (+6.0) while its losses sit in Table 2 A (-2.0) and
+2 B (-2.0) -- the composition cells the two rules were adopted for -- and trading composition cells for
+large-portfolio levels is the move `GAPS.md` section 3 (S1) refuses. Recorded so that nobody has to
+re-run it.
+
+**The one printed count that could arbitrate does not.** Table 1's note prints "The average number of
+pairs in the all-pair portfolio is 2057" (p. 807) and the check scores that cell: shipped 2,009,
+`--same-issuer allow` 2,006, `--max-stale-share none` 2,016, `--trigger-sigma std` 2,009 and row 9 2,013,
+all within 2.5% of the print and all marked ✓. The five runs span 10 pairs, so **the count does not
+discriminate**; if it leans at all it leans toward the filter *off* (2,016 is the closest single flip)
+and toward row 9. What remains of the exclusions' anchor is `GAPS.md` section 9's other evidence: the
+top-20 size decile (printed 2.71; 0.95 gives 2.73, within 1%; no limit 3.07, 13% off), the 1999 draft's
+top-5 trigger (printed 0.0399; 0.95 reproduces it to 3% at 0.0386; no limit is 10% low at 0.0361), the
+RFS top-5 trigger (printed 0.0476, on which every setting sits 16-22% low and is therefore neutral), and the
+1999 draft's Table I, which the filter lifts from 33.5 to 46.5 of 72 (`REVIEW_NOTES` 18). The same-issuer
+rule keeps the draft's trigger and round-trip rows and the printed Table 2 composition (section 18,
+`TBD.md` T14); the sigma keeps the draft's 0.0399 trigger (section 21).
+
+**What is held constant.** Every run passes the shipped `--table9a-cache`, `--table9b-cache`,
+`--table6-cache` and `--delist-cache`, so Table 9 A (44), Table 9 B (44), Table 6 (48) and footnote 4's
+two cells cannot move: 138 of the 865 cells are fixed by construction and each delta prices the 727 the
+main cache feeds. No run moves a side-cache block. Pricing them too would need four extra builds per
+convention against a budget of six.
+
+**What needs a build, read from the code.** Seven of the eight options are stamped into the cohort cache
+(`formation_options`) and are written per cohort: the two exclusions and the sigma change the pair
+selection and move every table; `--normalization` and `--short-weights` change the engine; and the two
+sector rules are written into the cached sector labels, which is why they can only reach Table 3 and
+Table 2 B -- the builds confirm it, 14 and 12 marks of 865 and no other block. `--capital-base count`
+adds no column (`_capital_base_options` selects series every cache already holds), so it is an
+aggregate-only run. `table3_sectors.py --label` can price a Table 3 label reading without a rebuild but
+cannot reach Table 2 B, so the builds are the honest price for 3 and 4.
+
+**Proposed header sentence (not applied here).** The header's "The paper states none of these three
+exclusions beyond screening out stocks with a no-trade day; REVIEW_NOTES section 18 gives the evidence,
+and SCORE_LOG.md the score without them." could read: "The paper states none of these three exclusions
+beyond screening out stocks with a no-trade day; REVIEW_NOTES section 18 gives the evidence, and section
+100 prices every convention this header names on all 865 cells -- the same-issuer rule 1.0, the
+near-frozen-quote filter 20.5, the telephone SIC 4.5, waste management 2.0, the trigger's RMS sigma 4.5,
+the continued trading index 65.0, eq. (3)'s short weight 21.0 and the value-weighted base 16.0, each of
+865, with the same-issuer rule, the near-frozen filter and the RMS sigma of rows 7-9 off together
+gaining 6.5 (a 32.5-point interaction over the 385.0 their deltas predict) and not adopted. The 291-, 323-
+and 481-cell numbers SCORE_LOG.md records are not comparable with this check."
+
+**Proposed SCORE_LOG addition (not applied here).** The paragraph that ends "the score without it (165.0,
+row 6)" and names `--telephone-sic 481x`, `--trigger-sigma std` and `--short-weights value` could close
+with: "Those numbers are 291-cell numbers; on the 865-cell check section 100 prices the same readings at
+410.0, 406.5, 409.0, 406.5, 346.0, 390.0 and 395.0 respectively, and the same-issuer rule, the
+near-frozen filter and the sigma off together at 417.5 against 411.0 (from an additive prediction of
+385.0), which is disclosed and not adopted."
+
+**Runs.** Base `.private/base` (411.0, one "2005 archives" paragraph); alternatives
+`.private/same_issuer_allow` 410.0 (315 / 190 / 360), `.private/stale_none` 390.5 (295 / 191 / 379),
+`.private/telephone_481x` 406.5 (319 / 175 / 371), `.private/waste_utilities` 409.0 (322 / 174 / 369),
+`.private/sigma_std` 406.5 (319 / 175 / 371), `.private/rebased` 346.0 (262 / 168 / 435),
+`.private/short_value` 390.0 (304 / 172 / 389), `.private/capital_count` 395.0 (315 / 160 / 390) and
+`.private/combo_1_2_5` 417.5 (323 / 189 / 353), all under the R11-C worktree, with the nine cohort caches
+under `.review/r11/C/caches/<name>/`. Each cache's `cache_meta.json` shows the single option that differs
+from the shipped stamp (three for the joint row). Reproduce with
+`scripts/experiments/conventions_865.py --scratch <dir> --out <dir>`; it smokes each build at
+`--stride 24`, then builds and scores it at `--workers 6`, sequentially, and writes `summary.tsv` beside
+the caches.
+
+## 101. Code health with no output change: ruff 43 -> 0, a dead Table 3 report revived, and the LFS trap closed (2026-11-18): 411.0 -> 411.0 (code health)
+
+Contract R11-D. No cell moves, by construction and by measurement: the baseline command's
+`replication_check.md`, every `tables/*` file and `figures/figure1.png` are byte-identical before
+and after (evidence below). Four commits, one per task, on `chore/r11-code-health`.
+
+**What was broken.** `ruff check` reported 43 errors in seven files, and two of them were real
+failures rather than style: `scripts/experiments/table3_sectors.py` could not run its `report`
+subcommand at all, and two scripts on the Makefile's `build` and `edition-1999` targets could not
+import `project` in this checkout. Separately, note 88's silent trap -- a checkout whose factor
+files are Git LFS pointers writes a 544-cell check (331.5) that reads like a result -- was still
+armed.
+
+**Task 1: the F821s are one deleted line.** Round 6's R6-C (commit 442dc30) rewrote `report()` and
+dropped `t3, attr, book = load_fragments(root)` from its first statement, so the subcommand raised
+`NameError: name 't3' is not defined` at line 812 before reading a fragment (reproduced from the
+HEAD copy of the file). The path is not dead -- it prints the Table 3 readings table and the
+pair-kind attribution -- so it is repaired, not deleted: the line is restored. `load_fragments` is
+untouched, and the fragments it re-reads are the ones `build` writes (`-t3`, `-attr`, `-book`).
+Two unused unpacks (F841) and an unused `import json` (F401) go with it.
+
+One more bug in the same file: the `all` and `claim9` builds spelled their raw price directory
+from `ROOT`, which misses `project.paths`' shared-data fallback; in a checkout without its own
+`data/raw/wrds_api` they could not run. They now read `WRDS_API_DIR` (the same path where a local
+`data/raw/wrds_api` exists).
+
+Every mode was smoked on the shared cache with one cohort (`--limit 1`): `era`, `build`, `counts`,
+`all`, `claim9` (`--conv last_px`) and `report` all run to completion.
+`assemble`/`assemble9` were not smoked: they copy a whole 474-cohort cache and their code is
+untouched by the repair.
+
+**Task 2: the rest of ruff, 43 -> 0.** `ruff check --fix` was run with the default ruleset (safe
+fixes only) and every diff was read; the manual fixes are the ones the contract names. The
+archived `report/archive/data_review/B_checks.py` was fixed rather than added to
+`extend-exclude`: its six errors are four mechanical ones, and a linter that silently skips a
+directory hides the next real error. No `extend-exclude` was added anywhere.
+
+| file | rule | fix | behaviour change |
+|---|---|---|---|
+| `scripts/experiments/table3_sectors.py` | F821 x4 | restored the deleted `load_fragments` line in `report()` | none: the subcommand crashed with `NameError`; it runs (as it did before 442dc30) |
+| `scripts/experiments/table3_sectors.py` | F841 x2 | dropped the unused `form_start` and `frozen` unpacks | none |
+| `scripts/experiments/table3_sectors.py` | F401 | dropped an unused `import json` in `assemble_c9` | none |
+| `scripts/experiments/table3_sectors.py` | -- | `RAW_PRICE_DIR` from `project.paths.WRDS_API_DIR` | none where a local `data/raw/wrds_api` exists; the `all`/`claim9` modes now resolve the shared tree |
+| `report/build_initial_proposal.py` | RUF100 x10 | dropped ten unused `# noqa: E402` (E402 is not enabled here) | none |
+| `report/build_initial_proposal.py` | UP037 | `list["Block"]` -> `list[Block]` | none |
+| `report/build_initial_proposal.py` | ISC004 x8 | the eight implicit concatenations in the `bullets`/`card` lists are parenthesised | none: same string values |
+| `report/build_initial_proposal.py` | EXE001 | `chmod +x` (shebang kept) | none |
+| `report/archive/data_review/B_checks.py` | I001 | the two-name import sorted | none |
+| `report/archive/data_review/B_checks.py` | F841 x3 | dropped the `b3b1`, `b3b2` and `errmsg` bindings; the queries still run and still write their parquet | none: no reader of those variables existed |
+| `report/archive/data_review/B_checks.py` | SIM114 | the two identical `elif phase == "rerun"` arms became one | none |
+| `report/archive/data_review/B_checks.py` | SIM115 | the manifest is read inside `with open(...)` | none |
+| `src/project/evaluation.py` | BLE001 x3 | the broad `except Exception` stays, with `# noqa: BLE001` and the reason on each: an absent calendar, a series that is not month-indexed, and an unreadable cohort cache all mean "unknown" | none: narrowing the catch would change what the check treats as unknown |
+| `src/project/run_benchmark.py` | RUF100 x4 | dropped the unused `E402` parts of four directives, kept `F401` | none |
+| `src/project/run_benchmark.py` | EXE001 | `chmod +x` (shebang kept: it is a trampoline meant to be run) | none |
+| `tests/test_paper_targets.py` | PLW1510 | `check=False` written out | none: it is the default and the test asserts on `returncode` |
+| `tests/test_replicate.py` | C408 | `dict(...)` -> a literal | none |
+
+`git diff` includes the two mode changes (`100644 -> 100755`) for the EXE001 fix; no shebang was
+dropped.
+
+**Task 3: the LFS trap is closed.** `project.factors` gains `LFS_POINTER_PREFIX` (now the one
+spelling of the pointer line, used by `_french_text` and `load_ibbotson_factors` too),
+`is_lfs_pointer(path)`, `factor_inputs(vintage)` (the five raw files the three loaders read, per
+vintage) and `factor_problem_files(paths)` -> `[(path, "missing" | "git-lfs pointer")]`.
+
+The driver gains `guard_factor_inputs(steps, allow_missing)`, called from `main()` after the steps
+are validated and before any cohort is read. For the steps that read factor files -- `tables` and
+`check`; `table3` and `figure1` open none -- it names every offending file with the reason, names
+the fix (`git lfs pull`, or copy the real archives over `data/raw/french`,
+`data/raw/french_vintage_2005`, `data/raw/goyal_welch`), prints that to stderr and **exits 1**.
+`--allow-missing-factors` is the explicit way back to the old fallback; it prints the same listing
+as a warning and carries on.
+
+Evidence, from a fake checkout built in the scratch dir out of pointer files only (real cache,
+real scripts): without the flag the driver exits 1, names the five pointer files, and writes
+nothing; with the flag it prints `- Score: 331.5 of 544 compared cells`, the trap exactly as note
+88 recorded it. `tests/test_lfs_guard.py` (new, 17 tests) covers the pointer/missing detection,
+the step scoping, the flag, the driver's argv path, and the exit code -- temporary directories
+only, no market data. The two tests that call `main()` restore the factor vintage `main()` sets
+globally, which otherwise leaked into `tests/test_paper_consistency.py`.
+
+**Task 4: every script starts.** All 41 of `scripts/*.py`, `scripts/claims/*.py`,
+`scripts/experiments/*.py` pass `python -m py_compile`. The 30 that use argparse also pass
+`--help` under a 20 s timeout. Two failed and are fixed: `02_build_dataset.py` and
+`edition_1999.py` died with `ModuleNotFoundError: No module named 'project'` because they lack the
+`sys.path` line every other script in the tree carries, and the Makefile's `build` /
+`edition-1999` targets do not export `PYTHONPATH` -- both targets were unrunnable in this venv.
+They now carry the same line and print their usage. No script imports a module that no longer
+exists: a static scan of every `project.*` import in the 41 files resolves against `src/project`
+(importing a script without argparse would run it, so `--help` is not the right probe there).
+
+**Byte-identity (`cmp`).** Before: the baseline command run at the branch point into
+`.private/base_before` (411.0 of 865, the 2005-archives paragraph present), copied to
+`.private/snap_before`. After: the same command, same out-root name, final tree.
+
+```
+cmp .private/snap_before/tables/replication_check.md .private/base_before/tables/replication_check.md   # exit 0
+md5sum  them: 694a809a7a7c26b2a62b22f44eaea052  (758 lines)
+cmp .private/snap_before/figures/figure1.png .private/base_before/figures/figure1.png                  # exit 0
+md5sum  them: fc235ea9d11764744a69110ea1f7321b
+```
+
+All 20 files of `tables/` compare equal, `monthly_returns.parquet` and `table1_vs_paper.md`
+included, and so does `figures/figure1.png`. Score line both times:
+`- Score: 411.0 of 865 compared cells`; the "2005 archives" paragraph appears once in each.
+
+**Tests.** Before: 376 collected, 368 passed, 8 skipped. After: 393 collected, 385 passed, 8
+skipped (the 17 new tests; no existing test needed `--allow-missing-factors`, and none depended on
+the silent fallback -- the whole suite passes with the guard armed).
+`ruff check` at the tip: 0 errors.
+
+**What this note does not claim.** Nothing here is a ship candidate: no default, no typed paper
+value, no threshold and no row of `SCORE_LOG.md` changes, and the score is 411.0 before and after.
+`scripts/rebuild_manifest.json` and its pin are untouched, so the pin test sees no change.
+
+## 102. T09's price-sign day rule on all 865, T03 closed, Table 7 final, and paper_consistency.py's two defects fixed (2026-11-18): 411.0 -> 411.0 (one lever closed, two ledgers final, one script fixed)
+
+Contract R12-A, branch `replication/r12-last-lever`, worktree `$Q/.review/wt/r12-A`, scratch
+`$Q/.review/r12/A/`. Baseline from this worktree before any edit: `.private/base` **411.0 of 865**,
+the "2005 archives" paragraph present once. Four tasks, one commit each. Tests 416 passed / 10
+skipped before, **418 passed / 10 skipped** after (the two new tests are task 4's); `ruff check`
+clean repo-wide; the baseline check still prints 411.0 under the branch's defaults.
+
+### Task 1: T09's price-sign day rule, scored on all 865 cells (the lever is closed)
+
+`TBD.md` T09 named one unrun lever and `GAPS.md` section 9 listed it as untried: the price-sign day
+rule. The sentence is p. 803's, section 2.1 "Pairs formation" (the text layer puts each page's
+number in its footer, and "803" closes the page carrying the heading):
+
+> "In each pairs formation period, we screen out all stocks from the CRSP daily files that have one
+> or more days with no trade. This serves to identify relatively liquid stocks as well as to
+> facilitate pairs formation."
+
+`src/project/data.py`'s `UNIVERSES` gives the same `common` share filter three day rules, so the
+reading is which panel row counts as a traded formation day:
+
+| universe | day rule | counts when | what a no-trade day is |
+|---|---|---|---|
+| `vol_common` (shipped) | `vol_nonzero` | `prc_ok and not vol_zero` | a row whose volume is recorded **0**; a null volume is not zero, so a quote-only Nasdaq name passes |
+| `volpos_common` | `vol_pos` | `prc_ok and vol_pos` | volume recorded 0 **or missing** (`vol_pos = dlyvol > 0`) |
+| `price_common` | `tr` | `dlyprcflg == 'TR' and dlyprc > 0` | a row CRSP does not flag as an actual trade, whatever its volume |
+
+**Pre-registration** (`$Q/.review/r12/A/PREREG.md`, written before any cache was built): the
+sentence above; the two rules; the measurement (a full 474-cohort main cache per rule, then the full
+check with the four **shipped** side caches); and the ship criterion, whose binding half is the
+printed counts:
+
+> * **the printed counts are kept or improved as independent support.** `GAPS.md` S1 argues these
+>   rules cannot be the paper's, from the printed counts: the strict price-sign screen gives **1,562
+>   pairs on the published window against 2,057** (REVIEW_NOTES 10). A rule whose mean pairs per
+>   cohort falls further below 2,057 than the shipped 2,008.9, or whose mean stocks per cohort falls
+>   further below 2,317 than 2,293.1, is asserted by the paper's own printed numbers to be *not* the
+>   screen the paper used. **This is the binding condition** [...]
+> * **and T09's 7 cells improve** (strictly more of the 7 marked ✓ or ~) without the 729-cell
+>   main-cache score falling materially (it must not fall by more than the 7 cells could be worth,
+>   3.5 points).
+
+and the prediction: both targets fail the count test by 20% or more, so the reading is a sensitivity
+at best whatever the cells do, and `volpos_common` is built only if `price_common` gains on T09's
+cells.
+
+**Builds.** `--stride 24` smoke first (20 cohorts, 27 s, separate cache root; only its `figure1`
+step fails, because a strided cache has no 1963-08 cohort - a smoke artifact, not a build defect).
+Then the full builds, `--workers 4` after `free -g` showed 19 GB available: `cache_price` **474
+cohorts in 158 s** (`$Q/.review/r12/A/price_build.log`), `cache_volpos` (`volpos_build.log`), each
+scored `--aggregate-only` with the shipped side caches and the 2005 vintage into `.private/price`
+and `.private/volpos`. Both checks print the "2005 archives" paragraph once.
+
+**The scores.** Block marks read from the checks by `$Q/.review/r12/A/score_blocks.py`, which
+reproduces note 98's 729-cell figure for the shipped run exactly (350.0), so the 136 side-cache cells
+(Tables 9A, 9B, 6) are excluded from the like-for-like column and reported inside the full line:
+
+| | shipped | `price_common` | `volpos_common` |
+|---|---|---|---|
+| full check | **411.0 of 865** | **361.5 of 865** (-49.5) | **365.0 of 865** (-46.0) |
+| the 729 main-cache cells | 350.0 | **300.5** (-49.5) | **304.0** (-46.0) |
+| mean stocks per cohort | 2,293.1 | **1,799.8** (-22.3%) | **1,847.1** (-20.3%) |
+| mean pairs per cohort | 2,008.9 | **1,563.8** (-24.0%) | **1,606.7** (-21.9%) |
+| printed | 2,317 stocks / 2,057 pairs | | |
+
+Counts are the 474-cohort means of `summary.json`'s `stocks` and `pairs` (`$Q/.review/r12/A/counts.py`);
+the shipped column reproduces note 98's 2,293.1 / 2,008.9 to the digit. By block, shipped ->
+`price_common` -> `volpos_common`: Table 1 Panel A 27.0 -> 25.5 -> 25.5, Table 1 Panel B 29.5 ->
+25.0 -> 25.0, Table 2 Panel A 20.5 -> 19.0 -> 19.5, Table 2 Panel B 28.5 -> 18.0 -> 19.5, Table 3
+stocks 3.5 -> 1.5 -> 1.5, Table 3 Utilities 24.5 -> 19.5 -> 24.0, Transportation 12.5 -> 13.0 ->
+13.5, Financials 21.0 -> 14.0 -> 13.0, Industrials 18.5 -> 13.0 -> 12.0, Table 7 44.0 -> 38.0 ->
+39.5, Table 4 39.0 -> 34.0 -> 32.5, Table 8 36.5 -> 40.0 -> 39.0, the text numbers 4.0 -> 3.5 ->
+3.5.
+
+**T09's 7 cells, one by one** (Table 2 Panel B; printed value and mark, shipped / `price_common` /
+`volpos_common`):
+
+| cell | printed | shipped | `price_common` | `volpos_common` |
 |---|---|---|---|---|
-| long book mean | 1.25% / 1.24% ✓ | 1.36% / 1.33% ✓ | 1.48% / 1.46% ✓ | 1.51% / 1.62% ✓ |
-| short book mean | 0.52% / 0.50% ✓ | 0.47% / 0.43% ✓ | 0.72% / 0.66% ✓ | 0.88% / 0.91% ✓ |
-| long book sd | 3.87% / 3.88% ✓ | 3.70% / 3.65% ✓ | 3.80% / 3.44% ~ | 5.66% / 5.16% ✓ |
-| short book sd | 3.55% / 3.26% ✓ | 3.40% / 3.16% ✓ | 3.50% / 3.15% ~ | 4.98% / 4.60% ✓ |
-| long serial correlation | 0.084 / 0.06 ✗ | 0.089 / 0.09 ✓ | 0.133 / 0.13 ✓ | 0.16 / 0.17 ✓ |
-| short serial correlation | 0.132 / 0.11 ~ | 0.106 / 0.12 ~ | 0.080 / 0.12 ✗ | 0.136 / 0.16 ~ |
+| weight_transportation, top 5 | 0.02 | 0.0118 ✗ | 0.00949 ✗ | 0.00949 ✗ |
+| weight_transportation, top 20 | 0.02 | 0.0105 ✗ | 0.00949 ✗ | 0.00949 ✗ |
+| weight_financials, top 5 | 0.11 | 0.14 ✗ | **0.0861 ~** | **0.0861 ~** |
+| weight_industrials, top 5 | 0.15 | 0.0745 ✗ | 0.0646 ✗ | 0.0646 ✗ |
+| weight_industrials, top 20 | 0.14 | 0.0819 ✗ | 0.0727 ✗ | 0.0725 ✗ |
+| share_mixed_sector_pairs, top 5 | 0.20 | 0.105 ✗ | 0.0667 ✗ | 0.0667 ✗ |
+| share_mixed_sector_pairs, top 20 | 0.22 | 0.13 ✗ | 0.0966 ✗ | 0.0968 ✗ |
 
-32 cells, ✓ 23 / ~ 7 / ✗ 2 = 26.5 points, so the total goes 187.0 of 291 (64.3%) to **213.5 of 323
-(66.1%)**: the cell set grew by a table this build replicates better than its average, so both the
-total and the rate rise. The two misses are both serial correlations: the top 5 long book's (0.084
-against 0.06) and the 101-120 short book's (0.080 against 0.12), the second the same band's
-persistence gap Table 4 shows.
+**One** of the seven cells moves, and in the reading's favour by marking alone: Financials' top-5
+weight tips from ✗ to ~ (+0.5 of the 3.5 points the block could be worth). The other six stay ✗ and
+five of the six move **further** from the print: Transportation's weights halve, Industrials' fall
+(0.0745 -> 0.0646 against 0.15), mixed-sector pairs fall by a third. The composition direction is
+away from the paper, which is the opposite of what Q5 needed.
 
-Three details worth recording. First, the books are compounded on their own daily series and then
-differenced, which is what the paper's identity requires (section 33) - but Table 1 keeps the
-daily-difference convention it has always had, so the two are reported side by side rather than
-forced to agree; Table 1's 88 cells are byte-identical before and after this change, as are
-Table 2's 64 and Table 3's 139. Second, the refactor that added `portfolio_legs` moved the leg
-arithmetic into one place (`_leg_arrays`) used by both it and `_vw_legs`, and the existing
-hand-calculated leg tests pass unchanged. Third, the four paper values that back the new cells were
-typed from the RFS text layer and are now checked by `scripts/verify_paper_targets.py` (`Table 7:
-32 values compared`), bringing the typed targets it verifies to 355.
+**Verdict: closed.** Both pre-registered conditions fail, and the count condition is not close:
+1,563.8 pairs against the printed 2,057 is the **1,562 of REVIEW_NOTES 10** (measured there on the
+old window) reproduced on all 865 cells - `GAPS.md` S1's argument is now a measurement, and it is
+right. `volpos_common` was built only because `price_common` did gain one T09 cell; it lands 3.5 points
+above it (365.0 / 304.0) and does no better on any of the 7, whose seven values agree to three digits
+(Table 2 Panel B is 19.5 against 18.0, the rest of that block moving the other way). Neither reading
+is a sensitivity worth quoting as an alternative: they are the paper's
+sentence read through flags that exclude exactly the pre-1983 Nasdaq quote-only names its printed
+count says it kept. Ledgers updated: `TBD.md` T09's "What can still be tried", its "What has been
+tried", and its INDEX row now name **no untried lever** and point at the RFS's own coding and CRSP
+vintage (T27) as the only thing left; `GAPS.md` section 8's Q5 row and section 9's "Untried"
+sentence say the same.
 
-The 1999 draft's Table V prints the same decomposition; it is not scored, as usual, and
-`EDITION_1999.md` is unchanged.
+### Task 2: T03 closed, and the 0.494 explained
 
-## 36. The whole paper, indexed: nine tables and four figures in one place (2026-10-25)
+`TBD.md` T03's last "What has been tried" bullet compared the top-20 long book's measured CAPM beta
+(0.404) with "the paper's implied 0.494" and read the sign backwards. What 0.494 is, in one line:
+**it is our book's five-factor market loading inside the paper's frame** - our measured CAPM beta
+plus the market components of the paper's own printed SMB/HML/momentum/reversal loadings
+(`0.404 + 0.160 - 0.069`), i.e. what the top-20 long book would print against the printed 0.476. The
+reverse quantity - the CAPM beta the paper's **own** printed loadings imply - is
+`0.476 - 0.160 + 0.069 = 0.385`, and note 98's fix commit `3e46e0d` had already shown our 0.404 sits
+0.019 **above** it. The bullet is corrected to that comparison, and `claims/TABLE7_BETAS.md` section
+2.3 now carries the same one-line identification under its table (task 3's commit).
 
-Section 35 added Table 7 and left the obvious follow-up: which parts of the paper are still not
-looked at, and what would each one cost? `COVERAGE.md` answers it with one row per table and figure
-- what it measures, whether the check scores it, how many cells it holds, and where the evidence
-lives - so the question "are we replicating the paper or three of its tables?" has a written answer
-that a reviewer can check.
+T03 then gets its closing line, citing notes 85, 96 and 98: **nothing admissible is left for claim
+16**. Note 85's five readings exhaust the estimator (every full-sample one keeps the long t at 2.07
+or above; only French `ST_Rev` gets the top 5 under 1.96, and T25 excludes it); note 96's
+construction catalogue prices five book-construction choices and none moves the market loading by
+more than 0.0052, with the surviving residual in the two *larger* books; note 98 puts that residual in
+ranks 501+ and puts this book 0.019 above its own implied beta. What fails is the level of the long
+alpha (40 bp at t 2.93 against 24 bp at 1.27), and no reading of the paper's words moves a level. The
+INDEX row now says "closed". No verdict was changed: claim 16 was already "not as stated" and stays
+there.
 
-The inventory is nine tables and four figures. Scored: Tables 1 (88 cells), 2 Panel A (24), 2
-Panel B (40), 3 (139) and 7 (32). Diagnostic, printed without marks: Table 5 Panel A (20) and
-Table 8 (16). Measured and recorded, not printed: Table 4 (both blocks, section 32), Table 5
-Panel B (the daily panel, cross-checks round two), Table 9 Panel A (the top-three-decile universe,
-same section) and Figures 2, 3 and 4 (rounds two and six, and section 32). Unreplicated: Table 6
-(random pairs) and Table 9 Panel B (short recalls). Figure 1 is a pass/fail check.
+### Task 3: `claims/TABLE7_BETAS.md` reads as final
 
-Two things the inventory settles. First, the scored set is close to what this data can score: the
-remaining tables are mostly the *same series* counted again (Table 4's mean and standard deviation
-repeat Table 1 Panel B, Table 5 Panel A and Table 8 re-measure it), which is why they are diagnostics
-- scoring them would weight one series three times. Second, of the four additions that are genuinely
-new, only Table 4's Sharpe and persistence rows are free (8 cells, about 5 of them matching), and
-the rest need new data paths: Table 5 Panel B a daily panel in the cache, Table 9 Panel A pairing
-restricted to the top three deciles, Table 9 Panel B a recall rule in the engine plus volume, Table
-6 a resampling step.
+The page's title said "(round 10C)" and predated note 98. Title now reads "mostly the reversal
+factor, and the book-level tail is the loose-pair tail (rounds 10C and 11A, final)". A new section 7,
+"After round 11: the large-book residual", 22 lines, copies note 98 and `claims/LARGE_BOOK_BETA.md`
+with no new measurement: the residual is the **loose-pair tail** (ranks 501+ at 1.276 of market
+beta, 73.3% of the book's value-days and 76% of its market exposure); it **cancels in the spread**
+(Table 8's All column residual +0.034 / +0.007); the **share-class universe** moves the four
+large-book residuals by only 0.012 to 0.032, and the paper's size screen makes three of four worse;
+the **literal no-trade screen** scores 365.0 of 865 and pushes both residuals the wrong way (+0.225 /
++0.168 and +0.311 / +0.212). Section 5 gains a bullet closing the R11-A construction lead and a line
+saying the page is final; its T23/T03 bullets are unchanged because they were already right.
 
-The section also records the five places where the published version contradicts itself, because
-each one is a trap for anyone "fixing" a cell to match: Table 9 Panel A prints its skewness and
-kurtosis rows the wrong way round (kurtosis 0.02 beside skewness 7.01, both plausible once
-swapped); Table 1's caption says absolute kurtosis while Table 9's, read as printed, is an excess
-kurtosis; Figure 3's endpoint (about 40) cannot be the compounded series its caption describes
-(about 66 from its own Table 1); Table 5 Panel B's "all" column is inconsistent with its own monthly
-"all" (9.3 monthly units of the daily standard deviation against 4-7 elsewhere); and Figure 2's
-caption months disagree with its axis and with Table 1. None of these changes a score: they are
-reasons not to chase one.
+### Task 4: `scripts/paper_consistency.py`'s two defects, and the 0.007
 
-The three documents are unchanged in their roles. The published RFS article is the target; the Yale
-ICF working paper carries the same numbers (checked value by value) and is only a layout control;
-the 1999 draft is a second opinion with its own 136 scored cells that may veto but never justify.
-Where the draft has been decisive - the trigger's sigma as the root mean square about zero, and the
-by-sector matching - it is recorded in sections 21 and 27.
+`claims/CLASS_A_AUDIT.md` section 4 found two defects; both are fixed, and nothing about a verdict
+moves (R11-B showed the verdict is identical).
 
-## 37. Figure 2 is aligned; Figure 3 is not recoverable, and that is recorded (2026-10-25)
+**1. Vintage.** The script called `load_factors()` with no argument, so it read the module default,
+`current`, while every scored check runs French's **2005** archives. It now reads 2005 through a new
+`FACTOR_VINTAGE` constant and `load_check_factors()`, and prints it: the first output line is
+`Factors: French's 2005 archives (the vintage the paper had and every scored check runs)`. A
+`--factor-vintage {2005,current}` flag keeps the old reading reproducible, and the vintage is
+recorded in the JSON. On the 2005 archives **8 of 8** printed FF/momentum factor sds reproduce ours
+at three decimals (today's files miss post-1988 HML, 0.03359 against 0.03641), so the script's gate
+constant `THREE_DP_MATCHES` moved 7 -> 8 and `tests/test_paper_consistency.py`'s fixture now loads the
+scored vintage; that count rose, it was not loosened.
 
-The figures are 150-dpi rasters inside the PDF, so comparing them with our series had lived in
-prose: "correlates 0.68 and 0.76", "ends near 40". Prose cannot be re-run. `scripts/digitize_figures.py`
-now reads Figure 2 once and commits `report/replication/reference/figure2_bars.csv`, and the check
-prints the comparison every run. Figure 3 was attempted and abandoned; the reasons are below.
+**2. Precision.** Table 8's loadings came from `scripts/paper_cells.json` at three significant
+figures (`-0.434` for the printed `-0.43395`). The script now reads `scripts/03_replicate.py`'s
+five-decimal transcriptions (`PAPER_TABLE8`) through a new `typed_table8()`, which returns them in
+`paper_cells.json`'s own shape and units (percent for the mean, the sd and the intercept) so every
+call site keeps working; no typed value was edited, only read. `rounding_sensitivity` now perturbs
+each loading within half a unit of its **printed** last decimal (5e-6, from `BETA_DECIMALS = 5`)
+instead of half a unit of its third significant figure (5e-4 / 5e-5), which was ~30x the paper's own
+slack.
 
-**Figure 2, aligned.** The scale is anchored on the paper's own Table 1 Panel A top-20 maximum
-(13.295%), the only number the figure shares with a table, and the bars' baseline is measured from
-where they end (row 199 of the raster, not the middle of the three-pixel axis rule). Four checks
-show the alignment is right rather than assumed:
+**The regenerated record** (`report/replication/analysis/paper_consistency.json`, from
+`python scripts/paper_consistency.py --json ... > $Q/.review/r12/A/pc_regen.log`), old -> new:
 
-- **the bucket**: against the four portfolios the bars correlate best with the top 20 (0.51 / 0.61
-  monthly; the next best is the top 5 at 0.38 / 0.44, and 101-120 and all are near zero), which is
-  what the caption says;
-- **the offset**: scanning -3..+3 months, the two correlations peak at **zero** (1.015 against
-  0.999 at minus one and 0.48 at plus one), so the month mapping is not slid;
-- **the annual sums**: 0.84 across 40 years, with mean annual returns of 16.4% (ours) against 14.9%
-  (bars) - a 640-pixel raster carries 1.19 columns per bar and cannot resolve months, but it does
-  carry years;
-- **the extremes**: the tallest bar is the January 1975 month, smeared by the raster across
-  November 1974 - January 1975, which is the month Q2 and Table 1 both point at; the deepest is the
-  1974 bear market (ours April, the paper's February).
-
-What still disagrees is the tallest *month*: ours is October 1987 (10.23%), the paper's is that
-1974-75 bar (13.30%). That is Q2 in one line, and it is the same gap the prose recorded before.
-
-**Figure 3, abandoned with evidence.** Two independent readings of the same pixels were tried: a
-topmost-ink envelope, and a tracker that follows the two ink runs per column. They agree on the rise
-through 1987 (both correlate about 0.95 with our cumulative path) and disagree completely about
-afterwards - the envelope says the curve ends 60% below its 1987 level, the tracker says within 4%.
-The figure has no readable axis labels (no OCR here), draws its legend inside the plot, and its two
-curves cross, so nothing in it can be checked against a printed number. What it plots is the same
-monthly returns as Table 1 Panel A, which the check scores cell by cell: reading it back adds no
-information and risks a wrong one. `tests/test_figure_fixtures.py` asserts that no Figure 3 fixture
-is shipped, so the abandoned reading cannot creep back in.
-
-**Figure 4 needs no image work.** Its six correlations are printed in the paper's text (0.48 full
-sample, 0.51 before 1989, 0.18 after; 0.41 / 0.42 / 0.20 on five-factor residuals), so the check
-computes ours from the cached one-day-wait series and prints them beside the paper's: 0.32 / 0.39 /
-0.04, with rolling 24-month averages of 0.38 and 0.06. The residual version needs the Fama-French,
-momentum and reversal factors and stays a recorded measurement (section 32).
-
-None of this carries marks: a bar recovered from an image is evidence about which periods disagree,
-not a value the paper prints. No scored cell moves - the check still reads 213.5 of 323.
-
-## 38. Figure 3 tracked properly: both curves match ours at 0.997 (2026-10-25)
-
-*Superseded in part by Section 42: the figure has a readable log scale and labelled curves, and
-it plots the one-day-wait series.*
-
-Section 37 abandoned Figure 3 after two readings of its pixels disagreed. That was premature: the
-disagreement was a bug in both readings, not a property of the figure. Each took the topmost ink (or
-the top two runs) per column, and the figure prints its **legend inside the plot**, so from about
-column 400 the text's runs replace the curves'. One reading therefore followed a legend line to a
-"60% give-back" and the other followed the same text in the opposite direction.
-
-The fix is a tracker rather than a per-column rule: find the first column where twelve consecutive
-columns carry exactly two thin ink runs (left of the legend, where the two curves are unambiguous),
-then walk right taking from each column the run nearest the previous position, rejecting a jump of
-more than 40 rows as text. Both curves can then be followed to the right edge of the raster, and the
-months are mapped across the *curves'* columns instead of the raster's, which is what put the
-earlier readings' endpoint in the tick-label margin.
-
-With that, Figure 3 is usable, and it agrees with us:
-
-| | ours | paper, track 1 | paper, track 2 |
-|---|---|---|---|
-| shape correlation of the cumulative paths | 1 by definition | 0.997 | 0.997 |
-| share of the total rise made after 1987 | 19% | 15% | 17% |
-
-Three checks say the reading is stable rather than lucky. The post-1987 share does not move across
-18 settings of the jump guard (25 / 40 / 60 rows), the smoothing window (5 / 7 / 11 columns) and the
-start rule (8 or 12 clean columns). It matches the paper's own Table 8 arithmetic independently:
-0.375% a month for the 168 months after 1988 is 15% of 0.895% a month for all 474. And the two
-tracks stay distinct to the end (their rises are 166 and 114 pixel units), so the tracker is not
-following one curve twice.
-
-None of the level is recoverable - the axis carries no numbers - so the figure stays a shape
-comparison and is not scored. What it now supports is the statement Section 37 could not make: the
-paper's cumulative curve and ours rise in the same way, with about a sixth of the total made after
-1987 on all three. The earlier "61% give-back" is withdrawn here and in `COVERAGE.md`.
-
-## 39. What would actually move Tables 1-3: one month, measured (2026-10-25)
-
-*The single-month table is recomputed in Section 42 with Table 1's estimator and a control.*
-
-Three rounds of levers were tried against the first three tables and all of them cost points:
-the paper's leg-compounding arithmetic (Table 1 +0.5, Table 3 -3.5, net -3.0), demoting
-frozen-quote pairs from the ranking with the pool intact (-16.5), the same demotion restricted
-to pairs whose *both* legs are frozen (-7.5), and three size-adjacency ranking variants (0 to
--5.0 on Table 2 Panel B alone). The shipped configuration is a sharp local optimum: every
-single knob costs 3 to 16 points.
-
-This section records the reason, now quantified rather than argued. The top-20 portfolio's
-three shape cells miss together, and one month accounts for all three:
-
-| top 20, no wait | ours | with January 1975 at its printed height | paper |
-|---|---|---|---|
-| skewness | 0.81 | **1.29** | 1.39 |
-| kurtosis | 8.07 | **10.75** | 10.54 |
-| maximum | 10.23% | 13.30% | 13.30% (the same bar, so by construction) |
-
-January 1975 is the tallest bar of Figure 2 and the month Table 1 prints as the top-20
-maximum, so the maximum row moves by construction and the skew and kurtosis rows are the test:
-both come into range. That is why no rule can lift these cells - the lever is a month, not a
-parameter - and it is the same month Q2 records: our top-ranked January 1975 pairs are
-frozen-quote Nasdaq names that never converge, because CRSP's pre-1983 Nasdaq rows carry no
-volume field and the paper's "one or more days with no trade" screen cannot be applied without
-deleting an entire exchange.
-
-The check now prints this attribution under the figures, so the claim is re-derived on every
-run from the digitised bar and the cached series rather than quoted. No scored cell moves: the
-check still reads 213.5 of 323, of which the first three tables are 187.0 of 291.
-
-## 40. Eight levers measured against Tables 1-3, and the one that cannot be pulled (2026-10-26)
-
-The first three tables have been at 187.0 of 291 since Table 7 joined the scored set. Four rounds
-of work asked whether that is a plateau or an unfinished job, and measured every lever the paper's
-other tables and figures suggest. The answer is a plateau, and the reason is one month.
-
-| lever | what it changes | full-sample score |
+| quantity | before (current vintage, 3 s.f.) | after (2005, five decimals) |
 |---|---|---|
-| shipped | - | **213.5 of 323** (Tables 1-3: 187.0 of 291) |
-| the paper's leg-compounding arithmetic (Table 1 = Table 7) | Table 1 becomes the difference of the books | 184.0 earlier; Table 1 +0.5, Table 3 -3.5 |
-| demote frozen-quote pairs from the ranking, pool intact | top ranks hold tradeable pairs | 197.0 (Table 1 54.0 -> 45.5) |
-| the same, both legs frozen | a much smaller demotion | 206.0 (Table 1 54.0 -> 51.0) |
-| three size-adjacency ranking variants | sizes like the paper's pairs | Panel B alone: 13.0 / 10.5 / 8.0 of 40, no gain |
-| **trigger at 2.33 sigma instead of 2.00** | matches the paper's printed average trigger | **203.5** (Table 2 A 20.5 -> 22.0, Table 1 54.0 -> 46.0, Figure 1 lost) |
-| stale screen 0.85 / 0.90 / 0.99 | the frozen-quote population | 180.5 / 182.0 / 173.0 |
-| short weights `value` | eq. (3) read on the shorted stock | 183.5 |
+| Panel A joint R2 of the implied reversal factor | 0.9502 | **0.9434** |
+| Panel A print-rounding: share of 10,000 draws feasible | 98.25% | **99.83%** |
+| Panel A rounding p01 / p50 / p99 | 0.9315 / 0.9515 / 1.0056 | **0.9284 / 0.9446 / 0.9891** |
+| Panel B joint R2 | 0.7904 | **0.7841** |
+| Panel B print-rounding: share feasible / p99 | 82.0% / 1.204 | **84.4% / 1.176** |
+| R2 of French ST_Rev on the four (pre / post) | 0.2562 / 0.132 | **0.2592 / 0.1297** |
+| Panel A mean identity, four columns | 2.188 / 2.187 / 2.185 / 2.189 %/mo | **2.181 / 2.182 / 2.184 / 2.185 %/mo** |
+| Panel B mean identity | 2.693 / 2.654 / 2.617 / 2.652 %/mo | **2.596 / 2.564 / 2.656 / 2.602 %/mo** |
+| Table 4 mean identity | 2.267 / 2.384 / 2.392 / 2.317 %/mo | **2.284 / 2.401 / 2.379 / 2.305 %/mo** |
+| per-column required rho, Panel A | -0.952 / -0.947 / -0.932 / -0.911 | **-0.952 / -0.947 / -0.931 / -0.911** |
+| per-column four-loading variance, Panel A | 1.53 / 1.46 / 1.32 / 2.59 | **1.53 / 1.46 / 1.33 / 2.60** |
 
-The trigger test is the instructive one. The paper's own Table 2 prints an average trigger of
-0.0476 / 0.0528 where our sigma produces 0.0409 / 0.0467, so entering 16% deeper is exactly what
-the paper's numbers ask for - and it does fix what it should (Table 2 Panel A 20.5 -> 22.0, and
-Table 7 stays at 26.5) while costing 8 points in Table 1 and 3.5 in Table 3, because fewer, deeper
-positions make the monthly series lumpier. Even the sign of that trade is against us.
+The zero of the two defects is the 0.9434: it is `class_a_audit.py`'s number to four decimals, which
+is what the new `tests/test_paper_consistency_agreement.py` pins (its Panel A joint R2 equals the
+audit's to 1e-3, the audit's own value asserted at 0.9434, and the script reports the 2005 vintage in
+its `Factors:` line and in the JSON). A third assertion records that the old three-significant-figure
+transcription would miss the audit by more than 5e-3, so the test fails if the precision fix is
+reverted. The test is data-light: it skips with a reason when the factor archives are LFS pointers.
 
-Two conventions were also checked and closed. Every interior month averages exactly six cohorts
-(469 of 474 months; the rest are the sample's edge months), so no "flat trader" is being dropped
-from the overlap average. And extreme daily returns, up to +1595% in a day at 0.01% of rows, cannot
-move the "all" bucket: a single such leg is capped near 1/1940 of the book.
+`GAPS.md` section 11 is rewritten to the new output: the vintage table and its "seven of eight" (now
+eight, with the miss named as today's files'), the per-column variance ratios (1.32 -> 1.33, 2.59 ->
+2.60) and required rhos (0.932 -> 0.931), the joint table (0.950 -> 0.943, 98.2% -> 99.8%,
+0.931/0.951/1.006 -> 0.928/0.945/0.989, Panel B 0.790 -> 0.784 and its band), the rounding
+paragraph (three significant figures -> the printed five decimals; "by a margin of about one
+rounding step" -> "not narrowly"; Panel B's tail "1 in 18%" -> "1 in 15.6%"), the 95% span (94%), the
+Panel B and Table 4 rho rows (0.66/0.87/0.36/0.06 -> 0.65/0.86/0.37/0.06), and the mean-identity
+premiums above. Two paragraphs say why the numbers moved and cite note 99. **No verdict changes**:
+every gate still passes (`OK: all 16 checks reproduce`), Panel A is still feasible, still above 90%
+span, still above three times `ST_Rev`'s, and the 0.9434 is still implausible as an economic series.
 
-What is left is the attribution in section 39: the top-20 shape cells are one month's worth of
-difference - January 1975, the tallest bar of Figure 2 - and that month is the frozen-quote
-divergence whose stocks our CRSP vintage cannot screen out, because pre-1983 Nasdaq rows carry no
-volume field. That is a data limit, not a parameter. Any future attempt needs a 2002-vintage CRSP
-extract, or a decision to score a different cell set rather than to tune this one.
+**The check is untouched.** `scripts/03_replicate.py` is not modified on this branch
+(`git diff --name-only` lists no driver file) and mentions `paper_consistency.py` only in a doc
+string (line 2969), so the script is not on the check's path. Confirmed by measurement: two
+consecutive `--aggregate-only` runs of the baseline command into `.private/base` and
+`.private/base_b` produce `replication_check.md` files that `cmp` reports as differing at a
+single offset - line 106, the figure path each run prints for its own out-root
+(`Plot: .private/base[_b]/figures/figure1.png`) - and `diff` calls identical once that path is
+normalised; 411.0 and one "2005 archives" paragraph in both. A third run on the committed tree
+(`.private/base_final`) repeats it.
 
-## 41. Q2 closed from both ends: no CRSP field, and the paper's own pair count (2026-10-26)
+### Test count, lint, and the baseline
 
-Q2 has been "narrowed, not closable with the data we hold" since section 19.5. A live WRDS probe
-settles it, and the answer is not the one the question assumed.
+`pytest tests/ -q` **416 passed / 10 skipped -> 418 passed / 10 skipped** (the two new tests; the
+`test_paper_consistency.py` edits do not add tests). `ruff check` clean on the whole repo. The
+baseline command run last, after every edit, prints **411.0 of 865** with the "2005 archives"
+paragraph once (`.private/base`, `.private/base_b`, `.private/base_final`).
 
-**Nothing in CRSP separates the frozen Nasdaq names.** CRSP's new security-info history carries
-exactly the fields that could have stood in for a missing trade flag - `tradingstatusflg`,
-`exchangetier`, `securityactiveflg`, `conditionaltype`, `nasdcompno`. Pulled for forty frozen
-Nasdaq names (fewer than 25% of days moving in 1974H2) and forty liquid ones, every field agrees:
-`tradingstatusflg` "A", `exchangetier` "N/A", `securityactiveflg` "Y", `conditionaltype` "RW",
-`nasdcompno` populated for all of them. The daily files are no better: `crsp.dsf` and
-`crsp_q_stock` record **no volume and no trade count for any Nasdaq name in 1974** - the NYSE
-control has volume on all 128 days of the window while `numtrd` is null for every stock, including
-the one that trades. Re-downloading cannot help either, because both views are the current (2026)
-release: CRSP's 2003 vintage, which the paper used, is not served by WRDS.
+Four assertions in `tests/test_paper_consistency.py` moved with the fix, and **none was relaxed**:
+the joint-R2 test now reads the script's own `typed_table8()` inputs and pins 0.943 instead of
+0.950 (tolerance unchanged at +-0.005), the print-rounding share pins 0.998 instead of 0.982
+(unchanged +-0.04), the ST_Rev span 0.256 -> 0.259 (unchanged +-0.02), and the `factors` fixture
+loads the scored vintage. No test was deleted, no tolerance widened, and no gate constant was
+lowered: `THREE_DP_MATCHES` went 7 -> 8.
 
-**The paper's pair count says their screen did not remove our frozen names.** Our formation
-universe for the 1974-12 cohort holds 2,626 stocks - 1,793 Nasdaq, 777 NYSE, 56 AMEX - and the
-Nasdaq names move on only 34% of days at the median, against 85% on the NYSE. Screening at 25%
-frozen days would drop 555 of them (21% of the universe) and take the pair count to about 1,590,
-where the paper reports 2,057 with our build at 2,009. So their Nasdaq population cannot have been
-screened the way ours would have to be: their 2003 file either carried volume for those names or
-did not require it. That is consistent with everything the screens measured - they buy a few tail
-cells and cost 7 to 16 points, because the frozen names are part of the population the paper
-counted, not a minority it excluded.
+### For the coordinator (files I do not own)
 
-What remains is the one-month attribution of section 39: January 1975 is worth the top-20 skew,
-kurtosis and maximum cells, and it needs returns for quote-only Nasdaq names that neither our
-vintage nor a fresh WRDS pull can supply.
+Raised by this note and **fixed in the review's one-commit follow-up** (the coordinator asked for
+items 1-2 of `$Q/.review/r12/coord/review_A.md`): `claims/CLASS_A_AUDIT.md` section 4 now carries one
+line under its comparison table and "(fixed in R12, `REVIEW_NOTES` 102)" in findings 1 and 3, with
+the historical numbers untouched; `GAPS.md` section 8's closed-levers row for the three universes
+keeps its 291-cell figures and adds the 865-cell results (365.0 / not re-run / 361.5); the Q2 tracker
+row now quotes the measured count (1,563.8 pairs, -24.0 %); and section 11's two leftovers (the 2.19
+%/month premium, the 15/16 `OK` line) are corrected. Still open, and C's: `TBD.md` T19,
+`claims/CLAIM9_PRE1989.md` and `claims/NEAR_MISS_CENSUS.md` row 28 carry the 412.5 that note 94
+showed is 412.0 on a full build.
 
-## 42. Review fixes to Figures 2 and 3 (2026-10-26)
+## 103. The reversal constructions re-ranked against the factor both Table 8 panels imply (2026-11-18): 411.0 -> 411.0 (investigation)
 
-A code review of #44 found five problems in the figure readings; each is fixed and the numbers
-below replace those of Sections 37-39 where they differ.
+Contract R12-B. No cell moves, no option ships, no default changes: the work is
+`scripts/experiments/panel_a_rerank.py`, `tests/test_panel_a_rerank.py`, an additive
+extension of `scripts/experiments/class_a_audit.py` (Panel B's `c_req`, `s_r` and band, and the
+affine family `c(v)`, as new keys only), the page `claims/PANEL_A_RERANK.md`, `TBD.md`'s T23 and T29
+sections and INDEX rows, five lines in `GAPS.md` section 12,
+one pointer line in `claims/CLASS_A_AUDIT.md` section 6, and this section. The baseline was
+reproduced first from this worktree: **411.0 of 865**, one "2005 archives" paragraph
+(`.private/base/tables/replication_check.md`).
 
-**Figure 3 has a scale, labelled curves, and a stated series.** Section 38 said the figure has no
-readable axis labels and two unlabelled curves. It has a log axis labelled 0.1 / 1 / 10 / 100 whose
-decades are full-width rules (rows 5, 114, 223 and 331.5 of the raster, 108.9 pixels a decade, a
-linear fit exact to under 0.002 of a decade), and three labelled curves: Fully Invested Pairs,
-Committed Capital Pairs and the Equity Premium. The paper's text names the series: "the cumulative
-excess returns of the top 20 one-day-waiting strategy". The digitizer now writes levels, and the
-check compares Table 1 Panel B's series:
+**The control (step 0).** `python scripts/experiments/class_a_audit.py --ours .private/base/tables
+--draws 10000` on that run's tables reproduces `claims/CLASS_A_AUDIT.md` section 5 and its machine
+record: the fresh JSON is identical to the committed `analysis/class_a_audit.json` field for field,
+the two path strings aside. Section 5's rows: French `ST_Rev` `s_r` 0.02588, mean 0.806, ratio
+0.166, cosine +0.807, R2 0.259, R2 it would print 1.37 / 1.34 / 1.27 / 2.56; the scored losers-only
+series `s_r` 0.06852, mean 1.274, ratio 0.965486, cosine +0.999102, R2 0.949, R2 it would print
+0.1267 / 0.1544 / 0.1793 / 0.4979. The page printed that ratio as 0.966 where the record gives
+0.965; fixed in the review commit below.
 
-| top 20, one-day wait | fully invested: ours / figure / Table 1 B compounded | committed: ours / figure / Table 1 B compounded |
+**Pre-registration.** `.review/r12/B/PREREG.md`, written after the control and the target arithmetic
+and before any candidate was built: the paper sentence (p. 813 and footnote 7, quoted), the two
+panels' targets, the 78 candidates, the five metrics, and the decision rule. The rule needs all
+three of the following **in both windows** -- a strictly smaller norm gap `|1 - |c|/|c_req||`, a
+cosine no more than 0.002 below the shipped series', and an `s_r` inside that panel's band -- before
+note 82's Table 7 test (`s < 6`, `R < R(LO)`, `M < M(LO)`) gates the 865-cell check, which would
+still be a sensitivity without p. 813's textual support. The rule as registered, quoted: "A
+candidate **beats the shipped series** `french_ew_d3_losers_only` only if, **in both windows**: (i)
+`gap` is strictly smaller than the shipped series' `gap` in that window; (ii) `cosine` is no more
+than 0.002 below the shipped series' cosine in that window; (iii) its `s_r` is inside that panel's
+feasible band." Nothing was added to it after the first candidate was scored.
+
+**Targets, both panels, French's 2005 archives, `Sigma` rescaled to Table 8's factor SDs** (the
+convention `claims/CLASS_A_AUDIT.md` section 5 uses, so its row reproduces to the last printed
+digit):
+
+| | Panel A, 306 months | Panel B, 168 months |
 |---|---|---|
-| end level, 2002-12 | 72.1 / 39.7 / 72.5 | 11.6 / 11.5 / 11.5 |
-| correlation of the log paths | 0.998 | 0.998 |
+| `c_req` (market, SMB, HML, momentum) | 0.002693, 0.001665, -0.000344, -0.000382 | 0.001399, 0.000872, -0.000586, -0.000674 |
+| `\|c_req\|` | 0.0032078 | 0.0018753 |
+| `s_r` band | 0.0608 to 0.0816 | 0.0388 to 0.0566 |
+| joint R2 on the four | 0.943 | 0.784 |
+| implied premium, %/month | 2.181 / 2.182 / 2.184 / 2.185 | 2.596 / 2.564 / 2.656 / 2.602 |
 
-The committed curve agrees three ways. The fully invested curve agrees with neither our series nor
-the paper's own Table 1, which is the contradiction COVERAGE lists; it is not a scale error, because
-the same scale reads the committed curve exactly. Months are binned across the plot frame (columns
-55-630) rather than the tracked columns.
+**Panel B is feasible**, which is what this round adds to note 99: joint R2 0.784 (0.806 on our
+measured `Sigma`), its 101-120 column needs `|rho|` 0.372, no column fails an identity, and the
+printed 0.04448 is inside the band. The post-1988 panel is a target of the same shape as Panel A,
+not a contradiction.
 
-**Figure 2's annual sums used up minus down.** A month whose columns hold a neighbour's bar carries
-both a positive and a negative extent, so the sum mixed directions. The fixture now has a `signed`
-column, the reading at the column nearest each month's centre, and the annual sums use it: the
-correlation is 0.75 (not 0.84) and the paper's mean annual sum 15.5% (not 14.9%). Month bins now
-span the plot frame rather than the inked columns; on this raster the two coincide (columns
-66-629), so `up` and `down` are unchanged.
+**Results: 0 of 78 pass, measured 2026-11-18 in one run** (`.review/r12/B/panel_a_rerank.csv`: 78
+candidates x 2 windows x every metric; the page prints the tables). The shipped series ranks **7th of 78** in Panel
+A (gap 0.0345, ratio 0.9655, cosine +0.9991, `s_r` 0.06852 in band, premium 1.274 %, R2 gap mass
+0.422) and **63rd of 78** in Panel B (gap 0.6428, ratio 1.6428, cosine +0.9969, `s_r` 0.06857
+**outside** the band, R2 it would print 0.041 / 0.028 / 0.221 / 1.269 against the printed 0.02 /
+0.04 / 0.19 / 0.64).
 
-**The tallest bar is a window, not a month.** It is three columns wide (229-231), centred on
-December 1974, and covers November 1974 to January 1975. The single-month table now sets the month
-of that window where our return is highest (January 1975, 4.49%) to the printed maximum, uses
-Table 1's estimator (`summary_stats`, raw moments) rather than a separate one, and adds a control
-that sets our own tallest month (October 1987) instead:
-
-| top 20, no wait | ours | 1975-01 set | control: 1987-10 set | paper |
+| | closer than the shipped series | keeps direction (+/-0.002) | inside the band | all three |
 |---|---|---|---|---|
-| skewness | 0.81 | 1.30 | 1.15 | 1.39 |
-| kurtosis | 8.10 | 10.93 | 10.64 | 10.54 |
+| Panel A | 6 of 78 | 12 | 22 | 4 |
+| Panel B | 62 of 78 | 2 | 25 | 0 |
+| both | 2 | 0 | 2 | **0** |
 
-The control moves the cells almost as far, so the table measures the size of the shape gap (about
-one month at the paper's maximum) and does not by itself locate the month; Section 39's "the lever
-is a month, not a parameter" rests on Q2's evidence, not on this table.
+The two closer in both windows are `crsp_nyseamex_ew_d4_losers_only` (Panel A gap 0.0010, cosine
+0.9989, `s_r` 0.07120 in band; Panel B gap 0.3034, cosine 0.9795, `s_r` 0.05843 above the band) and
+`crsp_nyseamex_vw_d1_losers_only` (0.0210 / 0.9793 / 0.07111; 0.6110 / 0.9445 / 0.07242).
 
-**The check's prose is computed.** Every number in the figure section is now formatted from the
-values in the tables beside it.
+**What binds: the direction, in the second window, across two windows.** The norm is not the wall --
+it can be closed in either window, and 15 of 78 close it in both under the own-dispersion reading
+below. The band is not the wall alone -- 25 candidates reach Panel B's. What no construction does is
+shrink to Panel B's 0.0018753 *and* keep the factor's direction: only 2 of 78 are within 0.002 of
+the shipped series' post-1988 cosine (the shipped series and `french_ew_d4_losers_only`), and
+neither is in that band or closer on the earlier window's norm. The two windows also disagree about
+which construction is best: no candidate is in both top-three sets and the Spearman correlation of
+the norm gap across the windows is **-0.385**. So the contract's fourth possibility is the answer:
+the best pre-1989 construction is a different one from the best post-1988 construction, and the
+constraint that binds is the later window's direction.
 
-## 43. Where the 104 missing points are: a per-cell margin table (2026-10-26)
+**The class-A lead does not survive its own test.** `claims/CLASS_A_AUDIT.md` section 6 named a
+losers-only portfolio **more** co-moving with the four factors. Widening the bottom set from three
+deciles to four moves the other way: `french_ew_d4_losers_only` has ratio 0.9337 before 1989 (gap
+0.0663 against the shipped 0.0345) and 1.4891 after, with the direction intact (cosine 0.9986 in
+both windows). The one construction that does land on Panel A's target is the NYSE/AMEX
+equal-weighted bottom-four build (`crsp_nyseamex_ew_d4_losers_only`, gap 0.0010, cosine 0.9989,
+`s_r` 0.07120 in band, R2 gap mass 0.113 against the shipped 0.422) -- and it misses Panel B on both
+the band and the direction.
 
-The score is a sum of weights over cells, so the interesting question for a "can we do better"
-request is not which blocks are weak but how far each individual cell is from the next grade
-boundary. `scripts/03_replicate.py` marks ✓ within 10% of the paper, ~ within 25% and ✗ beyond,
-so each cell has a measurable *margin*: `|ours/paper - 1| - 0.10` for a ~ cell and
-`- 0.25` for a ✗ cell. Reading those margins off `table1.csv`, `table2_panelA.csv`,
-`table2_panelB.csv`, `table3.csv` and `table3_counts.csv` gives the whole picture.
+**Note 82's Table 7 test, run on the six new builds** (the only readings of the grid that table does
+not cover): three pass its three numeric gates and three do not -- `crsp_nyseamex_vw_d4_losers_only`
+(s 3, R 0.7061, M 0.9775, P 1.0062), `french_vw_d4_losers_only` (3, 0.8428, 1.1866, 1.2117),
+`crsp_nyseamex_ew_d4_losers_only` (5, 0.9429, 1.2907, 1.3358) pass; `french_ew_d4_losers_only` (6,
+1.3806, 1.7681, 1.8905), `crsp_all_vw_d4_losers_only` (6, 1.4522, 1.8745, 1.9964) and
+`crsp_all_ew_d4_losers_only` (6, 1.4972, 1.8980, 2.0397) do not. None can ship: `d4` is not three
+deciles, so it fails p. 813's text gate whatever its numbers.
 
-Tables 1-3: 291 cells, 187.0 points (✓ 152, ~ 70, ✗ 69). The 104 missing points split as
-Table 1 34.0, Table 2 Panel A 3.5, Panel B 11.0, Table 3 counts 0.5, Table 3 sectors 55.0.
-`scripts/cell_margins.py` prints all of this from the built tables, and its numbers are the ones
-quoted here.
+**Sensitivity, added after the rule ran** (labelled as such, not part of the rule): the band exists
+because `c` is affine in the reversal variance, so the target can be read at each candidate's own
+`s_r` instead of the printed one. 24 of 78 are then closer than the shipped series before 1989, 42
+after, 15 in both; **0 still pass all three conditions in both windows**. The caveat is that outside
+its band the affine family extrapolates a long way (the shipped series' own post-1988 cosine against
+the own-dispersion vector is 0.50), so the reading is only informative inside the band.
 
-**By statistic, the loss is almost entirely the tails.**
+**Tests.** Before: 416 passed, 10 skipped. After: **428 passed, 10 skipped** (the 12 new tests in
+`tests/test_panel_a_rerank.py`, all data-free: the cosine and ratio pins, the printed identity, the
+rule's three conditions and its 0.002 tolerance, the ranking order, the `d4` extension of the grid
+and its restoration). `ruff check` on the whole repo: 0 errors. The baseline check still prints
+411.0 of 865 under this branch's defaults.
 
-| family | cells | points | of |
+**What this note does not claim.** No cell is re-marked or reclassified, no option is added, no
+typed paper value, mark rule, threshold or `SCORE_LOG.md` row changes, and the score is 411.0 before
+and after. No construction was scored on the 865 cells, because none passed the first gate. The
+verdict on T23/T29 stays "measured, none passes" / "unreachable" -- only the *reason* recorded for
+T29 changes, from "it contradicts its own OLS identity" (withdrawn in note 99) to the feasibility and
+construction target above.
+
+**The coordinator's review, and the two fixes it asked for.** The result was verified
+independently (`.review/r12/coord/check_b.py`, raw factor files, none of this contract's code): the
+shipped series' pre-1989 cosine 0.99911, ratio 0.9655, `s_r` 0.06852 and post-1988 cosine 0.99688,
+ratio 1.643, `s_r` 0.06857 match the CSV above to four decimals, and the verdict stands. The two fix
+requests were my own "For the coordinator" items 1 and 3, now fixed in this section's commit, since
+the coordinator granted sections 2 and 5 of that page (A keeps section 4):
+
+1. `claims/CLASS_A_AUDIT.md` section 5's table printed the losers-only `|c|` ratio as **0.966**; its
+   own committed JSON (`analysis/class_a_audit.json`,
+   `factor_proximity.series.losers_only.norm_ratio` = 0.965486) and a fresh run both give **0.965**.
+   The row now reads 0.965, and "3.5 % short" stays (0.9655 is 3.5 %, not 3.4 %).
+2. Section 5's summary sentence and section 2's band sentence printed 0.0816 and 0.0815 as if they
+   were one number. Both now say which `Sigma` each end belongs to: 0.0816 rescaled to Table 8's
+   printed factor SDs (section 5's convention), 0.0815 on our measured `Sigma` (section 2's), a
+   difference of 0.09 of a thousandth.
+
+Item 2 of that list (`TBD.md:29-31`'s "T29-T32 are paper-side impossibilities") is routed to C by
+the coordinator, not fixed here.
+
+## 104. The ledgers brought to one state: the stale prices of notes 94-101 retired, and the check header pointed at the 865-cell prices (2026-11-18): 411.0 -> 411.0 (docs)
+
+Contract R12-C, branch `docs/r12-ledgers`. No cell moves and no default changes: the work is
+`README.md`, `TBD.md` (every section and INDEX row except T03 and T09, A's, and T23 and T29, B's),
+`GAPS.md` sections 1-7 and 10, `METHOD.md`, one sentence of the check header in
+`scripts/03_replicate.py` and the regenerated `REPLICATION_CHECK.md`. The baseline was reproduced
+first from this worktree into `.private/base` (**411.0 of 865**, 322 / 178 / 365, one "2005
+archives" paragraph) before any file was touched.
+
+**Why it exists.** Every round-10 and round-11 PR edited only the ledger lines it needed, so the
+pages had come to disagree with notes 94-101 in places. This note is the inventory, the fixes and
+the one disclosure that belongs in the check itself. Rounds 10 and 11 found no lever the paper's
+words support; nothing here is a lever either, and every number written is one a note, a claims
+page or this round's check already recorded.
+
+**The inventory** (`.review/r12/C/INVENTORY.md`, with each line number as of `2bcd80b` - the fixes
+move them - the stale text, the note that supersedes it and the fix). Twelve entries, each fixed
+here. Entry 12 was found on the final read of the branch, after the first three commits. The
+contract's third known-stale item - `GAPS.md` section 2's class-A reason - R11-B had already
+repaired before this worktree existed, so it is recorded below the table, not re-edited:
+
+| # | where | what was stale | fixed by |
 |---|---|---|---|
-| mean, median, nw_se, t_stat, std | 40 (Table 1) | 36.0 | 40 |
-| share_negative, mean (committed) | 16 (Table 1) | 11.0 | 16 |
-| skew, kurtosis, min, max | 32 (Table 1) | **7.0** | 32 |
-| the same four | 60 (Table 3 sectors) | **21.5** | 60 |
-| everything else (Tables 2, counts) | 199 | 158.5 | 199 |
+| 1 | `README.md:114-115` | "No measured reading or combination of readings beats 411.0" - false as written | restated: no reading the *text supports* beats it; what does score higher - 417.5 for three formation-stage readings off together, 412.0 for the delisting codes - is measured and not adopted (notes 94, 100) |
+| 2 | `README.md:26-29` | "the project scaffold ... all `.py` files are empty placeholders ... no results are generated yet" | replaced: the pipeline is implemented and `make outputs` regenerates the check |
+| 3 | `README.md:56-58` | "the `tests/` directory ... no research tests or results are included yet" | replaced with what the suite pins |
+| 4 | `README.md` first screen | no score, no statement of what was not adopted | a Status block: 411.0 of 865, row 9 at 417.5 **not adopted** (pending the user's decision), the delisting codes at 412.0, and pointers to `report/replication/README.md` and `SCORE_LOG.md` |
+| 5 | `TBD.md:780-783` (T22) | "a fourth would have to pair readings whose signatures do not overlap, of which none remain" - backwards: the three overlapping readings are the ones that stack | the round-11 joint row recorded, 417.5 with a 32.5-point interaction over 385.0, not adopted (note 100) |
+| 6 | `TBD.md:1178` (INDEX T22) | "measured, all lose \| none left in the library" | "measured; C1-C3 lose, and three readings of one signature off together gain 6.5 (417.5), not adopted" |
+| 7 | `TBD.md:497` (T12) | "No lever in the library moves it" with no measurement behind it | sourced: the screen leaves 1984-85, 1994-95 and 2000-01 untouched at every setting 0.95 -> 0.0 while 1974-75 falls 2,661 -> 911 (note 98), and five readings put the pair count at 2,006-2,016 against 2,057, all 2.0-2.5% short (note 100) |
+| 8 | `GAPS.md:156-157` (S2) and `:75` (S3) | "rebasing scores 143.5" - a 291-cell price | 346.0 of 865, with the 291-cell figure kept as its provenance (note 100) |
+| 9 | `GAPS.md:283-291` (section 7) | "Three of them scored above the shipped total when first measured" - now five | notes 94 and 100 added: the delisting family at 412.0 and the joint row at 417.5 |
+| 10 | `GAPS.md:299` (section 7, Q6) | Transportation's "needs" cell named no measurement | note 94's attribution: SIC 47xx is 6.6% of the top-5 payoff, no top-5 pair has both legs in it, and the book is railroad and airline pairs |
+| 11 | `TBD.md:313-314` (T07), `:558` (T14), `:280-281` (T06) | note-76 prices on the 406.0 base quoted with no current price beside them | the current price added beside each: the filter off 390.5 and the literal screen 365.0 (notes 98, 100), the same-issuer rule 410.0, the short weight 390.0 and the rebased index 346.0 (note 100) |
+| 12 | `TBD.md:29-33` (the page's preamble) | "every full-check reading measured against it is listed in `claims/NEAR_MISS_CENSUS.md` section 2 (31 readings, 5 above the baseline ...)" - the census stopped at note 88 | rounds 10-11 add six readings above the baseline: the delisting codes 411.5 / 412.0 / 412.0 (note 94), Table 6's panel-decile population and one-decile-per-pair draw at 412.0 each (note 97, `claims/TABLE6_CONSTRUCTION.md` R-A and R-C), the joint convention row 417.5 (note 100) | named, with their notes, beside the census's five; every one recorded and none adopted |
 
-The four tail statistics are 92 of the 291 cells and carry 28.5 of the 187.0 points - they run at
-31% when the rest of the table runs at 81%. Section 39 already showed why: the paper's top-20
-series has a right tail we do not have, and one month moved at its printed height fixes skewness,
-kurtosis and the maximum together.
+**Left in place, with the reason.** `GAPS.md` section 2's class-A row already carries the
+restatement the contract asks for: R11-B made it in `5b17e3c` before this worktree existed ("the
+identity argument this cell used to give is the one section 11 retracts ... every column is
+feasible alone and jointly"). It is verified against section 99 and left as it is; no second
+wording is needed and two would drift. Everything in A's and B's parts is untouched: T03, T09, T23,
+T29 and their INDEX rows, `GAPS.md` section 11, and section 8's Q5 row.
 
-**By margin, the near-misses are numerous but not enough.** Cells within 1%, 3% and 6% of a
-boundary, counting every flip as +0.5:
+**The census re-run.** `scripts/experiments/gaps_census.py --check .private/base/tables/replication_check.md`
+prints every shipped value, so section 2 is confirmed cell for cell and nothing was "fixed" to
+match: F 252.0 (310 cells, 217 / 70 / 23), D 65.5 (160, 46 / 39 / 75), C 39.0 (200, 23 / 32 / 145),
+A 9.5 (69, 5 / 9 / 55), G 19.0 (44, 14 / 10 / 20), B 4.0 (12, 3 / 2 / 7), E 4.5 (14, 2 / 5 / 7),
+H 4.5 (8, 4 / 1 / 3), I 13.0 (48, 8 / 10 / 30), total 865 / 322 / 178 / 365 / 411.0.
 
-| within | cells | points gained | score if every one flipped |
-|---|---|---|---|
-| 1% | 11 | +5.5 | 192.5 |
-| 3% | 24 | +12.0 | 199.0 |
-| 6% | 42 | +21.0 | 208.0 |
-| 10% | 62 | +31.0 | 218.0 |
+**METHOD.md: the seven default-off options of rounds 10-11.** The table of the paper's rules had
+no row for any of them: it names `--short-weights` and `--reversal-factor` inside rows 16 and 16
+for the two older readings, and `--trigger-sigma` and `--telephone-sic` live in the page's prose
+(sections 2 and 3). So the new subsection "The default-off readings of rounds 10-11" gives one row
+each - the option, what it reproduces, its note, "default off; sensitivity" - for
+`--delist-last-px` (411.5 / 412.0 / 412.0, note 94), `--pair-decile` (14.0 and 12.0 of Table 6's
+48 cells, note 97) and `--moments` 410.5, `--quantile-method` 409.5 / 410.0, `--sign-zero` 411.0,
+`--nw-correction` 411.0 and `--ibbotson-market` 411.0 (note 95). R10-B's five are written as they
+exist today, with the open question recorded: the user has not decided whether they stay. The
+paper-rule table's numbering and its tally are unchanged.
 
-So the "hit 200" target needs more than every cell within 3% of a boundary to land - it needs the
-cells within 6%, and those are not independent near-misses. They are the same two residuals
-repeated across portfolios: a level 12 to 25% too low in the 101-120 and "all" columns (mean,
-median, nw_se, committed), and a net-of-threshold touch on three Table 2 Panel A dispersion rows.
+**"Rows 7-9" meant SCORE_LOG's rows, and the header no longer says it.** R11-C's proposed wording
+(section 100) said "the same-issuer rule, the near-frozen filter and the RMS sigma of rows 7-9 off
+together". `SCORE_LOG.md` row 7 is the row the two exclusions landed on, row 8 the telephone SIC
+("`--telephone-sic 481x` gives row 7's 169.5") and row 9 the sigma ("`--trigger-sigma std` gives
+row 8's 172.0"), so rows 7-9 are the three readings - but they are also the page's *table* rows 1,
+2 and 5, and the page's row 9 is the joint reading, so the phrase reads two ways. The header now
+cites the page and its own row 9, naming the three readings in the sentence, and the ambiguity is
+gone by construction.
 
-**The direction histogram says the level residual is ours being too low, not too high.** Of the
-69 ✗ and 70 ~ cells, 94 want the statistic to move up and 63 down; but in Table 1 the balance is
-36 up against 13 down, and the "all" column alone is short by 20% on every location statistic
-while its standard deviation is within 7%. A portfolio whose mean is 20% low and whose dispersion
-is right is the signature of a population difference, not of a weighting or a parameter.
+**The header sentence, and the diff.** The old sentence pointed the reader at "SCORE_LOG.md [for]
+the score without them", where the scores are 291-, 323- and 481-cell numbers. It now reads:
 
-## 44. What the corrected Figure 2 reading says about the 1974 window (2026-10-26)
+```
+evidence, and claims/CONVENTIONS_865.md prices every convention this header
+names on all 865 cells: its row 9 - same issuer allowed, the near-frozen filter
+off, the trigger's sigma taken about the mean instead of the RMS about zero -
+gains 6.5 and is not adopted. Telephone utilities are
+```
 
-Section 42 replaced the Figure 2 fixture with a signed per-month reading. The month-by-month
-comparison behind section 39 is rebuilt on it here, and it is both weaker and more specific than
-the draft of this section that preceded the correction - the earlier draft still used the
-`up - down` columns, which mixed a neighbouring bar into a month, and two of its month claims do
-not survive.
+The first commit of the sentence (3 insertions, 1 deletion) said the three readings were "off
+together"; the coordinator's review (item 5) is right that row 9 does not switch the sigma off - it
+runs `--trigger-sigma std`, a standard deviation about the spread's mean instead of the RMS about
+zero - so a second commit rewords it (3 insertions, 2 deletions, again only in that sentence). The
+default-out-root run was made with `make benchmark` after the reword and `tables/replication_check.md`
+copied over `report/replication/REPLICATION_CHECK.md`; against the pre-edit baseline run the
+regenerated check differs in exactly two places: that sentence and the figure-path line, which
+carries the out-root (`.private/base` there, `results/replication` here) and differs for any two
+out-roots. Score line both times: `- Score: 411.0 of 865 compared cells`, one "2005 archives"
+paragraph in each. **No test pins the header text**: the suite is unchanged by both edits. The two
+header commits are self-contained (only `scripts/03_replicate.py` and the regenerated check), so they
+stand or fall together when the coordinator decides on the disclosure.
 
-The fixture's own limits first, because they bound what can be claimed. The raster carries 1.19
-columns per month and draws each bar about three columns wide, so a bar is placed to within a
-month either side, and several months share an identical reading (+13.30% for 1974-12, 1975-01 and
-1975-02; -4.79% for five months). Individual months are therefore not directly comparable; the
-check uses the annual sums (correlation 0.75) and the two extremes.
+**Tests and ruff.** Before (head of this branch, `results/` empty): 416 passed, 10 skipped. After
+the header edit, same tree state: 416 passed, 10 skipped. With the default out-root built the same
+suite reads 423 passed, 3 skipped in this worktree: the seven extra tests are the ones that skip
+without `results/replication/tables` (`test_cell_margins.py`, `test_class_a_audit.py`), and that
+directory is gitignored, so a fresh checkout of this branch is the 416 / 10 case. `ruff check`
+over the whole repo: clean before and after.
 
-| | ours | paper, digitised |
+**Coordinator review, round 12 (items 1, 2, 3, 5, 6, 7 and 8 applied; item 4 needs no action).**
+Seven fixes, two commits after the note's first five, and one re-run of everything:
+
+- **1, 6 (Makefile and the README's reproduce sentence).** `make benchmark` ran
+  `03_replicate.py --steps tables,table3,check` with none of the four side caches, so 138 of the 865
+  cells were absent and it could not print 411.0. It now passes `--cache-root` and the four side
+  caches through `PYTHON ?= python` and `REPL ?= data/processed/replication`, runs `figure1` too, and
+  writes the check to the default out-root `results/replication`, inside the worktree, where
+  `scripts/replication_score.py` reads it. Measured:
+  `make benchmark PYTHON=<venv>/python REPL=<cache-root>` prints
+  `{"score": 411.0, "valid": true, "full": 322, "half": 178, "miss": 365, "total_cells": 865}`, the
+  check carries `- Score: 411.0 of 865 compared cells` and one "2005 archives" paragraph, and the
+  file it writes is byte-identical to the committed `REPLICATION_CHECK.md`. The README now says which
+  target does what: `make benchmark` reproduces and scores the check, `make outputs` regenerates the
+  committed tables, figures and the pages' generated blocks but does not rerun the check.
+- **2.** The status paragraph's "four named causes" is the census's nine classes (`GAPS.md` section
+  2), as D's replication README will carry them.
+- **3.** One home per fact: the 417.5 / 412.0 sentence stays in the Status block and the later
+  paragraph now says only "every reading that scores higher is measured and not adopted".
+- **5.** The header sentence reworded, above.
+- **7.** `last_px` is 412.0 in all three places, with note 94: `TBD.md` T19's audit bullet, `T01`'s
+  (which now leads with the full-build number), `claims/CLAIM9_PRE1989.md`'s price cell and
+  `claims/NEAR_MISS_CENSUS.md` row 28. The 412.5 remains only where it is labelled as the round-6
+  script's engine and as not reproducing on a full build - `TBD.md` T09's section is A's and was left
+  alone.
+- **8.** `TBD.md`'s ID preamble now says paper-side "conditions no reading of this data closes": T29
+  unreachable rather than an identity violation (`REVIEW_NOTES` 99), T30-T32 impossible as printed.
+  T29's own rows stay B's.
+
+**Tests, ruff and the baseline after the review fixes.** `ruff check` clean repo-wide; `pytest tests/`
+423 passed, 3 skipped with the built tables and 416 passed, 10 skipped with `results/` empty; the
+contract's baseline command re-run into `.private/base_after` prints `- Score: 411.0 of 865 compared
+cells` with one "2005 archives" paragraph, and its tables are byte-identical to `.private/base`'s.
+
+**For the coordinator** - stale statements in files this contract does not give me:
+
+- `GAPS.md` section 8's closed-levers table (lines 450-486) is the one page still carrying the old
+  base. Six of its 865-cell prices were taken against the 406.0 base of their day and note 100
+  re-priced them: rebased 342.5 -> **346.0** (row 457), short value 389.5 -> **390.0** (row 458),
+  telephone 481x 401.5 -> **406.5** (row 461), waste 404.0 -> **409.0** (row 462), sigma std 405.5
+  -> **406.5** (row 463), same-issuer allow 404.5 -> **410.0** (row 464). Its closing paragraph's
+  "Three readings did when first measured" (lines 477-486) also needs note 94's delisting family
+  (412.0) and note 100's joint row (417.5), as section 7's equivalent sentence now has. The third
+  column's caption already says its scores are "on all 865 cells", which is why the omission
+  matters.
+- `GAPS.md` section 9's Q5 "Untried" sentence (lines 552-554) still lists "the delisting and merger
+  handling after 1983" as not yet tried; note 94 ran it (`--delist-last-px merge`, 411.5) and closed
+  it. The other candidate it names, the price-sign day rule, is still unrun and is the only lever
+  TBD's T09 row leaves open.
+- `scripts/03_replicate.py:2571-2579` (the `--short-weights` disclosure in the same header) still
+  cites "SCORE_LOG.md row 12" for the 183.5-of-291 comparison. The current price is 390.0 of 865
+  (note 100). It is outside the sentence this contract names, and the contract requires the
+  regenerated check to differ in that sentence and nothing else, so it is reported rather than
+  changed.
+- `TBD.md` T29 (lines 1025-1062) and its INDEX row 1185 are B's; B's R11-B pointer landed in
+  section 11 and in section 2 but not yet in T29's own "What can still be tried" item, which still
+  reads "the printed numbers violate an OLS identity or are portfolio-invariant" (line 1033) beside
+  its own corrected "Why it cannot be reproduced" paragraph (1056-1062). B's round-12 contract (T23,
+  T29) covers it.
+- `report/replication/README.md` is D's and is being rewritten as the final summary; the root
+  README's Status block points at it and assumes it will keep the score and the not-adopted
+  statement.
+
+## 105. The final summary: `report/replication/README.md` rewritten against notes 94-101 (2026-11-18): 411.0 -> 411.0 (docs)
+
+Contract R12-D, branch `docs/r12-summary`. The page that already existed is now the campaign's final
+summary, per round 9's rule of one home per fact: no `SUMMARY.md` was created, and every number on
+the page links to its ledger rather than copying it. No new measurement was made; the only thing run
+is the reproduce command, whose score line is quoted below. The page is 258 lines after the
+coordinator's fix request (the contract's guide was about 230: it carries the seven required parts,
+the seventeen exhibit rows the generator pins, fifteen lever rows -- thirteen levers plus this
+round's two results -- and the nine-class census). `$Q/.review/r12/D/SOURCES.md` lists every number
+on the page with its `file:line`, and `$Q/.review/r12/D/check_sources.py` re-checks all 81 of them by
+literal grep, the two round-12 rows through `git show <branch>:<path>`: **ALL OK** at the commit.
+
+**The baseline, before any edit.** The COMMON command from this worktree into `.private/base`:
+`- Score: 411.0 of 865 compared cells`, the "2005 archives" paragraph present once, and the check it
+wrote is `report/replication/REPLICATION_CHECK.md` byte for byte but for one line, the figure path it
+prints for its own out-root (`diff`: `106c106`).
+
+**What changed on the page, and why.**
+
+- **The four causes became the nine classes** (`GAPS.md` section 2). The old "Why the details
+  differ" section named four, merged the census rows and carried the class-A bullet's retracted
+  reason. The page now has one short paragraph per class -- points, cells, crosses, the strongest
+  evidence with its note, and what would move it -- over section 2's own table, and the tallies sum
+  to 865 cells and 411.0 points.
+- **Class A's reason is note 99's, not the older one.** "Table 8 Panel A's printed loadings violate
+  an OLS identity" is gone: every column is feasible alone and jointly (implied R2 0.943, feasible
+  reversal variance 0.0608-0.0815 around the printed 0.07228), and what the cells need is a
+  losers-only series 3.5% more co-moving with the four factors than the scored one, which is 3.5%
+  short in norm at a cosine of 0.999 (`claims/CLASS_A_AUDIT.md`).
+- **The reversal bullet is note 99's too.** The old text said no long-short construction reaches the
+  implied factor; what is out of reach is the *premium* (2.19%/month against the scored series'
+  1.27%). The paragraph now says both and adds note 96's decomposition: at the paper's own factor
+  beta (+0.724) the four smallest books land within 0.035 of the print.
+- **The lever table is new** (15 rows, T16-T23 plus notes 94-100, and the two round-12 results
+  below), with the numbers the contract
+  names: row 9 at **417.5** (not adopted, the user's decision, its gain all in Tables 7 and 8 -- the
+  class C and A cells), the delisting family at **412.0** (`all`, `nondistress`; 411.5 for `merge`),
+  the literal no-trade screen at **365.0**, the definition readings at **409.5-411.0**, Table 6's
+  draws at +1.0 unsupported, and the eight shipped conventions priced on 865. The two placeholder
+  rows are now filled from the other branches: R12-A (note 102) and R12-B (note 103).
+- **What would move it** is T24-T27 with the data, the source, the cells at stake and what each
+  unblocks, and T28-T32 one line each.
+- **Reproduce in one command.** The page leads with the driver invocation that produces the 865 cells
+  and says what it needs; the five-command pipeline is below it. `make benchmark` is explicitly not
+  the command: it passes no side cache, so 138 of the 865 cells are absent (`REVIEW_NOTES` 100).
+- **The ledger list** gains `DEFINITION_AUDIT`, `TABLE6_CONSTRUCTION`, `TABLE7_BETAS`,
+  `LARGE_BOOK_BETA`, `CLASS_A_AUDIT` and `CONVENTIONS_865`.
+
+**Not changed:** the exhibit table's marks and verdicts (generated column untouched, verdicts as
+`CLAIMS.md` states them), the score, `SCORE_LOG.md`, every typed paper value, the mark rule, the
+ceiling, `COVERAGE.md` (written by C), `GAPS.md`, `TBD.md`, `CLAIMS.md` and the root README.
+
+**The reproduce command and its score line.** Run 2026-11-18 in this worktree:
+
+    Q=$(git rev-parse --show-toplevel)
+    R=$Q/data/processed/replication
+    OMP_NUM_THREADS=2 $Q/.venv/bin/python scripts/03_replicate.py --universe vol_common \
+      --aggregate-only --workers 1 --cache-root $R/vol_common --table9a-cache $R/vol_common_top3 \
+      --table9b-cache $R/vol_common_recalls_r1 --table6-cache $R/vol_common_t6_book \
+      --delist-cache $R/vol_common_delist100 --out-root .private/base --steps tables,table3,figure1,check
+    grep "^- Score" .private/base/tables/replication_check.md
+
+    - Score: 411.0 of 865 compared cells (✓ = 1, ~ = ½, ✗ = 0); history in SCORE_LOG.md.
+
+and `grep -c "2005 archives"` on the same file prints `1`. It needs the shared caches (this
+checkout's `data/processed/` is empty) and the real factor files; the page says so.
+
+**The test.** `tests/test_replication_readme.py` (new, data-free, 2 tests) recounts ✓ / ~ / ✗ from
+the check's own per-block bullets, requires the recount to weigh to the check's score line and to its
+cell total (the control), and then requires the page's stamp line to equal all five numbers. Checked
+by mutation: with the page's `411.0` changed to `412.0` the test fails, and it passes again on
+restore. `tests/test_docs_pages.py`'s idempotency test also passes unchanged, so `scripts/docs_sync.py`
+would rewrite nothing.
+
+**Tests and lint.** Before: **416 passed, 10 skipped**, the base's count in `COMMON_R12.md`, and
+what this branch's suite reports with `tests/test_replication_readme.py` deselected. After: **418
+passed, 10 skipped** (+2, the new file).
+`ruff check` (whole repo): 0 errors, before and after.
+
+**For the coordinator** (files this contract does not own; listed, not edited):
+
+- `report/replication/COVERAGE.md:140` says the Figure 2 annual-sum correlation is "0.75 for both";
+  `REPLICATION_CHECK.md:724` prints 0.76. The page quotes the check. C owns `COVERAGE.md`.
+- The contract's summary of note 99 says the scored series is "|c| 3.4% short"; note 99, its table and
+  `claims/CLASS_A_AUDIT.md:261` say 3.5%. The page uses 3.5%.
+- `TBD.md`'s INDEX still carries two statements their sections have since retracted: T29's "it
+  contradicts its own OLS identity" (withdrawn by note 99; T29's own body says so at lines
+  1061-1064) and T22's "none left in the library" (note 100 measured the row-9 interaction and
+  proposed a replacement status at `REVIEW_NOTES` 1726-1730). T29 is B's section, the INDEX row C's.
+- `TBD.md` T09's INDEX row still says "try the price-sign day rule (the only lever left)"; R12-A
+  fills that row on the page, so the ledger and the page should agree when the round closes.
+- `GAPS.md` section 2's class-A row and the page's class-A paragraph now agree; nothing else in
+  sections 1-7 that the page cites is stale as of this round's notes.
+
+**Coordinator review (same day): four fix requests, all applied.** `$Q/.review/r12/coord/review_D.md`
+item 5 is the coordinator's own, so the page does not change for it.
+
+1. **No machine-specific paths.** The reproduce block is now `R=${GGR_SHARED_REPLICATION:-data/processed/replication}`
+   and plain `python` with repo-relative paths; the run's provenance kept its date and lost the
+   worktree name; the cache bullet now says "point `R` at the directory holding them" instead of
+   describing this checkout's empty `data/processed/`.
+2. **The two placeholder rows are filled** with results that exist on local branches, read there with
+   `git show`: R12-A/T09 (branch `replication/r12-last-lever`, note 102) at 361.5 (`price_common`) and
+   365.0 (`volpos_common`) of 865, 300.5 / 304.0 on the 729 main-cache cells, with 1,799.8 / 1,847.1
+   stocks against 2,317 and 1,563.8 / 1,606.7 pairs against 2,057, one T09 cell up and six further
+   away; R12-B (branch `replication/r12-panel-a-rerank`, note 103) at 0 of 78 constructions passing in
+   both Table 8 windows. Nothing was re-measured here: both rows quote the other branches' recorded
+   numbers and cite their notes.
+3. **Classes C and A and T23 now carry note 103.** Class A's round-11 lead ("3.5% more co-moving") is
+   recorded as tested and not surviving -- 0 of 78 pass in both windows, the binding constraint is the
+   post-1988 panel (64% too large in covariance norm, outside the band) -- and class C's "it lands on
+   the required factor" is now windowed: it holds before 1989 and misses after 1988. T23's row reads 78
+   candidates in two rankings, 0 of 72 on note 82's test and 0 of 78 across both windows.
+4. **T29's bullet drops Q5**, which `TBD.md` T29 does not mention; it now says the cells need the
+   reversal factor (T25), which note 103 shows no construction we can build reaches in both windows.
+
+So this commit quotes notes 102 and 103 that are not on this branch (the coordinator merges); the
+page's numbers on those two rows were read from the branches and re-checked by `check_sources.py`
+through `git show`. **The portable form of the reproduce command was then run as written**, with
+`GGR_SHARED_REPLICATION` exported to the shared tree and the venv on `PATH`, into
+`.private/portable`: `- Score: 411.0 of 865 compared cells`, the "2005 archives" paragraph once,
+and the check equal to the committed one but for its own figure path (`106c106`). Tests 418
+passed / 10 skipped and `ruff` clean again after the fix; SOURCES 81 rows, ALL OK.
+
+## Index of archived notes (1-77)
+
+Every number below is a live identifier. The text is in
+`REVIEW_NOTES_ARCHIVE.md`, byte for byte as it was written; the score column is the
+shipped score before and after the note, where the note changed it.
+
+| note | topic | score |
 |---|---|---|
-| tallest month | 1987-10, 10.23% | 1974-12, 13.30% |
-| deepest month | 1974-04, -8.02% | 1974-03, -7.98% |
-
-So the *downside* is right - the deepest months agree to 0.04 percentage points - and the whole
-of the extreme gap is the upside, in a window the check already names (1974-11 to 1975-01 for the
-tallest bar). Taking the three months the raster cannot separate, the positive residuals are
-+10.16 (1974-12), +8.81 (1975-01) and +11.55 (1975-02) percentage points, by far the largest in
-the sample; the next largest is +5.75 in 1963-07.
-
-One sign flip survives the correction and one does not. 1974-03 is genuinely opposite: the paper's
-bar is -7.98% where we earn +2.14%, the largest negative residual in the whole comparison. The
-1974-02 sign flip claimed in the draft was an artefact of the old columns - read signed, the paper
-is +7.14% against our +2.42%, the same sign and a 4.72 point gap. And 1987-10 runs the other way
-round, +10.23% for us against +0.84% for the paper.
-
-What that leaves is narrower than "one month". A level, a weight or a threshold cannot flip 1974-03
-from +2.14% to -7.98%; a portfolio whose largest month is ours in 1987 and the paper's in 1974-12
-is holding different pairs at different times. That is the same conclusion Table 4's beta
-diagnostic reaches independently (our "all" market beta is +0.059 against the paper's -0.145).
-
-The era split of the same comparison is consistent with the vintage reading of section 41 but
-milder than it claims: mean absolute residual 1.52pp over the 234 months before 1983 against
-1.26pp over the 240 after, with correlations of 0.493 and 0.309. 1974 is worse than an average
-pre-1983 month rather than representative of one, and "fix the frozen names and 1974 comes back"
-remains unestablished.
-
-## 45. Two more conventions measured, both rejected (2026-10-26)
-
-Five conventions had already been settled by score (SCORE_LOG rows 7 to 13). Two that the paper is
-genuinely silent about had never been measured, because each needs a full 474-cohort rebuild. Both
-were run end to end on separate cache roots; Tables 1-3 scored from their own `table3.csv` and
-`table1.csv` with the same marks as the check.
-
-| convention | flag | Tables 1-3 |
-|---|---|---|
-| current | - | **187.0** of 291 |
-| trading prices rebased to 1 on the first trading day | `--normalization rebased` | 143.5 |
-| two securities of one issuer may pair | `--same-issuer allow` | 182.5 |
-
-The rebasing result is the strongest single refutation in the file. Rebasing looks harmless - it
-changes no return, only the scale the spread is measured on - but the 2-sigma trigger is a level
-(`sigma` is estimated during formation, in formation units), so rebasing every pair quietly changes
-the threshold every pair must cross: pair entry timing moves for the whole sample and 43.5 points
-go. The *trading* rebasing day is therefore not free to choose: the paper's own Figure 1 anchor
-(day-0 levels 1.10) and the trigger both require the continued normalization. (`PAIR_FORMATION.md`'s
-"review point A" is a different question, the *formation* index's first day; section 47 measures
-it.)
-
-A third variant was screened before rebuilding: a variance-normalised pair distance (`D_ij` on
-`P_i/sd_i`), which the phrase "the two normalized price series" might permit and which would have
-raised the industrial share of the tightest pairs towards the paper's 15%. It is refuted without a
-rebuild, on five cohorts spanning 1974 to 2000: the top-5 pairs' mean formation sigma goes from
-0.0209 to 0.2145, ten times the paper's 0.0238 (Table 2 Panel A's trigger row is 2 sigma). Full
-normalisation is not available; what the top five pairs need is a different population, not a
-different scale. The halfway point was then measured rather than interpolated: dividing by
-`sqrt(sd)` instead of `sd` takes the top-5 sigma to 0.0427, still 1.8x the paper's, while moving
-the industrial share only from 0.14 to 0.26. Fitting the three points (0, 0.5, 1) puts the
-paper's 0.0238 at an exponent of about 0.09, where the sector mix has moved by roughly a fifth of
-the distance it has to travel. The constraint is not closable by tuning the exponent.
-
-## 46. The top five pairs are a degenerate population, and it is not a screen (2026-10-26)
-
-Section 45 left one question open: the paper's top-5 portfolio is 72% utilities, 15% industrials
-and 20% mixed-sector, and ours is 77%, 7.5% and 10.5%. Since a price-unit distance makes the
-tightest pairs out of the least volatile stocks, the sector mix is an order statistic of the
-universe, and the natural suspects were the universe screens. All of them are now measured, on
-thirty-nine January cohorts (1964-2002):
-
-| build | utilities | industrials | financials | mixed-sector | top-5 sigma |
-|---|---|---|---|---|---|
-| current (stale limit 0.95) | 0.826 | 0.056 | 0.118 | 0.118 | 0.021 |
-| stale limit 0.85 | 0.864 | 0.041 | 0.095 | 0.092 | 0.021 |
-| stale limit 0.70 | 0.885 | 0.049 | 0.067 | 0.072 | 0.021 |
-| **paper** | **0.72** | **0.15** | **0.11** | **0.20** | **0.0238** |
-
-Tightening the stale screen makes the concentration **worse**, not better: it removes financials
-and industrials before it removes utilities, because a near-frozen price is the flattest possible
-formation series and utilities are the second flattest. The sigma is flat at 0.021 across all
-three settings, so the screen is not what the top five are made of.
-
-The era split shows the same thing from the other side. Counting one January cohort per year:
-
-| era | utilities | industrials | financials | mixed-sector |
-|---|---|---|---|---|
-| 1964-1975 | 0.800 | 0.108 | 0.092 | 0.217 |
-| 1976-1985 | 0.800 | 0.070 | 0.130 | 0.160 |
-| 1986-1995 | 0.980 | 0.000 | 0.020 | 0.040 |
-| 1996-2002 | 0.686 | 0.029 | 0.286 | 0.000 |
-
-Between 1986 and 1995 the five tightest pairs in a 2,000-pair universe are 98% utilities: five
-pairs drawn from 6% of the stocks, with only 4% of them spanning two sectors. The paper's
-full-sample mix is outside our best era as well as our average - our best decade reaches 0.108
-industrials against its 0.15, and its 0.20 mixed-sector is below only our 1964-1975 reading. So
-the difference is not a weighting of eras we could reweight, and not a screen: under a
-price-unit sum of squared deviations, low-volatility near neighbours win the top ranks in every
-period, and the paper's top five are more diverse than that at every point of its sample.
-
-That is where Tables 2 Panel B's four weakest cells (industrial, transportation and mixed-sector
-weights in top5 and top20) and Table 2 Panel A's three top-5 dispersion rows come from, and it is
-the reason the near-miss cells of section 43 cannot be collected: they are not near misses of a
-parameter, they are the observable signature of a pair-selection rule whose top ranks we do not
-reproduce. What the paper's rule is remains open - the candidates that scale the distance have
-been measured and rejected here and in section 45, and the universe screens in sections 18, 41 and 43.
-
-## 47. Three more readings of the trading rule measured, none shipped (2026-10-26)
-
-A review list (`TO_FIX`, kept outside the repository) named two readings no rebuild had tested, and
-a cohort-cache count suggested a third. All three were run as full 474-cohort rebuilds on separate
-cache roots, each changing one thing against the shipped engine (`87f645e`), and scored with the
-check's own marks.
-
-| reading | change | Tables 1-3 | total | Figure 1 |
-|---|---|---|---|---|
-| shipped | - | **187.0** of 291 | **213.5** of 323 | reproduced |
-| formation index starts at the previous close | `P_0 = 1 + r_0`: the first formation day's return enters the index | 183.5 | 211.5 | **not reproduced** |
-| no wait-1 persistence clause | a wait-1 signal opens on the following day even if the prices crossed back in between | 187.0 | 213.5 | reproduced |
-| fresh divergence | a pair opens only after its spread has been inside the 2-sigma band, so a pair already apart at the end of formation waits for a new divergence | 179.0 | 206.5 | reproduced |
-
-**The formation index's first day** (`PAIR_FORMATION.md`, review point A). `normalized_prices` sets the
-index to 1 at the close of the first formation day, so that day's return never enters the distance.
-Starting at the previous close is the more literal reading of "a cumulative total returns index ...
-over the formation period", and it shifts every stock by its own `1 + r_0`, so it reorders pairs
-rather than rescaling them. It loses 3.5 points (Table 1 +1.0, Table 2 B +0.5, Table 3 -5.0), and the
-Figure 1 pair moves from rank 4 to rank 3 with its third trade opening on day 80 against the chart's
-74 (shipped: 76), outside the three-day tolerance. The figure is the only place the paper shows a
-pair's own path, so the shipped convention has independent support, not just the score.
-
-**The wait-1 persistence clause** (`models.py`, "skipping signals whose prices cross on that intervening
-day"). Neither edition states it; the 1999 draft says only "initiate positions in each pair on the day
-following the divergence". Removing it moves values by a basis point or less (Table 1 Panel B top 20
-mean 0.88% -> 0.87%; Table 2 Panel A top 5 round trips 2.24 -> 2.26) and changes no mark. With
-neither text nor score behind it, the clause is now disclosed in the check header rather than
-changed, since the change would move every Panel B value for no measured reason. Earlier review
-comments quoted 180.0 and 182.5 for this variant; those came from a local experimental tree with
-payoff-count returns that was never shipped, not from this engine.
-
-**Fresh divergence.** On the shipped cache, 15% of the pairs that ever open do so on the first
-possible day (14.9% top 5, 15.0% top 20, 16.5% "all"): under the continued normalization a pair can
-end formation already more than two sigma apart, and the engine opens it at once. In the "all"
-portfolio those immediate trades earn 0.10% on average against 1.49% for the rest. The paper's
-"positions are opened at the end of the day that prices diverge" can be read as an event rather
-than a state, so the variant arms a pair only once its spread has been inside the band. It does
-what the count suggests for Table 1 - the one-day-wait "all" mean rises from 0.60% to 0.68%
-against the paper's 0.71% and its t-statistic from 6.95 to 7.86 against 7.92, Table 1 +2.0 - but
-Table 3 loses 10.5 points, because the sector portfolios' means are already at or above the paper's
-(Transportation "all" mean 0.45% -> 0.59% against 0.44%; Industrials top 20 t-statistic 8.63 ->
-9.16 against 6.93). The same trade appears in section 33 and in the short-weight choice
-(SCORE_LOG row 13): any change that raises the unrestricted portfolios' returns raises the sector
-portfolios' too, and ours sit on opposite sides of the paper in the two tables: below it in all
-eight Table 1 fully invested means, above it in nine of the fifteen Table 3 means.
-
-**What this leaves.** With these three, every untested reading of the trading rule that a review
-has named is now measured, and the best of them ties the shipped score. The Table 1 / Table 3
-opposition above is the clearest statement yet of why the remaining points are not a convention:
-the paper's unrestricted portfolios earn more than ours while most of its within-sector portfolios
-earn less, and a single rule applied to both moves them together.
-
-
-## 48. The quote-only Nasdaq names, measured from the data up (2026-10-26)
-
-This section takes Q2 from the raw CRSP fields rather than from the score. Every number is from the
-shipped cache or a full 474-cohort rebuild against `87f645e`.
-
-**What the data are.** Before 1983, CRSP has no Nasdaq volume and no trade prices: in 1975 every
-Nasdaq row has missing volume and a bid/ask-average price, and 62.5% of Nasdaq daily returns are
-exactly zero (NYSE 21%). The zero-volume screen cannot see these stocks, so in the cohort trading
-from January 1975 they are 2,132 of the 2,989 eligible stocks (71%), with a median share of
-unchanged-quote days of 0.71. The stalest fifth (0.8-0.95) has a median market cap of $2.2m. In that
-cohort's top 20 (cohort 1974-11), half the pairs have a quote-only leg, most of them banks, quoted
-unchanged on 55-94% of formation days (Buning Florist 0.94, Commonwealth National 0.90, Bank of Delaware 0.89), and they
-earn 0-10% in January 1975 while the NYSE utility pairs beside them move 14-41%.
-
-**January 1975, position by position.** 11,296 open positions across the six cohorts: long legs
-gain 21% and short legs 12% on average, and the tightest pairs earn least (ranks 1-20 2.6%, ranks
-past 1,000 9.2%). The "all" portfolio's 10.3% is the value-weighted reading; equal weight gives
-9.1% and payoff per pair 7.8%. The paper's "all" maximum (17.18% / 16.32%) has to fall before 1989:
-its post-1988 standard deviation of 1.295% over 168 months leaves no room for a 16% month after
-1988, so January 1975 is the likely month. No cached capital reading reaches it: payoff counts get
-the "all" mean (0.740% against 0.715%, one-day wait) and the kurtosis (23.8 against 25.7) but put
-the maximum in March 2000 (+13.0%) with skewness near zero.
-
-**Removing them (`--max-stale-share 0.5`).** Tables 1-3 fall to 157.0 of 291 (-30.0): Financials
-drop to 263 stocks per cohort (paper 371), the size-decile rows move off the paper's (all-pairs
-average decile 4.63 -> 4.19, paper 4.57), and the top-5 and top-20 means overshoot (Table 1 Panel A
-top 20 1.38% -> 1.59%, paper 1.44%). The unscored Figure 2 moves the other way: the correlation of
-annual sums with the digitised bars rises from 0.75 to 0.89 (before 1983 0.60 -> 0.83, after 1983
-unchanged), January 1975 for the top 20 rises from 4.5% to 8.5% (paper 13.3%), and 1975 as a year
-from 9.8% to 35.0% (paper 46.3%), with 1976, 1980 and 1981 overshooting.
-
-**The trigger is not this.** Removing the quote-only names leaves the top-5 trigger at 0.0416
-(shipped 0.0409, paper 0.0476). Two other readings were screened on every 24th or 12th cohort and
-are rejected: a price-only (`dlyretx`) formation index (0.0421 against 0.0423 on the same sample),
-and the spread actually observed at the wait-1 opening (0.0454 / 0.0529 / 0.0834 / 0.1969 against
-the paper's 0.0476 / 0.0528 / 0.0756 / 0.1689), which fits the top 5 and top 20 but not the other
-two columns and contradicts the table note's "two standard deviations". Idle cohort-months (no pair
-open) are under 1% of every portfolio except where a 101-120 band does not exist, so how they enter
-the overlap average is not a lever either.
-
-**What this leaves.** The paper's top ranks in 1973-82 behave like a portfolio without these names
-(Figure 2), while its stock counts and size deciles say they were in its universe. Both hold only if
-its CRSP edition quoted these stocks less statically than today's file does, which is the edition
-question Q2 already ends on, now with the paper's own figure as evidence. No rule we can state from
-the paper separates the two readings, so nothing is shipped.
-
-## 49. Every table and figure with a printed number joins the score: 213.5 of 323 -> 266.5 of 481 (2026-10-27)
-
-**What is scored now.** Table 4 (the Sharpe ratio, the Fama-French + momentum + reversal
-regression, the Ibbotson-factor regression and the equity-premium column: 60 cells), Table 5 Panel A (20), Table 8 (the subperiod
-moments and a five-factor regression in each half: 72) and Figure 4 (the six correlations its text
-prints, raw and on five-factor residuals: 6). Rows that repeat a scored row are not counted twice,
-and neither are t-statistics or Table 8's factor standard deviations. Every new paper value is
-read back out of the PDF by `scripts/verify_paper_targets.py` (Table 4 60 values, Table 8 72,
-Figure 4 6), and `scripts/paper_cells.json` carries the new cells for the scorer.
-
-| block | cells | ✓ / ~ / ✗ | points |
-|---|---|---|---|
-| Table 4 | 60 | 19 / 8 / 33 | 23.0 |
-| Table 5 Panel A | 20 | 7 / 5 / 8 | 9.5 |
-| Table 8 | 72 | 12 / 15 / 45 | 19.5 |
-| Figure 4 | 6 | 0 / 2 / 4 | 1.0 |
-| all new cells | 158 | 38 / 30 / 90 | 53.0 |
-
-The total rises 213.5 -> 266.5 and the rate falls 66.1% -> 55.4%. The new blocks split cleanly:
-what describes the series itself matches (the four Sharpe ratios within 10%, the equity premium's
-mean, standard deviation and Sharpe ratio within 10%, Table 8's top-20 moments in both halves),
-while the regressions do not (4.0 of 28 points in Table 4's, 9.5 of 56 in Table 8's). The factors
-are French's and reproduce the paper's printed factor volatilities for the market, SMB, HML and
-momentum to within 0.5% before 1989, so the data are right; the reversal factor is not (0.026
-against the paper's 0.072 before 1989, section 32), and a regression shares its misfit across
-every coefficient. Our "all" market loading is +0.053 against -0.145, which is Q1's population
-difference, not the factors. Tables 1-3 and 7 are byte-identical to SCORE_LOG row 14's check.
-
-**Review findings on #44.** F1: Figure 2 stays compared on the no-wait series, now on evidence
-that uses only the paper - the digitised bars match Table 1 Panel A's top-20 row on five of six
-statistics and Panel B's on one (mean 1.31% against 1.44% and 0.90%) - and the check prints that
-test and the one-day-wait comparison beside it. F2: `tests/test_cell_margins.py` skips with a
-message when the built tables are absent, so `make test` passes on a fresh clone (210 passed, 7
-skipped). F3: the 19 ruff findings the branch added are fixed; the touched files carry only the
-findings `main` already had.
-
-**Landing.** #44, #45 and #46 had merged into the branches they were stacked on, not into `main`;
-this change brings all three to `main` with it.
-
-**The Ibbotson block.** The paper's second model regresses on Ibbotson's market, small-stock,
-bond default and bond horizon premia ("the monthly geometric difference" of the underlying total
-returns, from the Ibbotson EnCorr analyzer). CRSP has the S&P 500, the 30-day bill and government
-bond indices but no corporate bond returns. Ibbotson's own long-term corporate and government bond
-returns are in Goyal and Welch's predictor data (`corpr`, `ltr`; the 2005 edition, already in
-`data/raw/goyal_welch`), so the default and horizon premia use Ibbotson's series directly. The
-small-company series is rebuilt by Ibbotson's recipe (NYSE common stocks in the bottom fifth by
-capitalization, re-formed every five years, through 1981; the DFA Small Company fund from 1982),
-which matches the published 1961-81 annual returns at a correlation of 0.999. The block scores 12.0
-of 24 (✓ 10, ~ 4, ✗ 10): three of four intercepts are within 10% (0.688% / 0.866% / 0.719%
-against 0.716% / 0.857% / 0.766%), and so are the top-5 default and horizon loadings and both
-R2 values of the broad portfolios. Reading the `.xls` needs `xlrd`, now a dependency.
-
-**The reversal factor by Carhart's recipe.** The paper builds its reversal factor "similar to
-Carhart's (1997) momentum factor, but the performance-sorting horizon here is one month" (footnote
-7). Carhart's footnote 3 gives that recipe: "the equal-weight average of firms with the highest 30
-percent ... minus the equal-weight average of firms with the lowest 30 percent ... The portfolios
-include all NYSE, Amex, and Nasdaq stocks and are re-formed monthly" (his main text calls the
-factors value-weighted; the footnote is the construction). Built that way on CRSP monthly returns
-with a one-month sort, the factor's standard deviation is 0.030 before 1989 and 0.058 after,
-against the paper's printed 0.072 and 0.044 (common shares only: 0.030 / 0.061; price at least $1:
-0.029 / 0.048). The paper's factor is more volatile in the first half and calmer in the second,
-and no construction tried reproduces that ordering. Swapped in for French's ST_Rev, it scores the
-same on Table 4's five-factor block (4.0 of 28) and lower on Table 8's regressions (8.5 against
-9.5 of 56), so French's factor stays. Building it on the pairs universe itself (each cohort's 2,293 stocks
-on average, against the paper's 2,317) does not help either: 0.031 / 0.072 equal weighted, 0.033 /
-0.054 value weighted, 0.032 / 0.036 on NYSE and Amex only. The universe moves the post-1988 figure
-across a range that brackets the paper's 0.044, but every reasonable universe and weighting gives
-0.030-0.033 before 1989, so the paper's 0.072 there is not a sample choice. Closing the 1% stock-count
-gap cannot change that either. Perturbing each cohort's universe gives pre-1989 standard deviations of
-0.0310 for a random 1% dropped, 0.0311 for a random 1% of other CRSP stocks added, and 0.0317 for the
-1% of other stocks with the most extreme prior-month returns added. Even 25% of those extreme stocks
-added gives only 0.0354. A bound gives the same answer: 1% is about 23 stocks against legs of about
-685 each, so the added names carry about 3% of a leg's weight. To lift 0.031 to 0.072, they would have to
-add an independent component with a standard deviation of 0.065, which means a leg spread among them of
-about 200% a month. The recipe matters more than the universe: decile 1 minus decile 10 gives 0.047 /
-0.110. The text confirms the sign used: "The exposures to momentum
-and reversals have the predicted signs" (p. 816), i.e. positive on losers minus winners.
-
-**Momentum and reversal compared, and what the paper's reversal factor looks like.** The text
-treats the two factors in parallel. Momentum is "constructed along the lines of Carhart (1997)"
-(p. 814; the Table 4 note says "Carhart's Momentum factor"). Reversal is the top three deciles of
-prior-month return minus the bottom three, and its construction "is similar to Carhart's (1997)
-momentum factor, but the performance-sorting horizon here is one month" (footnote 7). The Table 8
-factor SDs show where the factors came from. French's library matches four of the five in both
-windows: market 0.0459 / 0.0445 against 0.0458 / 0.0439, SMB 0.0292 / 0.0388 against 0.0292 /
-0.0386, HML 0.0260 / 0.0336 against 0.0260 / 0.0364, and UMD 0.0350 / 0.0494 against 0.0351 / 0.0493.
-The paper's momentum is therefore French's UMD, not a series built on the pairs universe. That build
-gives 0.042 / 0.079, and adding or removing 150 stocks keeps it between 0.041 and 0.044 before 1989.
-Carhart's own recipe on CRSP gives 0.039 / 0.067. The same reading applied to reversal is French's
-ST_Rev, the factor shipped here. It matches after 1988 (0.0403 against 0.0445) and misses before
-(0.0259 against 0.0723).
-
-The pre-1989 panel has a fingerprint. In every column the market and SMB loadings are almost exactly
-the negative of the reversal loading: -0.434 / -0.442 / +0.436, -0.312 / -0.332 / +0.333, -0.289 /
--0.275 / +0.288 and -0.434 / -0.402 / +0.452. A long-short factor does not produce that offset.
-A reversal series that carries market and small-stock exposure, such as a long-only portfolio of
-losers, does. The equal-weighted bottom three prior-month deciles minus the T-bill, with no short
-leg, have an SD of 0.0685 (French deciles) or 0.0728 (built, bottom 30% of CRSP) against the
-paper's 0.0723. In the "all" regression this series gives -0.29 / -0.30 / +0.34 and R2 0.63,
-against the paper's -0.43 / -0.40 / +0.45 and 0.70, while ST_Rev gives +0.04 / +0.09 / +0.17. After
-1988 the same series has an SD of 0.069-0.086 against 0.0445, so it does not describe the second
-panel. Scored on the 84 regression cells of Tables 4 and 8, the losers-only series reaches 20.0,
-against 13.5 for ST_Rev. A splice of losers-only through 1988 and ST_Rev after reaches 15.5. This is
-consistent with the paper's pre-1989 reversal factor lacking its short leg, but that is a hypothesis
-about an error in the paper. The pre-1989 SD is its only non-fitted support, so the hypothesis is
-recorded here and not shipped.
-
-**The paper's reversal factor, identified from its own Table 8.** In-sample OLS satisfies R2 x
-sd(y)^2 = b' Sigma b exactly. Table 8 prints, for each panel, every b, R2 and sd(y) for four portfolios,
-and French's Mkt, SMB, HML and UMD match the paper's Factor SD column, which fixes their 4 x 4 block
-of Sigma. The four covariances of the reversal factor with those factors are then the solution of
-four linear equations. The method is exact: on our own unrounded regressions it returns ST_Rev's
-actual correlations to three decimals. The page image (PDF p. 822) confirms the transcribed values.
-With the paper's R2 rounded to two decimals, Table 8 implies these correlations with market / SMB /
-HML / UMD:
-- before 1989: +0.81 / +0.79 / -0.18 / -0.16 (90% band over the R2 rounding: +0.77..+0.86 /
-  +0.72..+0.86 / -0.20..-0.15 / -0.17..-0.14);
-- after 1988: +0.79 / +0.55 / -0.53 / -0.30, with wider bands because three of the four R2 are
-  0.02-0.19.
-
-French's ST_Rev correlates +0.28 / +0.26 / -0.04 / -0.40 and +0.24 / +0.05 / -0.11 / -0.30. No
-long-short reversal series tried comes near +0.8 with the market. The equal-weighted bottom three
-prior-month deciles minus the T-bill, with no short leg, do:
-- built from CRSP before 1989: SD 0.0728 and +0.82 / +0.77 / -0.18 / -0.14;
-- French's EW deciles before 1989: SD 0.0685 and +0.84 / +0.77 / -0.20 / -0.12;
-- after 1988: +0.72 / +0.52 / -0.44 / -0.35, inside the bands, but SD 0.069 against 0.0445.
-
-A regressor's scale moves only its own loading, so the SD gap affects the reversal row, not the
-market or SMB rows. With this series our pre-1989 loadings take the paper's shape: market ≈ SMB ≈
--reversal in every column. For example, 101-120 gives -0.25 / -0.23 / +0.25 against the paper's
--0.29 / -0.28 / +0.29, where ST_Rev gives -0.02 / +0.05 / +0.11. After 1988, "all" gives -0.07 /
--0.10 / +0.16 against -0.07 / -0.06 / +0.19. The rest of the gap sits with our pairs portfolios, which
-load less on the factor before 1989 (top 5: +0.18 against +0.44). Rebuilding Table 4 from Table 8's two
-panels is not conclusive: the R2 rounding leaves bands that the printed values sit at the edge of. Scored
-cells: 20.5 against 14.0 of the 87 that use the factor (266.5 -> 273.0 overall), not shipped pending a
-decision, because the text describes a long-short factor.
-
-**Not a pre-1983 data problem.** The pre-1989 panel splits into three eras: before Nasdaq enters
-CRSP (1963-07 to 1972-11), quote-only Nasdaq (1972-12 to 1982-12) and the Nasdaq National Market
-(1983-01 to 1988-12). Built EW losers-minus-winners has an SD of 0.024 / 0.037 / 0.024 and a market
-correlation of +0.23 / +0.33 / +0.31 in those eras. NYSE and Amex alone give 0.024 / 0.041 / 0.023,
-and Nasdaq alone gives 0.035 / 0.026 in the two eras where it exists. ST_Rev gives 0.020 / 0.032 /
-0.022. The first era has no Nasdaq data at all and is already a third of the paper's 0.072. For a
-long-short factor to average 0.072 over the panel, the later eras would need an SD near 0.09, over
-twice what Nasdaq alone produces. Bad prints are also idiosyncratic and diversify across about 700
-stocks per leg, so they cannot create a +0.8 market correlation. Stale zero returns rise only from
-3.4% to 8.2% of stocks. The losers-only series instead has a market correlation of +0.83 / +0.83 /
-+0.84 in all three eras, the first included. The paper took Mkt-RF, SMB, HML and UMD from French and
-built only the reversal factor itself, which is the one factor that does not match.
-
-**Built from the daily file, the paper's own data.** The paper's data are "the CRSP daily files", and
-its monthly returns are daily returns "compounded to obtain monthly returns" (p. 803). Its reversal
-factor's data source is not stated, so the factor was rebuilt from `daily_stocks`: legs set by the prior
-month's compounded daily return, EW. Holding each leg for the month reproduces the monthly-file
-build (0.0301 / 0.0615, which checks the two files against each other). Rebalancing daily and
-compounding each leg gives 0.0309 / 0.0646, and compounding the daily difference gives 0.0294 /
-0.0613. The market correlation stays at +0.27 to +0.30 in every version. Losers rebalanced daily minus
-the bill give 0.0730 and +0.82 before 1989, against the paper's 0.0723 and an implied +0.81. Daily
-data therefore changes neither the long-short result nor the losers-only match.
-
-**French's file history (Wayback Machine).** ST_Rev first appears on French's data library page as
-"New! Short-Term Reversal Factor (ST Rev)" between the 2006-06-12 snapshot (absent) and the
-2006-08-27 snapshot (present). Its earliest archived file is dated 2006-10-30 and was built on the
-200609 CRSP database. UMD is already on the October 2003 page. The paper could therefore download
-momentum but had to build reversal itself, as it says ("we control for this possibility by
-constructing a short-term reversal factor"). French's construction has not changed since 2006: the
-average of the small and big low-prior-return portfolios minus the average of the two high ones,
-from a 2 x 3 sort with NYSE median and 30th/70th percentile breakpoints, value weighted. Nine
-archived vintages and the repo copy all give a pre-1989 SD of 0.0258-0.0259 and a post-1988 SD of
-0.0400-0.0403: 200609, 200612, 201005, 201209, 201406, 201705, 202005, 202212, 202509 and 202608.
-Each correlates 0.9993 or more with the 2006 file. UMD from the 200509 database (archived 2005-10-29)
-gives 0.0350 / 0.0494, the same as today's file, against the paper's 0.0351 / 0.0493. Vintage revisions
-therefore explain none of the reversal gap. French's ST_Rev is a stand-in that did not exist when the
-paper was written, not the paper's factor.
-
-**French's 2 x 3 recipe rebuilt from our CRSP file.** The rebuild uses common shares (EQTY / COM / NS,
-US-incorporated, issuer ACOR or CORP, the CIZ equivalent of share codes 10 and 11) on NYSE, Amex and
-Nasdaq. Size is the end of the prior month's cap split at the NYSE median, and prior return is split at
-NYSE 30th / 70th percentiles. The six portfolios are value weighted, and each factor is half small
-plus half big. Against French's published series:
-- ST_Rev: SD 0.0258 / 0.0401 against 0.0259 / 0.0403, mean 0.80% against 0.81% before 1989,
-  correlation 0.9997 / 0.9995, tracking SD 0.07 / 0.13 percentage points;
-- UMD: 0.0349 / 0.0493 against 0.0350 / 0.0494, correlation 0.9993 / 0.9997;
-- all twelve component portfolios correlate 0.9994-1.0000 with French's.
-
-Our data and French's method therefore reproduce French. The paper's momentum SD (0.0351 / 0.0493)
-is that same series. Its pre-1989 reversal SD (0.0723) is not produced by this recipe on this data,
-by French's own file, or by any of its archived vintages.
-
-**A bug in the factor, not a typo in the SD.** If the printed 0.0723 were a misprint for a normal
-reversal SD, Table 8's regressions would still have to be consistent with that smaller SD. Solving the
-four R2 equations for a range of assumed SDs and checking the implied 5 x 5 covariance matrix says
-otherwise. Before 1989, every assumed SD from 0.026 to 0.055, and 0.090, needs correlations above 1
-(for example +1.41 with the market at 0.0259) or a matrix that is not positive semidefinite. That holds in
-all 2,000 draws over the R2 rounding. Only 0.0723 gives a valid matrix, and it does so in every draw. The
-printed SD therefore agrees with the regressions: the factor in the pre-1989 regressions really had an
-SD of about 0.072 and a market correlation of about +0.8, so the error is in how it was built. After
-1988 the valid range is about 0.040-0.055, and the printed 0.0445 lies inside it. The implied market
-correlation there is still +0.7 to +0.85, against ST_Rev's +0.24. ST_Rev's post-1988 agreement is
-therefore in the SD only, not in the factor. The paper's post-1988 factor also looks
-market-correlated, though less volatile than the losers-only series (0.069), which falls outside the
-valid range.
-
-**The equity premium column is French's Mkt-RF.** Table 4's last column (mean 0.410%, SD 4.509%,
-Sharpe 0.09, serial correlation 0.05) is scored here as S&P 500 minus the 30-day bill, which gives
-0.427% / 4.386% / 0.097 / 0.0002 (3 of 4). French's Mkt-RF gives 0.425% / 4.540% / 0.094 / 0.047
-(4 of 4). Starting in June 1963 or using a geometric difference does not change either result. Table 8
-names its market regressor "U.S. equity risk-premium", and its SDs match Mkt-RF. The note's "S&P 500
-returns are calculated in excess of Treasury bill returns" fits the Ibbotson block's market factor,
-which the text defines as "the excess return on the S&P 500". Shipped in section 50 (+1.0).
-
-**What is still not scored.** Table 5 Panel B (needs a daily panel in the cache),
-Table 6 (needs a random-pair resampling step), Table 9 (needs a top-three-decile universe and a
-recall rule), and Figures 2 and 3 (their numbers are read off images, and Figure 3's fully
-invested curve contradicts the paper's own Table 1).
-
-## 50. Table 4's equity premium is Mkt-RF, and the alphas' t-statistics (2026-10-27): 266.5 -> 267.5
-
-**The change.** Table 4's last column is now French's Mkt-RF over the portfolio months, not the S&P
-500 less the 30-day bill (section 49, "The equity premium column is French's Mkt-RF"). The evidence,
-strongest first:
-1. *Structure.* Table 8 labels the market regressor of the same five-factor model the "U.S. equity
-   risk-premium", so Table 4's equity-premium column and that regressor are one series. Its Table 8
-   SDs are Mkt-RF's.
-2. *The SD bracket.* Table 8 prints that series' SD in each half, 0.04580 (306 months) and 0.04390
-   (168). A full-sample variance is the months-weighted average of the halves' variances plus a
-   non-negative term for the gap between their means, so the series' full-sample SD is at least
-   about 4.51% (the paper's own 4.509% sits on that floor). The S&P series' 4.386% lies below both
-   halves and cannot be that series; Mkt-RF's 4.540% clears the floor and is 0.7% from 4.509%. The
-   two halves are verified against the PDF with the other paper values.
-3. *Serial correlation.* Mkt-RF gives 0.047 against the printed 0.05; the S&P series gives 0.0002.
-   With 474 months the standard error of a lag-1 autocorrelation is about 1/sqrt(474) = 0.046, so
-   the two candidates are about one standard error apart. This leg only agrees with the other two
-   and does not separate the series on its own. The mean (0.425% against 0.427%) and the Sharpe ratio
-   (0.094 against 0.097) separate them even less.
-
-The score moves 266.5 -> 267.5 through that one serial-correlation cell (✗ -> ✓), a statistic whose
-standard error exceeds the gap between the candidates. The +1.0 follows from identifying the series
-by 1 and 2; it is not independent evidence for that identification. Every other cell is
-byte-identical on a full 474-cohort rebuild. The Ibbotson block's market factor keeps the S&P,
-because the note's S&P sentence describes it.
-
-**Is pairs trading explained by the five factors?** The paper's claim is "only a small portion of
-the excess returns of pairs trading can be attributed to their exposures to the five risk factors".
-The check now prints the intercepts' Newey-West t-statistics (six lags, Bartlett weights, no
-small-sample correction, `factors.factor_tstats`) beside the paper's, unscored:
-
-| window | top 5 | top 20 | 101-120 | all |
-|---|---|---|---|---|
-| full sample, ours vs paper | 5.93 vs 3.81 | 8.61 vs 7.08 | 10.78 vs 8.66 | 9.77 vs 5.30 |
-| before 1989 | 5.58 vs 1.72 | 7.85 vs 4.41 | 8.37 vs 6.54 | 10.14 vs 4.19 |
-| after 1988 | 1.35 vs 2.12 | 4.41 vs 3.77 | 7.88 vs 3.01 | 2.97 vs -0.56 |
-
-Our alphas are significant wherever the paper's are, and more so. They are close to the raw means:
-the full-sample "all" alpha is 0.64% against a 0.60% mean. The paper's alphas are 10-20 bp below its
-raw means, and our portfolios carry little market or SMB exposure. The factors explain about 60% of
-the "all" portfolio's variance, mostly through momentum and reversal, and almost none of its mean.
-The two disagreements are the post-1988 top 5 (insignificant here) and the post-1988 "all", which is
-negative and insignificant in the paper and +2.97 here; our post-1988 "all" mean is lower too (0.12%
-against 0.21%). Swapping in the losers-only reversal series of section 49 leaves every alpha
-significant (full sample t 6.4 / 8.5 / 10.9 / 9.1), so the conclusion does not depend on the
-reversal factor. The paper's t-statistics are verified against the PDF by
-`scripts/verify_paper_targets.py` (12 values), as every scored value is.
-
-## 51. The paper's reversal factor: audited, disclosed, and reported as an unscored alternative (2026-10-27)
-
-Section 49 holds the measurements. This section records what ships, and
-`scripts/audit_reversal_factor.py` regenerates the numbers the decision rests on
-(`REVERSAL_FACTOR_AUDIT.md`).
-
-**What is settled.**
-- Market, SMB, HML and momentum are French's series. Their Table 8 SDs match his files to three
-  or four decimals, and the 2005 UMD file gives the same 0.0350 / 0.0494 as today's.
-- French's 2 x 3 recipe, rebuilt from our CRSP monthly file, reproduces his ST_Rev and UMD
-  (correlation 0.9993-0.9997, SDs within 0.0002), so neither our data nor the recipe is the gap.
-- ST_Rev is a stand-in. French added it in mid-2006, after the paper was written; the paper
-  says it built its own ("we control for this possibility by constructing a short-term reversal
-  factor"). Nine archived vintages of ST_Rev agree to a correlation of 0.9993 or better.
-
-**What Table 8 says about the paper's factor.** Solving each panel's R2 equations for the reversal
-factor's covariances with the four known factors gives the following.
-- Before 1989, a valid covariance matrix appears only at an SD near the printed 0.0723. Every SD
-  from 0.026 to 0.055 needs a correlation above 1. The printed SD is not a misprint.
-- At 0.0723 the implied correlations with market / SMB / HML / momentum are +0.81 / +0.79 /
-  -0.18 / -0.16. No long-short reversal series built here exceeds +0.4 with the market, in any
-  era, from monthly or daily data.
-- The equal-weighted bottom three prior-month deciles less the bill, a long-only losers
-  portfolio, has an SD of 0.0685 (0.0728 rebuilt from CRSP) and correlations of +0.84 / +0.77 /
-  -0.20 / -0.12. That holds in each era, including 1963-72, before Nasdaq is in CRSP.
-- After 1988 the printed 0.0445 is valid, but the implied market correlation is still +0.7 to
-  +0.85, against ST_Rev's +0.24 and the losers series' SD of 0.069. The second panel's factor is
-  therefore neither, and ST_Rev's post-1988 SD match is in the SD only.
-
-**What ships.**
-- The scored regressions keep ST_Rev, the correct construction of the factor the paper describes.
-  The losers series reproduces what the paper printed, not what it describes, and its only support
-  that was not fitted to scored cells is the pre-1989 fingerprint.
-- The check header now says the paper's factor is not a long-short factor.
-- The check ends with an unscored section that repeats the 84 regression cells of Tables 4 and 8
-  with the losers series and prints what they would score against ST_Rev. Its rows carry no " / ",
-  so `score_wrapper` skips them, and the score is unchanged.
-- The alphas stay significant under both factors (section 50), so the paper's conclusion does not
-  depend on the choice.
-
-## 52. Tables 4 and 8 under French's ST_Rev: the conclusion replicates, the cells do not (2026-10-28)
-
-**The conclusion.** With French's ST_Rev as the reversal factor, the paper's claim about Tables 4
-and 8 holds in both subperiods: pairs returns load little on the five factors and keep a large,
-significant alpha, which shrinks after 1988 but does not vanish (section 50 has the Newey-West
-t-statistics). Monthly alphas, ours vs the paper's, from the check's intercept rows:
-
-| window | top 5 | top 20 | 101-120 | all |
-|---|---|---|---|---|
-| before 1989 | 0.92% vs 0.35% | 1.11% vs 0.67% | 0.91% vs 0.71% | 0.81% vs 0.45% |
-| after 1988 | 0.18% vs 0.34% | 0.36% vs 0.42% | 0.57% vs 0.36% | 0.27% vs -0.07% |
-
-Both versions fall after 1988, and the t-statistic falls further because the window is shorter
-(168 months against 306 scales t by about sqrt(168/306) = 0.74 at equal alpha and volatility).
-The full-sample reversal loadings are 0.04-0.15 (paper 0.07-0.20), and the factors explain almost
-none of the top 5 and top 20 (R2 0.01 and 0.03), so pairs trading is not a disguised short-term
-reversal strategy, as the paper argues (§3.6).
-
-**The cells.** Table 8 scores 19.5 of its 72 cells, almost evenly by panel
-(`REPLICATION_CHECK.md`, Table 8 block):
-
-| Table 8 | means and SDs (8) | loadings (20) | intercept and R2 (8) | total ✓ / ~ / ✗ | points |
-|---|---|---|---|---|---|
-| Panel A, before 1989 | 4 / 4 / 0 | 2 / 0 / 18 | 1 / 1 / 6 | 7 / 5 / 24 | 9.5 |
-| Panel B, after 1988 | 2 / 4 / 2 | 1 / 4 / 15 | 2 / 2 / 4 | 5 / 10 / 21 | 10.0 |
-
-The two panels miss for different reasons.
-- *Panel A: the factor.* Our pre-1989 portfolios match the paper's (no mean or SD cell is ✗), yet
-  18 of 20 loadings miss: reversal is 2.6-3.9 times too small, and market and SMB are 7-30 times
-  too small or of the wrong sign (paper -0.28 to -0.44 on both). With the dependent
-  variable right and the loadings wrong, the gap is the regressors, i.e. the unidentified reversal
-  factor of section 51.
-- *Panel B, near-zero coefficients.* Most post-1988 loadings are statistically zero in the paper
-  (|t| < 2 in 14 of 20) and small in ours, and a 10% / 25% relative band turns agreement on "no
-  exposure" into a miss: the 101-120 market loading is 0.054 here against 0.0024 (t = 0.06).
-- *Panel B, our "all" portfolio.* The "all" column is wrong before any regression: mean 0.117%
-  against 0.212% and SD 1.573% against 1.295%, and its loadings have the wrong sign on market, SMB
-  and HML (+0.075 / +0.039 / -0.010 against -0.070 / -0.061 / -0.082). The 101-120 mean (0.509%
-  against 0.327%) is the same kind of miss.
-
-**The post-1988 "all" portfolio, diagnosed.** Table 8 uses the fully invested ("employed") series
-of `results/replication/tables/monthly_returns.parquet` (wait 1, "all"; post-1988 mean 0.117%, SD
-1.573% reproduce the check). Its excess SD sits in a few months: January 2001 +8.61%, November 2002
-+6.82%, October 1998 +6.81%. Dropping those three takes the SD to 1.232%, but the mean to -0.016%,
-so the ordinary months also earn less than the paper's. The spikes are broad, not a few bad
-prints: in January 2001, 5,032 trades close (cohorts' `w1_trades.parquet`), 297 return over 50%,
-and the ten largest payoffs carry 9% of the month's total. Those 297 are not penny stocks: the
-smaller leg's median market-cap percentile at formation is 0.44 (all trades 0.66), and pairs with a
-leg in the bottom 5% of cap are 0.2% of trades. They are high-volatility pairs (median formation
-sigma 0.143 against 0.088), dot-com-era names converging in a market-wide rebound, which the paper's
-universe should hold too.
-
-The stale-quote screen and the SIC source do not explain it. "All" uses no sector labels, and every
-day rule gives the same late pair surplus (`summary.json` of each universe's cohort cache):
-
-| pairs per cohort | 1962-82 | 1983-97 | 1998-2002 |
-|---|---|---|---|
-| `vol_common` (shipped) | 1,646 | 2,024 | 3,381 |
-| `volpos_common` | 868 | 1,976 | 3,381 |
-| `price_common` | 868 | 1,868 | 3,365 |
-| `vol_ns` | 1,662 | 2,135 | 3,612 |
-
-The day rule moves only the pre-1983 Nasdaq era. The pattern is the era split of OPEN_QUESTIONS Q8,
-now seen in returns as well as counts: our "all" SD is 17% low before 1989 and 21% high after, as
-our pair count is 4.4% low to 1997 and 5.1% high after (section 19.1). Closing it needs the paper's
-universe by period (its CRSP vintage or stock list), not a filter tuned to the printed SD.
-
-**A caveat on `PAPER_CONSISTENCY.md`'s Panel B joint figure.** Its post-1988 joint test (R2 of the
-implied reversal factor on the four factors 0.790, 82.0% of rounding draws feasible) is weak
-evidence. The per-column required correlations are +0.66 / +0.87 / +0.36 / -0.06; the demand comes
-from the top 5 and top 20, whose reversal loadings (-0.063 and -0.017, t = -1.76 and -0.67) are
-statistically zero, and the identity divides by the loading. The one significant loading ("all",
-0.188, t = 5.56) needs -0.06, which an ordinary long-short factor meets. The same caution applies
-to section 51's post-1988 implied correlations. Panel A is unaffected: its four reversal loadings are
-0.29-0.45 with t = 3.6-8.0, every column needs -0.91 to -0.95, and 98.2% of rounding draws agree.
-
-**What the write-up can say.** With French's ST_Rev, the qualitative conclusions of Tables 4 and 8
-replicate: the alpha is significant in both subperiods, smaller after 1988, and the reversal
-exposure is small. Cell-level agreement is poor, because Panel A's reversal factor is unidentified
-(section 51) and Panel B's coefficients are mostly indistinguishable from zero, with our post-1988
-"all" portfolio off by the Q8 era split.
-
-
-## 54. Two readings the paper's text requires: book compounding and the mixed-pairs decile row (2026-11-02): 267.5 -> 261.0
-
-Origin: a teammate's rule audit (public PR #8) bundled about a dozen convention changes. Two of them
-are required by the paper's own text and tables; this section adopts those two, measures both, and
-records what was measured of the rest. Both lower the score; they are adopted because the paper
-requires them, not for fit.
-
-**1. Compound each book, then subtract (Tables 1 and 3).** §2.3, p. 805: "The daily returns on the
-long and short positions are calculated as value-weighted returns ... and the daily returns are
-compounded to obtain monthly returns. This has the simple interpretation of a buy-and-hold
-strategy." The tables pin the order: Table 7's long minus short book means (p. 821) equal Table 1
-Panel B (p. 807) in all four portfolios, 0.01245 - 0.00501 = 0.00744 against 0.00745 and exactly
-0.00895 / 0.00795 / 0.00715. That holds only if each book is compounded to a monthly return before
-the two are differenced. Section 33 measured this reading and kept the daily difference because it
-scored three points more on Tables 1-3; this section reverses that choice.
-`evaluation.portfolio_monthly` compounds the long and the short book separately (committed capital
-scales each book's day by n_t / N first); the driver uses it for Tables 1 and 3, and the Table 6
-and Table 9B claim scripts use it too, so every portfolio series in the repository follows one
-accounting. Table 7's books were already compounded separately and do not move. CACHE_FORMAT 6, and
-the cache stamp records `monthly_aggregation: books`, so a format-5 cache is refused.
-
-**2. "Average decile difference for mixed pairs" averages the mixed pairs (Table 2 Panel B).** §3.2,
-p. 809: "About two-thirds of the pairs combine stocks from different size deciles (i.e., 'size mixed
-pairs'), and the stocks in mixed pairs differ on average by a single decile." Section 34 found that
-the scored key carried the all-pairs mean under the mixed-pairs name. It now carries the mean over
-mixed pairs (1.67 / 1.74 / 2.17 / 2.64 against 0.97 / 0.97 / 0.97 / 0.98); the all-pairs mean is
-`avg_decile_diff_all_pairs`. A mean over mixed pairs cannot be below 1, so the printed row is a
-reported gap, and the second half of claim 10 is recorded as not replicated (`CLAIMS.md`).
-
-**Measured on a full 474-cohort rebuild** (private cache; the shared cache is untouched):
-
-| | Table 1 | 2A | 2B | 3 | 7 | 4 | 5A | 8 | Fig. 4 | total |
-|---|---|---|---|---|---|---|---|---|---|---|
-| before (row 16) | 54.0 | 20.5 | 29.0 | 83.5 | 26.5 | 24.0 | 9.5 | 19.5 | 1.0 | 267.5 |
-| after (row 17) | 55.5 | 20.5 | 28.5 | 80.0 | 26.5 | 21.5 | 10.0 | 17.5 | 1.0 | 261.0 |
-
-Table 1 Panel B means move toward the paper (0.691 / 0.879 / 0.749 / 0.603% -> 0.723 / 0.891 /
-0.764 / 0.629%, paper 0.745 / 0.895 / 0.795 / 0.715%) and the top-5 worst month improves (-15.3% ->
--13.6%, paper -12.6%); Table 3's sector means, already at or above the paper's, rise further. The
-decile row costs 0.5 (top 5 from ~ to ✗).
-
-**Checks.**
-
-- *Data and cache.* Before the change, a from-scratch rebuild of `personal/main` on the current shared
-  panel reproduced the committed check line for line (only the Figure 1 file path differs), so the
-  data and SIC mapping are the ones behind 267.5.
-- *An independent implementation.* The same two changes in the teammate's code (PR #8 at 5d137c3,
-  `--specification legacy --monthly-aggregation books --start 1963-07`) give identical marks on all
-  484 cells both checks mark. Its `legacy` profile alone reproduces our 267.5 except the decile row.
-- *Controls.* Table 6's control rebuilds the true-pair series from the trade logs with the new
-  accounting and matches the cache exactly (maximum difference 0; the vectorised layer to 1.3e-15).
-  Table 9B's no-recall control matches all 474 cohorts.
-- *The paper's identity.* With book compounding, Table 1 Panel B equals Table 7 long minus short in
-  every portfolio (gap below 0.00001; `claims/TABLE7_REGRESSIONS.md`).
-
-**The rest of PR #8, measured one change at a time on top of these two fixes (261.0), not adopted:**
-
-| change | score change | why not adopted |
-|---|---|---|
-| drop the 95% stale-quote screen | -17.5 | our disclosed convention (section 18); the paper is silent |
-| value short weights | -11.5 | our disclosed reading of eq. (3) (section 29, with its objections) |
-| allow same-issuer pairs | -9.5 | our disclosed convention (section 18) |
-| formation-end SIC only | -1.0 | a separate decision; the paper is silent |
-| next-day entry without the crossing check | -1.0 | a separate decision; the paper's wording supports it (p. 808) |
-| zero return for a whole idle month | 0.0 | a separate decision |
-| all six together | -25.0 | |
-| strict trade-flag universe (`traded_common`) | | 1,799 stocks and 1,561 pairs per cohort against the paper's 2,317 and 2,057 (pp. 807, 812); it drops all pre-November-1982 Nasdaq stocks |
-| sigma as the demeaned standard deviation | -6.0 | the paper's only direct measurement of sigma, Table 2A's trigger (p. 809), is closer under RMS in three columns and tied in the fourth (section 21) |
-| warm-up cohorts from 1963-02 | | contradicts p. 806: "with the exception of the first 12 months, which are needed to estimate pairs" |
-
-**Table 6's design: the random position opens and closes with its true trade.** The caption
-(p. 819) opens "a position in a random pair when the stocks in the true pair diverge by two
-historical standard deviations and closes the position after the next crossing of prices", and
-§3.6 (p. 818) takes "the set of historical dates on which the various pairs open" and reads "the
-difference between the actual and the simulated pairs returns" as "the portion of our pairs return
-that is not due to reversion". The only crossing the sentence defines is the true pair's, and the
-A/B difference isolates stock selection only if both sides hold their positions over the same
-dates. So each random position now opens and closes with the true trade it replaces (earlier only
-if a drawn stock delists or its data end); the drawn stocks keep their true legs' long and short
-roles. The previous primary closed on the drawn stocks' own next crossing, a reading with no
-sentence behind it. Three designs were measured on this build's accounting (no wait, fully
-invested, top 5 / top 20 / 101-120 / all 120):
-
-| design | random means | random SDs | Table 6 cells ✓ / ~ / ✗ |
-|---|---|---|---|
-| (a) open and close with the true trade (primary) | -0.20 / -0.31 / -0.31 / -0.34% | 4.12 / 2.13 / 2.15 / 1.01% | 8 / 10 / 30 |
-| (b) close on the drawn stocks' own crossing (`--close own`) | -0.16 / -0.23 / -0.23 / -0.24% | 3.49 / 1.84 / 1.92 / 0.85% | 1 / 18 / 29 |
-| (c) the drawn stocks on their own 2-sigma rule (scratch only) | -0.11 / -0.15 / -0.18 / -0.17% | 4.79 / 3.88 / 3.98 / 3.12% | 9 / 6 / 33 |
-| paper | -0.14 / -0.11 / -0.11 / -0.11% | 5.52 / 2.30 / 2.26 / 1.20% | |
-
-(a) was chosen on the text; it also scores best (13.0 of 48 against 10.0 and 12.0). (c) contradicts
-the caption's open and does not diversify like the paper's random pairs: their SD falls from 5.5%
-to 1.2% between 5 and 120 pairs, (a)'s from 4.1% to 1.0%, (c)'s only from 4.8% to 3.1%. The
-decile stays the previous calendar month (§3.6, "previous month's performance"): ranking on the
-trailing month that ends on the open day made random pairs earn +0.09 to +0.16% a month on PR #8's
-other conventions, the reversal profit, against the paper's "slightly negative". In every design
-true minus random is positive with t > 2 in all 16 series. The sign of the random-pair mean is set
-by the short-weight convention, not by the bootstrap: under PR #8's value weights the random means
-are near zero, under this repository's position weights they are negative, as in the paper.
-
-**Claim 4 is no longer counted.** "Pairs trading profits from temporary mispricing of close
-substitutes" (p. 797) is the abstract's interpretation, used nowhere else in the paper (its body
-speaks of the "Law of One Price"). `CLAIMS.md` lists it under "Not tested" and counts 24 claims:
-19 replicate (5 with the paper's numbers, 14 in substance), 4 partly, 1 not as stated.
-
-**Legacy SIZ, for the data question.** A run of the shipped code on CRSP's legacy SIZ daily file
-(final December 2024 release; `data/raw/wrds_api/legacy/dsf/`) scores 249.5 with the usual share
-codes 10/11/12 and 263.5 with REITs (code 18) added. The two releases agree on 56.6 million matched
-rows except the share code of corporate REITs, which CIZ classes as ordinary common stock; the data
-are not closer to the paper in either format.
-
-**One Table 6 output directory holds one run.** `--mode run` resumes by skipping the cohorts
-already written, so a second run with another `--close`, seed or replication count into the same
-`--out-root` would have mixed the two runs without a word. The directory now records the three
-in `run_params.json`; a run or report that does not match it is refused, as are older outputs
-without it, and `--mode report` renders only the primary `--close true` design that
-`t6_template.md` describes. The committed report came from a fresh directory and is unchanged.
-
-## 55. Footnote 4's delisting check and the 495x map as flags; one Newey-West estimator (2026-11-02): 261.0 -> 261.0
-
-Two opt-in flags of `scripts/03_replicate.py` and one estimator fix. Neither flag is on by default,
-and each is stamped in `cache_meta.json` only when on, so a default cache's stamp is unchanged and
-the shipped check is untouched by them. All numbers are a full 474-cohort build of this
-repository's defaults (`vol_common`), which reproduces the committed check at 261.0 before the
-change; each flag was built into its own cache (`--cache-root`).
-
-**1. `--long-delisting-loss`: footnote 4 (RFS p. 804).** The paper's robustness check assumes
-every delisted long position loses 100% and reports the top-20 no-wait fully invested mean falling
-from 1.436% to 1.32% and its standard deviation rising from 1.69% to 1.9%. With the flag, an open
-position whose long leg has a terminal (`dlydelflg == 'Y'`) row books -1.0 on that leg that day,
-including when the row has no return; a delisting short leg keeps its actual return, and prices
-that drive the rule are unchanged (`models.simulate_cohort`, `long_delisting_loss`).
-
-| top 20, no wait | plain | footnote 4 | change |
-|---|---|---|---|
-| fully invested mean, ours | 1.387% | 1.274% | -11.2 bp |
-| fully invested mean, paper | 1.436% | 1.32% | -11.6 bp |
-| standard deviation, ours | 1.67% | 1.87% | +0.20 |
-| standard deviation, paper | 1.69% | 1.9% | +0.21 |
-| committed mean, ours | 0.807% | 0.730% | -7.8 bp |
-
-On the current accounting the effect has the paper's size in both the mean and the dispersion.
-Section 17's earlier calibration (1.333% to 1.169%, about 1.4x the paper's effect) was measured
-before the book-compounding change of section 54 and is superseded. The other portfolios: top 5
--16.6 bp, 101-120 -6.3 bp, all pairs -24.2 bp (no wait); the one-day wait moves by the same
-amounts to within 1 bp. The top-5 worst month falls from -13.1% to -23.9%. Scored, the assumption
-gives 217.0 of 481 (Table 1: 20 of 88 within 10%), so it stays a sensitivity, as in the paper.
-
-**2. `--waste-sic utilities`: section 24's map as a flag.** SIC 4950-4959 back in Utilities moves
-261.0 to 259.0, all in Table 3: the Utilities stock count improves (137 to 144 against 156, ~ to
-✓) and Utilities 101-120 loses the cells section 24 gained (mean 0.89% to 0.72% against 0.93%;
-t, skew, kurtosis, minimum and maximum each lose a mark; standard deviation gains one), with small
-moves in Utilities "all". The top-pair sector weights do not move (weight_utilities 0.774), as
-section 24 found. The default stays Industrials.
-
-**3. Table 1's Newey-West standard error has no small-sample factor.** `evaluation.summary_stats`
-used statsmodels' HAC with `use_correction=True` (an n/(n-1) factor) while `factors.factor_tstats`
-(Tables 4 and 8) uses none; the paper states none. Both now use none, and a test pins the two to
-one estimator. Five printed t-statistics move by 0.01 (Table 1 Panel B and the four Table 3
-sectors), no mark changes, and the score stays 261.0; `REPLICATION_CHECK.md` is regenerated.
-
-**Not added: a second fully invested row.** A row dividing the period's summed fixed-dollar
-payoffs by the pairs that opened was considered and dropped: `mean_employed_literal` in
-`table1.csv` already reports payoffs over the pairs that open (compounded daily). It gives
-0.856% for the top 20 against 0.807% committed and 1.387% fully invested, a ratio of 1.06
-against the paper's 1.8, so the literal denominator cannot produce the paper's fully invested
-numbers and the employed-capital reading the shipped headline uses is consistent with them.
+| 1 | Data provenance: is anything wrong with the download? |  |
+| 2 | Code review |  |
+| 3 | Fixed: the one-day-wait rule delayed only the entry |  |
+| 4 | Known fragilities (documented, not changed) |  |
+| 5 | Results after the wait-1 fix (all four universes rebuilt) |  |
+| 6 | Other replications (checked 2026-10-16) |  |
+| 7 | Delisting rows were dropped by the panel build (found and fixed 2026-10-16) |  |
+| 8 | Portfolio returns: account weights replaced by pair counts (2026-10-16) |  |
+| 9 | Continued normalization, n̄ denominator and Figure 1 (2026-10-16/17) |  |
+| 10 | Universe: what matches and what does not (2026-10-16/17) |  |
+| 11 | CRSP edition (vintage) checks (2026-10-17) |  |
+| 12 | Other replications, revisited (2026-10-17) |  |
+| 13 | PR review fixes, rebuild and speed-up (2026-10-17) |  |
+| 14 | Frozen prices and the employed-capital denominator (2026-10-18) |  |
+| 15 | Attribution, SIC sensitivity and value-weighted books (2026-10-19) |  |
+| 16 | The Table 2 Panel B decile-difference row reports the all-pairs average (2026-10-20) |  |
+| 17 | Score experiments under value-weighted books (2026-10-20) |  |
+| 18 | Same-issuer and near-frozen-quote exclusions are now on by default (2026-10-20) |  |
+| 19 | Daily panel, post-1988 "all" and a re-read of both editions (2026-10-20) |  |
+| 20 | Telephone utilities are SIC 4811, the 1972 code (2026-10-22) |  |
+| 21 | The trigger's sigma is the spread's root mean square about zero (2026-10-22) |  |
+| 22 | Unknown-SIC fallback order: the security-header SIC first (2026-10-23) |  |
+| 23 | Table 2 Panel A over completed trading windows (2026-10-23) |  |
+| 24 | We classify 495x (waste management) as Industrials (2026-10-24) |  |
+| 25 | Payoff-count returns measured and rejected (2026-10-24) |  |
+| 26 | Where 183.5 sits: the two editions on one window, and what 200 would need (2026-10-24) |  |
+| 27 | Two ambiguities settled by measurement: the by-sector matching and the cohort weights (2026-10-24) |  |
+| 28 | Every typed paper target is verified against the PDF (2026-10-24) |  |
+| 29 | Capital readings re-measured, and eq. (3) read on the short position's own return (2026-10-24) |  |
+| 30 | Table 5 Panel A and Table 8 are printed as diagnostics, not scored (2026-10-24) |  |
+| 31 | Documentation cleanup (2026-10-24) |  |
+| 32 | Tables 4 and 7 and Figure 4, read in the paper's own terms (2026-10-25) |  |
+| 33 | The paper's Table 1 = Table 7 identity, and the convention that breaks it (2026-10-25) |  |
+| 34 | Table 2's decile-difference row: answered from the paper's prose, and a bug behind it (2026-10-25) |  |
+| 35 | Table 7 joins the scored set: 187.0 of 291 -> 213.5 of 323 (2026-10-25) |  |
+| 36 | The whole paper, indexed: nine tables and four figures in one place (2026-10-25) |  |
+| 37 | Figure 2 is aligned; Figure 3 is not recoverable, and that is recorded (2026-10-25) |  |
+| 38 | Figure 3 tracked properly: both curves match ours at 0.997 (2026-10-25) |  |
+| 39 | What would actually move Tables 1-3: one month, measured (2026-10-25) |  |
+| 40 | Eight levers measured against Tables 1-3, and the one that cannot be pulled (2026-10-26) |  |
+| 41 | Q2 closed from both ends: no CRSP field, and the paper's own pair count (2026-10-26) |  |
+| 42 | Review fixes to Figures 2 and 3 (2026-10-26) |  |
+| 43 | Where the 104 missing points are: a per-cell margin table (2026-10-26) |  |
+| 44 | What the corrected Figure 2 reading says about the 1974 window (2026-10-26) |  |
+| 45 | Two more conventions measured, both rejected (2026-10-26) |  |
+| 46 | The top five pairs are a degenerate population, and it is not a screen (2026-10-26) |  |
+| 47 | Three more readings of the trading rule measured, none shipped (2026-10-26) |  |
+| 48 | The quote-only Nasdaq names, measured from the data up (2026-10-26) |  |
+| 49 | Every table and figure with a printed number joins the score: 213.5 of 323 -> 266.5 of 481 (2026-10-27) |  |
+| 50 | Table 4's equity premium is Mkt-RF, and the alphas' t-statistics (2026-10-27) | 266.5 -> 267.5 |
+| 51 | The paper's reversal factor: audited, disclosed, and reported as an unscored alternative (2026-10-27) |  |
+| 52 | Tables 4 and 8 under French's ST_Rev: the conclusion replicates, the cells do not (2026-10-28) |  |
+| 53 | Three no-gain experiments, landed with their scripts (2026-10-28) |  |
+| 54 | Two readings the paper's text requires: book compounding and the mixed-pairs decile row (2026-11-02) | 267.5 -> 261.0 |
+| 55 | Footnote 4's delisting check and the 495x map as flags | 261.0 -> 261.0 |
+| 56 | Public sync: #12's flags, #13's importers and input checks, #14's tables (2026-11-03) | 261.0 -> 261.0 |
+| 57 | The late sample as one exchange's file: formation profile fits, returns and count do not (2026-11-15) | 261.0 -> 261.0 |
+| 58 | The four claims that fall short, measured under the readings the paper leaves open (2026-11-15) | 261.0 -> 261.0 |
+| 59 | PR #64 review follow-up: the note, the wording, and the committed-capital switch (2026-11-15) | 262.0 -> 262.0 |
+| 60 | Table 9 Panel A joins the scored set, as printed (2026-11-15) | 262.0 -> 289.0 |
+| 61 | The reversal factor the paper's own Table 8 implies, scored (2026-11-15) | 262.0 -> 270.5 |
+| 62 | Table 5 Panel B (daily value at risk) joins the scored set (2026-11-16) | 297.5 -> 327.5 |
+| 63 | Table 7's regression block joins the scored set on the scored reversal series (2026-11-16) | 297.5 -> 308.0 |
+| 64 | Table 9 Panel B joins the scored set, on the claim script's primary reading (2026-11-16) | 297.5 -> 315.5 |
+| 65 | Table 6 (returns to random pairs) joins the scored set (2026-11-16) | 297.5 -> 308.5 |
+| 66 | Contract G score hunt (2026-11-16): SBBI unavailable, 73 borderline cells, no mark moves (326.0 of 625) |  |
+| 67 | The printed regression t-statistics of Tables 4, 7 and 8 join the scored set (2026-11-16) | 326.0 -> 352.0 |
+| 68 | The last printed numbers join the scored set, and the coverage inventory is full (2026-11-16) | 326.0 -> 339.0 |
+| 69 | Table 6's four open readings, measured (2026-11-16) | 337.0 -> 337.0 |
+| 70 | The denominator is the paper: 865 cells, pinned by a test (2026-11-17) | 406.0 -> 406.0 |
+| 71 | One home per fact: the replication folder restructured to seven pages (2026-11-17) | 406.0 -> 406.0 |
+| 72 | The factors are French's 2005 files, the vintage the paper had (2026-11-17) | 406.0 -> 406.0 |
+| 73 | No reversal construction matches the paper's factor in both subperiods (2026-11-17) | 406.0 -> 406.0 |
+| 74 | Table 9 Panel B: six recall readings, and the same-day close ships (2026-11-17) | 408.0 -> 411.0 |
+| 75 | Table 6 takes the caption's committed capital, and four draw readings (2026-11-17) | 406.0 -> 408.0 |
+| 76 | The rejected flag readings, re-scored on all 865 cells (2026-11-17) | 411.0 -> 411.0 |
+| 77 | The code-only readings, measured on all 865 cells (2026-11-17) | 411.0 -> 411.0 |

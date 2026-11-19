@@ -77,7 +77,7 @@ substituted by itself) and compares it with the shipped monthly series.
 | cohort-waits compared | 948 |
 | cells compared | 5688 |
 | max abs diff, rebuilt vs shipped monthly returns | 0.000e+00 |
-| max abs diff, vectorised layer vs project layer | 1.332e-15 |
+| max abs diff, vectorised layer vs project layer | 1.734e-01 |
 | max abs diff, trade payoff vs cached payoff | 1.066e-14 |
 
 ## 4. Our Table 6 next to the paper's

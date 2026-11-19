@@ -25,16 +25,16 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-from PIL import Image, ImageChops  # noqa: E402
-from pptx import Presentation  # noqa: E402
-from pptx.chart.data import CategoryChartData  # noqa: E402
-from pptx.dml.color import RGBColor  # noqa: E402
-from pptx.enum.chart import XL_CHART_TYPE, XL_LABEL_POSITION, XL_LEGEND_POSITION  # noqa: E402
-from pptx.enum.shapes import MSO_SHAPE  # noqa: E402
-from pptx.enum.text import MSO_ANCHOR, PP_ALIGN  # noqa: E402
-from pptx.oxml.ns import qn  # noqa: E402
-from pptx.util import Inches, Pt  # noqa: E402
+import matplotlib.pyplot as plt
+from PIL import Image, ImageChops
+from pptx import Presentation
+from pptx.chart.data import CategoryChartData
+from pptx.dml.color import RGBColor
+from pptx.enum.chart import XL_CHART_TYPE, XL_LABEL_POSITION, XL_LEGEND_POSITION
+from pptx.enum.shapes import MSO_SHAPE
+from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.oxml.ns import qn
+from pptx.util import Inches, Pt
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_MD = ROOT / "report" / "proposal_trading_simulation.md"
@@ -63,7 +63,7 @@ class Block:
     eqs: list[str] = field(default_factory=list)
     table: list[list[str]] | None = None
     notes: list[str] = field(default_factory=list)
-    cards: list["Block"] = field(default_factory=list)
+    cards: list[Block] = field(default_factory=list)
 
 
 def parse_source(path: Path) -> tuple[list[Block], list[str]]:
@@ -349,13 +349,19 @@ def team_intro(d: Deck) -> None:
                 "Gatev, Goetzmann & Rouwenhorst, Review of Financial Studies (2006).", 13, after=12)
     add_par(tf, "Brief introduction:", 14, bold=True, after=2)
     bullets(tf, [
-        "Tests a Wall Street rule: pair stocks whose normalized prices moved together, "
-        "then bet on convergence when they diverge",
-        "U.S. daily data 1962–2002: top pairs earn up to ~11% a year in excess returns, "
-        "above conservative cost estimates",
+        (
+            "Tests a Wall Street rule: pair stocks whose normalized prices moved together, "
+            "then bet on convergence when they diverge"
+        ),
+        (
+            "U.S. daily data 1962–2002: top pairs earn up to ~11% a year in excess returns, "
+            "above conservative cost estimates"
+        ),
         "Not explained by standard risk factors or simple reversal, but returns fall after the late 1980s",
-        "Our project: replicate the core experiment, then extend it to 2026 with explicit "
-        "trading frictions, stress tests and new pair-selection methods",
+        (
+            "Our project: replicate the core experiment, then extend it to 2026 with explicit "
+            "trading frictions, stress tests and new pair-selection methods"
+        ),
     ], 13, bold_label=False, after=6)
     add_par(tf, "", 6)
     add_par(tf, "Team: Jared Cohen, Jacob Waxman, Eiko Reisz, Hao Wang", 13, bold_label=True, after=0)
@@ -375,11 +381,15 @@ def team_summary(d: Deck) -> None:
     tf = textbox(s, 0.45, 1.5, 4.45, 5.4)
     bullets(tf, [
         "Idea: a broader Law of One Price; near-substitutes that drift apart should converge again",
-        "Method: form pairs over 12 months by minimum distance between normalized total-return "
-        "prices; trade them over the next 6 months",
+        (
+            "Method: form pairs over 12 months by minimum distance between normalized total-return "
+            "prices; trade them over the next 6 months"
+        ),
         "Rule: buy the loser and short the winner at a 2σ divergence; close when the prices cross",
-        "Finding: profits survive conservative cost estimates and are not explained by known "
-        "factors or simple reversal",
+        (
+            "Finding: profits survive conservative cost estimates and are not explained by known "
+            "factors or simple reversal"
+        ),
         "Caveat: profitability declines in the later years of the sample",
     ], 13, after=8)
     data = CategoryChartData()
@@ -448,20 +458,26 @@ def team_pairs(d: Deck) -> None:
     s = d.slide("Pairs Construction Methodology", "Start from the paper's mechanical rules, then "
                 "make pair selection adaptive.", owner="Jared Cohen (draft)")
     card(s, 0.45, 1.5, 4.475, 4.6, "Paper's rules (baseline)", [
-        "Entry: open a long–short position when normalized prices diverge by more than "
-        "2 formation-period standard deviations",
+        (
+            "Entry: open a long–short position when normalized prices diverge by more than "
+            "2 formation-period standard deviations"
+        ),
         "Convergence exit: close when the two price paths cross again",
         "Time exit: if they never cross, close at the end of the 6-month trading period",
         "Delisting exit: close at the delisting return or the last available price",
-        "Risk analysis: returns, worst losses, risk factors, transaction costs and short-selling "
-        "risks; do not lean on historical VaR",
+        (
+            "Risk analysis: returns, worst losses, risk factors, transaction costs and "
+            "short-selling risks; do not lean on historical VaR"
+        ),
     ], size=14)
     card(s, 5.075, 1.5, 4.475, 4.6, "Our ideas (in progress)", [
         "Build pairs on each stock's total-return index, dividends included",
         "ML-based pair selection (specified on slide 12)",
         "Regime-based selection: choose dynamically which pairs to trade",
-        "Structural-break test with risk factors: drop pairs that stop moving together and "
-        "close their positions",
+        (
+            "Structural-break test with risk factors: drop pairs that stop moving together and "
+            "close their positions"
+        ),
     ], size=14, header=GREEN, body=GREEN_TINT)
 
 

@@ -58,8 +58,8 @@ def conventions(options: dict, short_weights: str) -> list[str]:
         "the employed-capital denominator uses pairs open that day. This timing convention",
         "remains an interpretation of the paper's 'open during the trading period'.",
         f"Additional screens: same issuer excluded={options.get('exclude_same_issuer', False)};",
-        f"constant path excluded={options.get('exclude_constant', False)}; "
-        f"maximum stale share={options.get('max_stale_share')}.",
+        (f"constant path excluded={options.get('exclude_constant', False)}; "
+         f"maximum stale share={options.get('max_stale_share')}."),
         "These exclusions are disclosed conventions, not explicit paper instructions. The volume",
         "baseline admits missing volume and quote prices, preserving historical Nasdaq coverage;",
         "the stricter traded_common universe remains available as a sensitivity.",
